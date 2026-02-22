@@ -14,7 +14,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   final _emailController = TextEditingController();
   final _nameController = TextEditingController();
   final _phoneController = TextEditingController();
-  
+
   String? _base64Image;
   bool _isLoading = false;
 
@@ -45,31 +45,31 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
 
     setState(() => _isLoading = true);
-    print("Attempting to save user: $email"); // Debug Log
 
     try {
-      // Logic investigation: Ensure Firebase is initialized in main.dart!
+      // Logic: Using email as the Document ID
       await FirebaseFirestore.instance.collection('users').doc(email).set({
         'username': _nameController.text.trim(),
         'email': email,
         'phone': _phoneController.text.trim(),
         'photoBase64': _base64Image ?? "",
-        'createdAt': FieldValue.serverTimestamp(), // Better for DB sync
+        'createdAt': FieldValue.serverTimestamp(),
       });
 
-      print("Database write successful!"); // Debug Log
-      
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Profile Saved!")),
-      );
-      
-      // Navigate to Home screen here...
+
+      // FEEDBACK
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text("Profile Saved!")));
+
+      // THE NAVIGATION FIX:
+      // This sends them to Home and prevents them from hitting "back" to return here.
+      Navigator.pushReplacementNamed(context, '/home');
     } catch (e) {
-      print("DATABASE ERROR: $e"); // Check your console for this!
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("Error: $e")),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text("Error: $e")));
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -81,7 +81,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // --- BACKDROP DECORATION ---
+          // --- BACKDROP DECORATION (Original Design) ---
           Positioned(
             top: -100,
             right: -50,
@@ -114,7 +114,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
               child: SingleChildScrollView(
                 physics: const BouncingScrollPhysics(),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 60),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 30,
+                    vertical: 60,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -130,7 +133,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       const SizedBox(height: 10),
                       const Text(
                         "Fill in your details to join the community.",
-                        style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w500),
+                        style: TextStyle(
+                          color: Colors.black54,
+                          fontWeight: FontWeight.w500,
+                        ),
                       ),
                       const SizedBox(height: 40),
 
@@ -145,13 +151,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
                                 decoration: BoxDecoration(
                                   shape: BoxShape.circle,
                                   color: Colors.white,
-                                  border: Border.all(color: const Color(0xFFF3E5AB), width: 3),
+                                  border: Border.all(
+                                    color: const Color(0xFFF3E5AB),
+                                    width: 3,
+                                  ),
                                   boxShadow: [
                                     BoxShadow(
                                       color: Colors.black.withOpacity(0.05),
                                       blurRadius: 10,
                                       offset: const Offset(0, 5),
-                                    )
+                                    ),
                                   ],
                                 ),
                                 child: CircleAvatar(
@@ -161,7 +170,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
                                       ? MemoryImage(base64Decode(_base64Image!))
                                       : null,
                                   child: _base64Image == null
-                                      ? const Icon(Icons.camera_alt_outlined, color: Colors.black26, size: 30)
+                                      ? const Icon(
+                                          Icons.camera_alt_outlined,
+                                          color: Colors.black26,
+                                          size: 30,
+                                        )
                                       : null,
                                 ),
                               ),
@@ -170,8 +183,15 @@ class _UserProfilePageState extends State<UserProfilePage> {
                                 right: 5,
                                 child: Container(
                                   padding: const EdgeInsets.all(6),
-                                  decoration: const BoxDecoration(color: Colors.black, shape: BoxShape.circle),
-                                  child: const Icon(Icons.edit, color: Color(0xFFF3E5AB), size: 14),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.black,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: const Icon(
+                                    Icons.edit,
+                                    color: Color(0xFFF3E5AB),
+                                    size: 14,
+                                  ),
                                 ),
                               ),
                             ],
@@ -180,15 +200,29 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       ),
                       const SizedBox(height: 40),
 
-                      _buildElegantField("Full Name", _nameController, Icons.person_outline),
-                      _buildElegantField("Email Address", _emailController, Icons.alternate_email),
-                      _buildElegantField("Phone Number", _phoneController, Icons.phone_android_outlined),
+                      _buildElegantField(
+                        "Full Name",
+                        _nameController,
+                        Icons.person_outline,
+                      ),
+                      _buildElegantField(
+                        "Email Address",
+                        _emailController,
+                        Icons.alternate_email,
+                      ),
+                      _buildElegantField(
+                        "Phone Number",
+                        _phoneController,
+                        Icons.phone_android_outlined,
+                      ),
 
                       const SizedBox(height: 50),
 
                       Center(
                         child: _isLoading
-                            ? const CircularProgressIndicator(color: Colors.black)
+                            ? const CircularProgressIndicator(
+                                color: Colors.black,
+                              )
                             : SizedBox(
                                 width: 220,
                                 height: 55,
@@ -197,12 +231,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
                                   style: ElevatedButton.styleFrom(
                                     backgroundColor: Colors.black,
                                     foregroundColor: const Color(0xFFF3E5AB),
-                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(30),
+                                    ),
                                     elevation: 8,
                                   ),
                                   child: const Text(
                                     "SAVE PROFILE",
-                                    style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2),
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 1.2,
+                                    ),
                                   ),
                                 ),
                               ),
@@ -218,7 +257,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
-  Widget _buildElegantField(String label, TextEditingController controller, IconData icon) {
+  Widget _buildElegantField(
+    String label,
+    TextEditingController controller,
+    IconData icon,
+  ) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 20),
       child: TextField(

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'user_profile.dart';
-import 'home_screen.dart';
+import 'home_page.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -10,7 +10,8 @@ class SplashScreen extends StatefulWidget {
   State<SplashScreen> createState() => _SplashScreenState();
 }
 
-class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderStateMixin {
+class _SplashScreenState extends State<SplashScreen>
+    with SingleTickerProviderStateMixin {
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
@@ -18,37 +19,31 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   void initState() {
     super.initState();
-
-   
     _controller = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
-
-    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
-      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
-    );
-
-   _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
-  CurvedAnimation(
-    parent: _controller, 
-    curve: Curves.bounceInOut, 
-  ),
-);
-
-
+    _fadeAnimation = Tween<double>(
+      begin: 0.0,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
+    _scaleAnimation = Tween<double>(
+      begin: 0.8,
+      end: 1.0,
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.bounceInOut));
     _controller.forward();
     _checkUserStatus();
   }
 
   void _checkUserStatus() async {
-    // Keep the splash visible for 3.5 seconds to show off the animation
     await Future.delayed(const Duration(milliseconds: 3500));
-    
     if (!mounted) return;
-    
+
     User? user = FirebaseAuth.instance.currentUser;
-    Widget nextScreen = (user != null) ? const HomeScreen() : const UserProfilePage();
+    // FIXED: Changed HomeScreen() to VoxHomePage()
+    Widget nextScreen = (user != null)
+        ? const VoxHomePage()
+        : const UserProfilePage();
 
     Navigator.pushReplacement(
       context,
@@ -71,7 +66,6 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      // Gradient background makes the Butter Yellow look more "High-End"
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -83,20 +77,17 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
         child: Stack(
           alignment: Alignment.center,
           children: [
-            // THE WATERMARK: Larger, slightly more visible, and centered.
             FadeTransition(
               opacity: _fadeAnimation,
               child: ScaleTransition(
                 scale: _scaleAnimation,
                 child: Icon(
-                  Icons.forum_rounded, // Rounded icons look more modern
+                  Icons.forum_rounded,
                   size: MediaQuery.of(context).size.width * 0.8,
                   color: Colors.black.withOpacity(0.12),
                 ),
               ),
             ),
-
-            // THE CONTENT
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
@@ -106,12 +97,15 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
                     fontSize: 42,
                     fontWeight: FontWeight.w900,
                     color: Colors.black,
-                    letterSpacing: 4.0, // Edgy, spaced-out look
+                    letterSpacing: 4.0,
                   ),
                 ),
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
                   decoration: BoxDecoration(
                     color: Colors.black.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(4),
