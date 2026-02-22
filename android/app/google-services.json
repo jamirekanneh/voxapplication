@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "265615744997",
+    "project_id": "vox-application-76ecd",
+    "storage_bucket": "vox-application-76ecd.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:265615744997:android:5d386a6307133f8de8990c",
+        "android_client_info": {
+          "package_name": "com.example.voice_command_application_vox"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlV7kVOayanaeyoWFnm7GkFxAoDp8GnvQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:265615744997:android:bfbcf8562ea47aebe8990c",
+        "android_client_info": {
+          "package_name": "com.example.voxapplication"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlV7kVOayanaeyoWFnm7GkFxAoDp8GnvQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
