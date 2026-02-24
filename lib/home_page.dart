@@ -30,7 +30,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
     _tts.setPitch(1.0);
   }
 
-  // VOICE COMMAND LOGIC
+  // VOICE COMMAND
   void _listen() async {
     if (!_isListening) {
       bool available = await _speech.initialize();
@@ -40,7 +40,6 @@ class _VoxHomePageState extends State<VoxHomePage> {
           onResult: (val) {
             String command = val.recognizedWords.toLowerCase();
             if (command.contains("open")) {
-              // Extracts filename from "open biology note"
               String targetFile = command.replaceFirst("open ", "").trim();
               _processVoiceCommand(targetFile);
             }
@@ -84,12 +83,14 @@ class _VoxHomePageState extends State<VoxHomePage> {
     return Scaffold(
       backgroundColor: Colors.white,
       resizeToAvoidBottomInset: false,
+
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // TOP BAR
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -119,6 +120,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   ),
                 ],
               ),
+
               const Text(
                 "Library",
                 style: TextStyle(
@@ -127,8 +129,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   fontWeight: FontWeight.bold,
                 ),
               ),
+
               const SizedBox(height: 15),
 
+              // FILE GRID
               Expanded(
                 child: StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
@@ -136,8 +140,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       .where('userId', isEqualTo: userEmail)
                       .snapshots(),
                   builder: (context, snapshot) {
-                    if (!snapshot.hasData)
+                    if (!snapshot.hasData) {
                       return const Center(child: CircularProgressIndicator());
+                    }
 
                     var docs = snapshot.data!.docs.where((doc) {
                       String name =
@@ -157,6 +162,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       itemCount: docs.length,
                       itemBuilder: (context, index) {
                         var data = docs[index].data() as Map<String, dynamic>;
+
                         return GestureDetector(
                           onTap: () =>
                               _startReading("Reading ${data['fileName']}"),
@@ -174,6 +180,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
           ),
         ),
       ),
+
+      // BOTTOM NAVIGATION
       bottomNavigationBar: BottomAppBar(
         shape: const CircularNotchedRectangle(),
         notchMargin: 8,
@@ -182,25 +190,43 @@ class _VoxHomePageState extends State<VoxHomePage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
+              // HOME
               _navItem(Icons.home, "Home", const Color(0xFF70E1C1)),
-              // COMMAND BUTTON NOW LISTENS
+
+              // VOICE COMMAND
               _navItem(
                 _isListening ? Icons.graphic_eq : Icons.mic,
                 "Command",
                 _isListening ? Colors.red : Colors.grey,
                 onTap: _listen,
               ),
+
               const SizedBox(width: 48),
-              _navItem(Icons.book, "Dictionary", Colors.grey),
+
+              // DICTIONARY BUTTON (THIS IS THE IMPORTANT PART)
+              _navItem(
+                Icons.book,
+                "Dictionary",
+                Colors.grey,
+                onTap: () {
+                  Navigator.pushNamed(context, '/dictionary');
+                },
+              ),
+
+              // MENU
               _navItem(Icons.menu, "Menu", Colors.grey),
             ],
           ),
         ),
       ),
+
+      // UPLOAD BUTTON
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
         backgroundColor: const Color(0xFF70E1C1),
-        onPressed: () => Navigator.pushNamed(context, '/upload'),
+        onPressed: () {
+          Navigator.pushNamed(context, '/upload');
+        },
         child: const Icon(Icons.file_upload_outlined, color: Color(0xFF1D3D3D)),
       ),
     );

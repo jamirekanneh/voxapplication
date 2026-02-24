@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
+import "dictionary_page.dart";
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
 import 'splash_screen.dart';
 import 'home_page.dart';
 import 'upload_page.dart';
 import 'menu_page.dart';
-import 'user_profile.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +25,7 @@ class TheVoxApp extends StatelessWidget {
         '/home': (context) => const VoxHomePage(),
         '/upload': (context) => const UploadPage(),
         '/menu': (context) => const MenuPage(),
+        '/dictionary': (context) => const DictionaryPage(),
       },
     );
   }
