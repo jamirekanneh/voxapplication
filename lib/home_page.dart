@@ -28,6 +28,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
   void _initTTS() {
     _tts.setLanguage("en-US");
     _tts.setPitch(1.0);
+    _tts.setSpeechRate(0.5); // Adjust speed for better clarity
   }
 
   // VOICE COMMAND
@@ -54,12 +55,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
   void _processVoiceCommand(String fileName) {
     _showFloatingMessage(context, "Voice Command: Opening $fileName");
-    _startReading(
-      "This is the content of $fileName. Starting automated reading now.",
-    );
+    _startReading("Opening $fileName and starting automated reading now.");
   }
 
   Future<void> _startReading(String text) async {
+    await _tts.stop(); // Stop any current speech before starting new
     await _tts.speak(text);
   }
 
@@ -81,7 +81,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
         FirebaseAuth.instance.currentUser?.email ?? "demo@user.com";
 
     return Scaffold(
-      backgroundColor: Colors.white,
+      // KEPT ORIGINAL BACKGROUND COLOR
+      backgroundColor: const Color.fromARGB(255, 243, 229, 171),
       resizeToAvoidBottomInset: false,
 
       body: SafeArea(
@@ -109,7 +110,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         hintText: "Search files...",
                         prefixIcon: const Icon(Icons.search, size: 18),
                         filled: true,
-                        fillColor: Colors.grey[100],
+                        fillColor: Colors.white.withOpacity(0.8),
                         contentPadding: EdgeInsets.zero,
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
@@ -154,20 +155,20 @@ class _VoxHomePageState extends State<VoxHomePage> {
                     return GridView.builder(
                       gridDelegate:
                           const SliverGridDelegateWithFixedCrossAxisCount(
-                            crossAxisCount: 3,
+                            crossAxisCount: 3, // Smaller icons
                             crossAxisSpacing: 10,
                             mainAxisSpacing: 10,
-                            childAspectRatio: 0.85,
+                            childAspectRatio: 0.9,
                           ),
                       itemCount: docs.length,
                       itemBuilder: (context, index) {
                         var data = docs[index].data() as Map<String, dynamic>;
+                        String name = data['fileName'] ?? 'File';
 
                         return GestureDetector(
-                          onTap: () =>
-                              _startReading("Reading ${data['fileName']}"),
+                          onTap: () => _startReading("Reading $name"),
                           child: _buildSmallFileCard(
-                            data['fileName'] ?? 'File',
+                            name,
                             data['fileType'] ?? 'pdf',
                           ),
                         );
@@ -190,10 +191,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              // HOME
               _navItem(Icons.home, "Home", const Color(0xFF70E1C1)),
 
-              // VOICE COMMAND
               _navItem(
                 _isListening ? Icons.graphic_eq : Icons.mic,
                 "Command",
@@ -203,7 +202,6 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
               const SizedBox(width: 48),
 
-              // DICTIONARY BUTTON (THIS IS THE IMPORTANT PART)
               _navItem(
                 Icons.book,
                 "Dictionary",
@@ -213,16 +211,15 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 },
               ),
 
-              // MENU
               _navItem(Icons.menu, "Menu", Colors.grey),
             ],
           ),
         ),
       ),
 
-      // UPLOAD BUTTON
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
+        // Match the background or keep a clean look
         backgroundColor: const Color(0xFF70E1C1),
         onPressed: () {
           Navigator.pushNamed(context, '/upload');
@@ -257,11 +254,19 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
+  // UPDATED FILE CARD: Smaller, Grey Color, and better layout
   Widget _buildSmallFileCard(String title, String type) {
     return Container(
       decoration: BoxDecoration(
-        color: const Color(0xFF67B7F7),
-        borderRadius: BorderRadius.circular(8),
+        color: const Color(0xFFE0E0E0), // NEUTRAL GREY COLOR
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       padding: const EdgeInsets.all(8),
       child: Column(
@@ -269,14 +274,14 @@ class _VoxHomePageState extends State<VoxHomePage> {
         children: [
           Icon(
             type.contains('pdf') ? Icons.picture_as_pdf : Icons.description,
-            color: Colors.white,
-            size: 20,
+            color: Colors.grey[700], // Darker grey for the icon
+            size: 24,
           ),
-          const SizedBox(height: 5),
+          const SizedBox(height: 6),
           Text(
             title,
             style: const TextStyle(
-              color: Colors.white,
+              color: Colors.black87,
               fontSize: 10,
               fontWeight: FontWeight.w600,
             ),

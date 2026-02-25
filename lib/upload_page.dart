@@ -56,7 +56,7 @@ class _UploadPageState extends State<UploadPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFDF2B3),
+      backgroundColor: const Color(0xFFF3E5AB),
       appBar: AppBar(
         title: const Text(
           "Upload Files",
