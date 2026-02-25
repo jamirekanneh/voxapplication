@@ -110,8 +110,15 @@ class _DictionaryPageState extends State<DictionaryPage> {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
-        color: Colors.grey.shade100,
+        color: const Color(0xFFE0E0E0), // Grey — matches library cards
         borderRadius: BorderRadius.circular(30),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Row(
         children: [
@@ -127,11 +134,14 @@ class _DictionaryPageState extends State<DictionaryPage> {
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.search),
+            icon: const Icon(Icons.search, color: Colors.black87),
             onPressed: () => searchWord(controller.text),
           ),
           IconButton(
-            icon: Icon(isListening ? Icons.mic : Icons.mic_none),
+            icon: Icon(
+              isListening ? Icons.mic : Icons.mic_none,
+              color: isListening ? Colors.red : Colors.black87,
+            ),
             onPressed: listen,
           ),
         ],
@@ -144,20 +154,27 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
     return Container(
       width: double.infinity,
-      margin: const EdgeInsets.all(16),
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color.fromRGBO(255, 97, 97, 97),
+        color: const Color(0xFFE0E0E0), // Grey — matches library cards
         borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.07),
+            blurRadius: 6,
+            offset: const Offset(0, 3),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
+          Text(
             "Definition",
-            style: TextStyle(color: Colors.white70, fontSize: 16),
+            style: TextStyle(color: Colors.grey[600], fontSize: 13),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
@@ -166,16 +183,16 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   style: const TextStyle(
                     fontSize: 28,
                     fontWeight: FontWeight.bold,
-                    color: Colors.white,
+                    color: Colors.black87,
                   ),
                 ),
               ),
               IconButton(
-                icon: const Icon(Icons.volume_up, color: Colors.white),
+                icon: const Icon(Icons.volume_up, color: Colors.black54),
                 onPressed: () => speak(word),
               ),
               IconButton(
-                icon: const Icon(Icons.copy, color: Colors.white),
+                icon: const Icon(Icons.copy, color: Colors.black54),
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: meanings.join("\n")));
                   ScaffoldMessenger.of(context).showSnackBar(
@@ -188,16 +205,16 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   favorites.contains(word)
                       ? Icons.bookmark
                       : Icons.bookmark_border,
-                  color: Colors.white,
+                  color: Colors.black54,
                 ),
                 onPressed: () => toggleFavorite(word),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 6),
           Text(
             partOfSpeech,
-            style: const TextStyle(fontSize: 18, color: Colors.white70),
+            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
           ),
           const SizedBox(height: 16),
           Wrap(
@@ -206,14 +223,18 @@ class _DictionaryPageState extends State<DictionaryPage> {
             children: meanings.map((m) {
               return Container(
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
+                  horizontal: 14,
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withOpacity(0.7),
                   borderRadius: BorderRadius.circular(25),
+                  border: Border.all(color: Colors.grey.shade300),
                 ),
-                child: Text(m, style: const TextStyle(color: Colors.white)),
+                child: Text(
+                  m,
+                  style: const TextStyle(color: Colors.black87, fontSize: 13),
+                ),
               );
             }).toList(),
           ),
@@ -225,11 +246,12 @@ class _DictionaryPageState extends State<DictionaryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color.fromARGB(255, 243, 229, 171),
+      backgroundColor: const Color(0xFFF3E5AB), // Same as homepage
       appBar: AppBar(
-        backgroundColor: const Color.fromARGB(255, 243, 229, 171),
+        backgroundColor: Colors.transparent,
         elevation: 0,
         centerTitle: true,
+        iconTheme: const IconThemeData(color: Colors.black),
         title: const Text(
           "Dictionary",
           style: TextStyle(
@@ -264,7 +286,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
           if (isLoading)
             const Padding(
               padding: EdgeInsets.all(8.0),
-              child: CircularProgressIndicator(),
+              child: CircularProgressIndicator(color: Colors.black),
             ),
           buildResultCard(),
         ],
@@ -286,42 +308,75 @@ class HistoryScreen extends StatelessWidget {
   String formatDate(DateTime date) {
     final now = DateTime.now();
     final difference = now.difference(date).inDays;
-
     if (difference == 0) return "Today";
     if (difference == 1) return "Yesterday";
-
     return "${date.day}/${date.month}/${date.year}";
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: const Color(0xFFF3E5AB), // Same as homepage
       appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
         title: const Text(
           "Search History",
-          style: TextStyle(fontWeight: FontWeight.bold),
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
         ),
       ),
       body: history.isEmpty
-          ? const Center(child: Text("No history yet"))
+          ? const Center(
+              child: Text(
+                "No history yet",
+                style: TextStyle(color: Colors.black54),
+              ),
+            )
           : ListView.builder(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               itemCount: history.length,
               itemBuilder: (context, index) {
                 var item = history[index];
                 DateTime time = item["time"];
 
-                return Column(
-                  children: [
-                    ListTile(
-                      title: Text(item["word"]),
-                      subtitle: Text(formatDate(time)),
-                      onTap: () {
-                        onSelect(item["word"]);
-                        Navigator.pop(context);
-                      },
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  decoration: BoxDecoration(
+                    color: const Color(
+                      0xFFE0E0E0,
+                    ), // Grey — matches library cards
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: ListTile(
+                    title: Text(
+                      item["word"],
+                      style: const TextStyle(
+                        color: Colors.black87,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
                     ),
-                    const Divider(height: 1),
-                  ],
+                    subtitle: Text(
+                      formatDate(time),
+                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                    ),
+                    trailing: const Icon(
+                      Icons.chevron_right,
+                      color: Colors.black45,
+                    ),
+                    onTap: () {
+                      onSelect(item["word"]);
+                      Navigator.pop(context);
+                    },
+                  ),
                 );
               },
             ),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'user_profile.dart';
 import 'home_page.dart';
 
@@ -40,10 +41,37 @@ class _SplashScreenState extends State<SplashScreen>
     if (!mounted) return;
 
     User? user = FirebaseAuth.instance.currentUser;
-    // FIXED: Changed HomeScreen() to VoxHomePage()
-    Widget nextScreen = (user != null)
-        ? const VoxHomePage()
-        : const UserProfilePage();
+
+    // If no user at all, sign in anonymously so we always have a UID
+    if (user == null) {
+      try {
+        final credential = await FirebaseAuth.instance.signInAnonymously();
+        user = credential.user;
+      } catch (e) {
+        debugPrint("Anonymous sign-in failed: $e");
+      }
+    }
+
+    if (!mounted) return;
+
+    // If user has a profile saved already (non-anonymous or returning), go home
+    // If brand new anonymous user, go to profile page to fill in details
+    Widget nextScreen;
+    if (user != null && !user.isAnonymous) {
+      // Returning user who completed profile — go straight home
+      nextScreen = const VoxHomePage();
+    } else if (user != null && user.isAnonymous) {
+      // Check if they already filled in their profile
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      nextScreen = doc.exists ? const VoxHomePage() : const UserProfilePage();
+    } else {
+      nextScreen = const UserProfilePage();
+    }
+
+    if (!mounted) return;
 
     Navigator.pushReplacement(
       context,

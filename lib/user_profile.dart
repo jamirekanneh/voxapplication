@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 
 class UserProfilePage extends StatefulWidget {
@@ -17,6 +18,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   String? _base64Image;
   bool _isLoading = false;
+
+  // Use UID as the document ID — matches Firestore rules
+  String get _userId => FirebaseAuth.instance.currentUser?.uid ?? "anonymous";
 
   Future<void> _pickAndConvertImage() async {
     final ImagePicker picker = ImagePicker();
@@ -47,24 +51,25 @@ class _UserProfilePageState extends State<UserProfilePage> {
     setState(() => _isLoading = true);
 
     try {
-      // Logic: Using email as the Document ID
-      await FirebaseFirestore.instance.collection('users').doc(email).set({
-        'username': _nameController.text.trim(),
-        'email': email,
-        'phone': _phoneController.text.trim(),
-        'photoBase64': _base64Image ?? "",
-        'createdAt': FieldValue.serverTimestamp(),
-      });
+      // FIX: Use UID as document ID (matches Firestore rule: match /users/{userId})
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_userId) // was: .doc(email) — now uses UID
+          .set({
+            'username': _nameController.text.trim(),
+            'email': email,
+            'phone': _phoneController.text.trim(),
+            'photoBase64': _base64Image ?? "",
+            'createdAt': FieldValue.serverTimestamp(),
+            'userId': _userId, // store UID in doc for reference
+          });
 
       if (!mounted) return;
 
-      // FEEDBACK
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text("Profile Saved!")));
 
-      // THE NAVIGATION FIX:
-      // This sends them to Home and prevents them from hitting "back" to return here.
       Navigator.pushReplacementNamed(context, '/home');
     } catch (e) {
       ScaffoldMessenger.of(
@@ -81,7 +86,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       backgroundColor: Colors.white,
       body: Stack(
         children: [
-          // --- BACKDROP DECORATION (Original Design) ---
+          // Backdrop decoration
           Positioned(
             top: -100,
             right: -50,
@@ -107,7 +112,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
             ),
           ),
 
-          // --- MAIN CONTENT ---
+          // Main content
           Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 500),
@@ -140,7 +145,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
                       ),
                       const SizedBox(height: 40),
 
-                      // Photo Upload
+                      // Photo upload
                       Center(
                         child: GestureDetector(
                           onTap: _pickAndConvertImage,

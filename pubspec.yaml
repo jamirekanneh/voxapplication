@@ -18,6 +18,8 @@ dependencies:
   flutter_tts: ^4.2.2
   read_pdf_text: ^0.3.1
   speech_to_text: ^6.6.2
+  permission_handler: ^11.1.0
+  syncfusion_flutter_pdf: ^23.2.7
 
 dev_dependencies:
   flutter_test:

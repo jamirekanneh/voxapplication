@@ -6,6 +6,7 @@ import 'splash_screen.dart';
 import 'home_page.dart';
 import 'upload_page.dart';
 import 'menu_page.dart';
+import 'notes_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +27,7 @@ class TheVoxApp extends StatelessWidget {
         '/upload': (context) => const UploadPage(),
         '/menu': (context) => const MenuPage(),
         '/dictionary': (context) => const DictionaryPage(),
+        '/notes': (context) => const NotesPage(),
       },
     );
   }
