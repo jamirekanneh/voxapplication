@@ -147,7 +147,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
       margin: const EdgeInsets.all(16),
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF67B7F7),
+        color: const Color.fromRGBO(255, 97, 97, 97),
         borderRadius: BorderRadius.circular(20),
       ),
       child: Column(
@@ -225,9 +225,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: const Color.fromARGB(255, 243, 229, 171),
       appBar: AppBar(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color.fromARGB(255, 243, 229, 171),
         elevation: 0,
         centerTitle: true,
         title: const Text(
