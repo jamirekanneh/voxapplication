@@ -9,13 +9,17 @@ import 'upload_page.dart';
 import 'menu_page.dart';
 import 'notes_page.dart';
 import 'language_provider.dart';
+import 'reader_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(
-    ChangeNotifierProvider(
-      create: (_) => LanguageProvider(),
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => LanguageProvider()),
+        ChangeNotifierProvider(create: (_) => ReaderProvider()),
+      ],
       child: const TheVoxApp(),
     ),
   );

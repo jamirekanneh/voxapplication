@@ -1,39 +1,57 @@
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'language_provider.dart';
+import 'reader_provider.dart';
+import 'reader_page.dart';
+import 'mini_player_bar.dart';
 
-class NotesPage extends StatefulWidget {
-  const NotesPage({super.key});
+class VoxHomePage extends StatefulWidget {
+  const VoxHomePage({super.key});
 
   @override
-  State<NotesPage> createState() => _NotesPageState();
+  State<VoxHomePage> createState() => _VoxHomePageState();
 }
 
-class _NotesPageState extends State<NotesPage> {
+class _VoxHomePageState extends State<VoxHomePage> {
+  final TextEditingController _searchController = TextEditingController();
   final stt.SpeechToText _speech = stt.SpeechToText();
-
-  bool _isListeningTitle = false;
-  final TextEditingController _titleController = TextEditingController();
-
-  bool _isListeningContent = false;
-  final TextEditingController _contentController = TextEditingController();
-
-  String get _userId => FirebaseAuth.instance.currentUser?.uid ?? "anonymous";
+  String _searchQuery = "";
+  bool _isListening = false;
 
   @override
   void dispose() {
     _speech.stop();
-    _titleController.dispose();
-    _contentController.dispose();
+    _searchController.dispose();
     super.dispose();
   }
 
-  // FIX 1: Request mic permission before initializing STT
-  Future<bool> _requestMicPermission() async {
+  Future<void> _openReader(String fileName, String content) async {
+    final locale = context.read<LanguageProvider>().ttsLocale;
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => MultiProvider(
+          providers: [
+            ChangeNotifierProvider.value(value: context.read<ReaderProvider>()),
+            ChangeNotifierProvider.value(
+              value: context.read<LanguageProvider>(),
+            ),
+          ],
+          child: ReaderPage(title: fileName, content: content, locale: locale),
+        ),
+      ),
+    );
+  }
+
+  void _listen() async {
+    if (_isListening) {
+      setState(() => _isListening = false);
+      _speech.stop();
+      return;
+    }
     final status = await Permission.microphone.request();
     if (status != PermissionStatus.granted) {
       if (mounted) {
@@ -41,486 +59,240 @@ class _NotesPageState extends State<NotesPage> {
           const SnackBar(
             content: Text("Microphone permission denied"),
             backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
           ),
         );
       }
-      return false;
-    }
-    return true;
-  }
-
-  // ── Mic for title ──
-  Future<void> _listenForTitle() async {
-    final langProvider = context.read<LanguageProvider>();
-
-    if (_isListeningTitle) {
-      await _speech.stop();
-      setState(() => _isListeningTitle = false);
       return;
     }
-    if (_isListeningContent) {
-      await _speech.stop();
-      setState(() => _isListeningContent = false);
-    }
-
-    // FIX 1: Check permission first
-    final granted = await _requestMicPermission();
-    if (!granted) return;
-
     bool available = await _speech.initialize(
-      onError: (e) => setState(() => _isListeningTitle = false),
+      onError: (e) => setState(() => _isListening = false),
       onStatus: (s) {
         if (s == 'done' || s == 'notListening') {
-          setState(() => _isListeningTitle = false);
+          setState(() => _isListening = false);
         }
       },
     );
-
     if (available) {
-      setState(() => _isListeningTitle = true);
+      final langProvider = context.read<LanguageProvider>();
+      setState(() => _isListening = true);
       _speech.listen(
         localeId: langProvider.sttLocale,
-        onResult: (val) {
-          _titleController.text = val.recognizedWords;
-          _titleController.selection = TextSelection.fromPosition(
-            TextPosition(offset: _titleController.text.length),
-          );
-        },
-        listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 3),
-        partialResults: true,
+        onResult: (val) => setState(() => _isListening = false),
       );
     }
   }
 
-  // ── Mic for content ──
-  Future<void> _listenForContent() async {
-    final langProvider = context.read<LanguageProvider>();
-
-    if (_isListeningContent) {
-      await _speech.stop();
-      setState(() => _isListeningContent = false);
-      return;
-    }
-    if (_isListeningTitle) {
-      await _speech.stop();
-      setState(() => _isListeningTitle = false);
-    }
-
-    // FIX 1: Check permission first
-    final granted = await _requestMicPermission();
-    if (!granted) return;
-
-    bool available = await _speech.initialize(
-      onError: (e) => setState(() => _isListeningContent = false),
-      onStatus: (s) {
-        if (s == 'done' || s == 'notListening') {
-          setState(() => _isListeningContent = false);
-        }
-      },
-    );
-
-    if (available) {
-      final existingText = _contentController.text;
-      final prefix = existingText.isNotEmpty ? "$existingText " : "";
-
-      setState(() => _isListeningContent = true);
-      _speech.listen(
-        localeId: langProvider.sttLocale,
-        onResult: (val) {
-          final spoken = val.recognizedWords;
-          _contentController.text = "$prefix$spoken";
-          _contentController.selection = TextSelection.fromPosition(
-            TextPosition(offset: _contentController.text.length),
-          );
-          setState(() {});
-        },
-        listenFor: const Duration(minutes: 5),
-        pauseFor: const Duration(seconds: 4),
-        partialResults: true,
-      );
-    }
-  }
-
-  Future<void> _saveNote() async {
-    final content = _contentController.text.trim();
-    final title = _titleController.text.trim();
-
-    if (content.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("Please add some content before saving."),
-          backgroundColor: Colors.red,
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+  void _confirmDelete(String docId, String fileName) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.grey[600],
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            const Icon(Icons.delete_outline, color: Colors.redAccent, size: 40),
+            const SizedBox(height: 12),
+            Text(
+              'Delete "$fileName"?',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 6),
+            Text(
+              "This will remove it from your library.",
+              style: TextStyle(color: Colors.grey[400], fontSize: 13),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(sheetCtx),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(color: Colors.grey[600]!),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text("Cancel"),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () async {
+                      Navigator.pop(sheetCtx);
+                      await FirebaseFirestore.instance
+                          .collection('library')
+                          .doc(docId)
+                          .delete();
+                      if (mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('"$fileName" deleted'),
+                            behavior: SnackBarBehavior.floating,
+                            backgroundColor: Colors.grey[850],
+                            margin: const EdgeInsets.only(
+                              bottom: 90,
+                              left: 20,
+                              right: 20,
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(30),
+                      ),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: const Text("Delete"),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
-      );
-      return;
-    }
-
-    try {
-      await FirebaseFirestore.instance.collection('notes').add({
-        'userId': _userId,
-        'title': title.isNotEmpty ? title : "Note",
-        'content': content,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-      setState(() {
-        _contentController.clear();
-        _titleController.clear();
-      });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Note saved!"),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: Color(0xFF333333),
-            margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text("Error saving: $e"),
-            backgroundColor: Colors.red,
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
-          ),
-        );
-      }
-    }
-  }
-
-  Future<void> _deleteNote(String docId) async {
-    await FirebaseFirestore.instance.collection('notes').doc(docId).delete();
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final langProvider = context.watch<LanguageProvider>();
-
     return Scaffold(
       backgroundColor: const Color(0xFFF3E5AB),
-      appBar: AppBar(
-        title: const Text(
-          "Notes",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        automaticallyImplyLeading: false,
-        actions: [
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  langProvider.selectedLanguage,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
+      resizeToAvoidBottomInset: false,
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 10),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    "Vox",
+                    style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
                   ),
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Title field with mic ──
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _titleController,
-                        decoration: InputDecoration(
-                          hintText: _isListeningTitle
-                              ? "Listening for title..."
-                              : "Note title (optional)",
-                          filled: true,
-                          fillColor: _isListeningTitle
-                              ? Colors.grey[200]
-                              : Colors.white.withOpacity(0.7),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: _listenForTitle,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 46,
-                        height: 46,
-                        decoration: BoxDecoration(
-                          color: _isListeningTitle
-                              ? Colors.red
-                              : Colors.grey[700],
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(
-                          _isListeningTitle ? Icons.stop : Icons.mic,
-                          color: Colors.white,
-                          size: 22,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 10),
-
-                // ── Content area ──
-                Stack(
-                  children: [
-                    TextField(
-                      controller: _contentController,
-                      maxLines: 6,
-                      minLines: 4,
-                      onChanged: (_) => setState(() {}),
+                  SizedBox(
+                    width: 180,
+                    height: 38,
+                    child: TextField(
+                      controller: _searchController,
+                      onChanged: (v) =>
+                          setState(() => _searchQuery = v.toLowerCase()),
                       decoration: InputDecoration(
-                        hintText: _isListeningContent
-                            ? "Listening in ${langProvider.selectedLanguage}..."
-                            : "Speak or type your note here...",
+                        hintText: "Search files...",
+                        prefixIcon: const Icon(Icons.search, size: 18),
                         filled: true,
-                        fillColor: _isListeningContent
-                            ? Colors.grey[200]
-                            : Colors.white.withOpacity(0.7),
-                        contentPadding: const EdgeInsets.fromLTRB(
-                          16,
-                          14,
-                          56,
-                          14,
-                        ),
+                        fillColor: Colors.white.withOpacity(0.8),
+                        contentPadding: EdgeInsets.zero,
                         border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: _isListeningContent
-                              ? BorderSide(color: Colors.grey[600]!, width: 1.5)
-                              : BorderSide.none,
-                        ),
-                        enabledBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(20),
                           borderSide: BorderSide.none,
                         ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide(
-                            color: Colors.grey[400]!,
-                            width: 1,
-                          ),
-                        ),
                       ),
-                    ),
-                    Positioned(
-                      right: 8,
-                      bottom: 8,
-                      child: GestureDetector(
-                        onTap: _listenForContent,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 38,
-                          height: 38,
-                          decoration: BoxDecoration(
-                            color: _isListeningContent
-                                ? Colors.red
-                                : Colors.grey[700],
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                            _isListeningContent ? Icons.stop : Icons.mic,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 12),
-
-                // ── Save & Clear ──
-                Row(
-                  children: [
-                    if (_contentController.text.isNotEmpty)
-                      Expanded(
-                        flex: 1,
-                        child: OutlinedButton(
-                          onPressed: () =>
-                              setState(() => _contentController.clear()),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.black,
-                            side: BorderSide(color: Colors.grey[400]!),
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: const Text("Clear"),
-                        ),
-                      ),
-                    if (_contentController.text.isNotEmpty)
-                      const SizedBox(width: 10),
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton.icon(
-                        onPressed: _contentController.text.trim().isNotEmpty
-                            ? _saveNote
-                            : null,
-                        icon: const Icon(Icons.save_alt),
-                        label: const Text("Save Note"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey[400],
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
-                          ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
-          // Divider
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Expanded(child: Divider(color: Colors.grey[400])),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Text(
-                    "Saved Notes",
-                    style: TextStyle(
-                      color: Colors.grey[600],
-                      fontSize: 12,
-                      fontWeight: FontWeight.bold,
                     ),
                   ),
+                ],
+              ),
+              const Text(
+                "Library",
+                style: TextStyle(
+                  fontSize: 18,
+                  color: Color(0xFF9A9A3E),
+                  fontWeight: FontWeight.bold,
                 ),
-                Expanded(child: Divider(color: Colors.grey[400])),
-              ],
-            ),
-          ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                "Tap to read • Long press to delete",
+                style: TextStyle(color: Colors.grey[600], fontSize: 11),
+              ),
+              const SizedBox(height: 8),
+              Expanded(
+                child: StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('library')
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (!snapshot.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    var docs = snapshot.data!.docs.where((doc) {
+                      String name =
+                          (doc.data() as Map<String, dynamic>)['fileName'] ??
+                          "";
+                      return name.toLowerCase().contains(_searchQuery);
+                    }).toList();
 
-          // ── Saved notes ──
-          Expanded(
-            child: StreamBuilder<QuerySnapshot>(
-              stream: FirebaseFirestore.instance
-                  .collection('notes')
-                  .where('userId', isEqualTo: _userId)
-                  .snapshots(),
-              builder: (context, snapshot) {
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Text(
-                      "Error: ${snapshot.error}",
-                      style: const TextStyle(color: Colors.red),
-                    ),
-                  );
-                }
-                if (!snapshot.hasData) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                final docs = snapshot.data!.docs.toList()
-                  ..sort((a, b) {
-                    final aTime = (a.data() as Map)['timestamp'];
-                    final bTime = (b.data() as Map)['timestamp'];
-                    if (aTime == null || bTime == null) return 0;
-                    return bTime.compareTo(aTime);
-                  });
-
-                if (docs.isEmpty) {
-                  return Center(
-                    child: Text(
-                      "No notes yet. Start speaking or typing!",
-                      style: TextStyle(color: Colors.grey[500]),
-                    ),
-                  );
-                }
-                return ListView.builder(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 20,
-                    vertical: 8,
-                  ),
-                  itemCount: docs.length,
-                  itemBuilder: (ctx, i) {
-                    final data = docs[i].data() as Map<String, dynamic>;
-                    final title = data['title'] ?? 'Note';
-                    final content = data['content'] ?? '';
-                    final docId = docs[i].id;
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: ListTile(
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 8,
-                        ),
-                        title: Text(
-                          title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.bold,
+                    if (docs.isEmpty) {
+                      return Center(
+                        child: Text(
+                          "No files yet.\nTap + to upload.",
+                          textAlign: TextAlign.center,
+                          style: TextStyle(
+                            color: Colors.grey[600],
                             fontSize: 14,
                           ),
                         ),
-                        subtitle: Text(
-                          content,
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(fontSize: 12),
-                        ),
-                        trailing: IconButton(
-                          icon: const Icon(
-                            Icons.delete_outline,
-                            color: Colors.grey,
+                      );
+                    }
+
+                    return GridView.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 1.1,
                           ),
-                          onPressed: () => _deleteNote(docId),
-                        ),
-                      ),
+                      itemCount: docs.length,
+                      itemBuilder: (context, index) {
+                        final data = docs[index].data() as Map<String, dynamic>;
+                        final String name = data['fileName'] ?? 'File';
+                        final String type = data['fileType'] ?? 'pdf';
+                        final String content = data['content'] ?? '';
+                        final String docId = docs[index].id;
+                        return GestureDetector(
+                          onTap: () => _openReader(name, content),
+                          onLongPress: () => _confirmDelete(docId, name),
+                          child: _buildFileCard(name, type),
+                        );
+                      },
                     );
                   },
-                );
-              },
-            ),
+                ),
+              ),
+              // Mini bar persists via Provider — no setState needed
+              const MiniPlayerBar(),
+            ],
           ),
-        ],
+        ),
       ),
-
       bottomNavigationBar: BottomAppBar(
         color: Colors.grey[850],
         shape: const CircularNotchedRectangle(),
@@ -530,26 +302,25 @@ class _NotesPageState extends State<NotesPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
+              _navItem(Icons.home, "Home", Colors.white),
               _navItem(
-                Icons.home,
-                "Home",
+                Icons.note_alt_outlined,
+                "Notes",
                 Colors.grey[400]!,
-                onTap: () => Navigator.pushReplacementNamed(context, '/home'),
+                onTap: () => Navigator.pushNamed(context, '/notes'),
               ),
-              _navItem(Icons.note_alt_outlined, "Notes", Colors.white),
               const SizedBox(width: 48),
               _navItem(
                 Icons.book,
                 "Dictionary",
                 Colors.grey[400]!,
-                onTap: () =>
-                    Navigator.pushReplacementNamed(context, '/dictionary'),
+                onTap: () => Navigator.pushNamed(context, '/dictionary'),
               ),
               _navItem(
                 Icons.menu,
                 "Menu",
                 Colors.grey[400]!,
-                onTap: () => Navigator.pushReplacementNamed(context, '/menu'),
+                onTap: () => Navigator.pushNamed(context, '/menu'),
               ),
             ],
           ),
@@ -560,6 +331,69 @@ class _NotesPageState extends State<NotesPage> {
         backgroundColor: Colors.black,
         onPressed: () => Navigator.pushNamed(context, '/upload'),
         child: const Icon(Icons.file_upload_outlined, color: Colors.white),
+      ),
+    );
+  }
+
+  Widget _buildFileCard(String title, String type) {
+    IconData iconData;
+    Color iconColor;
+    switch (type.toLowerCase()) {
+      case 'pdf':
+        iconData = Icons.picture_as_pdf;
+        iconColor = Colors.red.shade400;
+        break;
+      case 'doc':
+      case 'docx':
+        iconData = Icons.description;
+        iconColor = Colors.blue.shade400;
+        break;
+      case 'ppt':
+      case 'pptx':
+        iconData = Icons.slideshow;
+        iconColor = Colors.orange.shade400;
+        break;
+      case 'txt':
+        iconData = Icons.text_snippet;
+        iconColor = Colors.grey.shade600;
+        break;
+      default:
+        iconData = Icons.insert_drive_file;
+        iconColor = Colors.grey.shade600;
+    }
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFFE0E0E0),
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.07),
+            blurRadius: 5,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.black87,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              height: 1.2,
+            ),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          Align(
+            alignment: Alignment.bottomRight,
+            child: Icon(iconData, size: 28, color: iconColor),
+          ),
+        ],
       ),
     );
   }

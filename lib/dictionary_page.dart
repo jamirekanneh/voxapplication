@@ -5,7 +5,9 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'language_provider.dart';
+import 'mini_player_bar.dart';
 
 class DictionaryPage extends StatefulWidget {
   const DictionaryPage({super.key});
@@ -31,10 +33,6 @@ class _DictionaryPageState extends State<DictionaryPage> {
   @override
   void initState() {
     super.initState();
-    _initTTS();
-  }
-
-  void _initTTS() {
     final langProvider = context.read<LanguageProvider>();
     tts.setLanguage(langProvider.ttsLocale);
     tts.setPitch(1.0);
@@ -74,7 +72,6 @@ class _DictionaryPageState extends State<DictionaryPage> {
   }
 
   Future<void> speak(String text) async {
-    // Always use current language for TTS
     final langProvider = context.read<LanguageProvider>();
     await tts.setLanguage(langProvider.ttsLocale);
     await tts.speak(text);
@@ -82,22 +79,44 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
   Future<void> listen() async {
     final langProvider = context.read<LanguageProvider>();
-    if (!isListening) {
-      bool available = await speech.initialize();
-      if (available) {
-        setState(() => isListening = true);
-        speech.listen(
-          localeId: langProvider.sttLocale,
-          onResult: (result) {
-            String spoken = result.recognizedWords;
-            controller.text = spoken;
-            searchWord(spoken);
-          },
-        );
-      }
-    } else {
+    if (isListening) {
       setState(() => isListening = false);
       speech.stop();
+      return;
+    }
+
+    // Fix: request mic permission
+    final status = await Permission.microphone.request();
+    if (status != PermissionStatus.granted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Microphone permission denied"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+      return;
+    }
+
+    bool available = await speech.initialize(
+      onError: (e) => setState(() => isListening = false),
+      onStatus: (s) {
+        if (s == 'done' || s == 'notListening') {
+          setState(() => isListening = false);
+        }
+      },
+    );
+    if (available) {
+      setState(() => isListening = true);
+      speech.listen(
+        localeId: langProvider.sttLocale,
+        onResult: (result) {
+          String spoken = result.recognizedWords;
+          controller.text = spoken;
+          searchWord(spoken);
+        },
+      );
     }
   }
 
@@ -270,7 +289,6 @@ class _DictionaryPageState extends State<DictionaryPage> {
           ),
         ),
         actions: [
-          // Current language badge
           Padding(
             padding: const EdgeInsets.only(right: 8),
             child: Center(
@@ -320,9 +338,14 @@ class _DictionaryPageState extends State<DictionaryPage> {
               child: CircularProgressIndicator(color: Colors.black),
             ),
           buildResultCard(),
+          const Spacer(),
+          // Mini bar persists on dictionary page too
+          const Padding(
+            padding: EdgeInsets.symmetric(horizontal: 16),
+            child: MiniPlayerBar(),
+          ),
         ],
       ),
-
       bottomNavigationBar: BottomAppBar(
         color: Colors.grey[850],
         shape: const CircularNotchedRectangle(),
