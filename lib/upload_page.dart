@@ -15,7 +15,7 @@ class _UploadPageState extends State<UploadPage> {
   bool _isUploading = false;
   String _statusMessage = "Uploading...";
 
-  @override
+  // REMOVED INVALID @OVERRIDE HERE
   Future<void> _pickAnyFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
@@ -38,7 +38,6 @@ class _UploadPageState extends State<UploadPage> {
       String fileContent = "";
 
       try {
-        // ── Extract text based on file type ──
         if (extension == 'txt' && file.bytes != null) {
           fileContent = String.fromCharCodes(file.bytes!);
         } else if (extension == 'pdf' && file.bytes != null) {
@@ -52,7 +51,6 @@ class _UploadPageState extends State<UploadPage> {
           fileContent = "";
         }
 
-        // Clean up extracted text
         fileContent = fileContent.trim().replaceAll(RegExp(r'\n{3,}'), '\n\n');
 
         setState(() => _statusMessage = "Saving to library...");
@@ -79,7 +77,7 @@ class _UploadPageState extends State<UploadPage> {
               behavior: SnackBarBehavior.floating,
             ),
           );
-          Navigator.pop(context); // back to home
+          Navigator.pop(context);
         }
       } catch (e) {
         debugPrint("Upload error: $e");
@@ -96,7 +94,6 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
-  /// Extract text from PDF bytes using Syncfusion
   Future<String> _extractPdfText(List<int> bytes) async {
     try {
       final PdfDocument document = PdfDocument(inputBytes: bytes);
@@ -114,10 +111,8 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
-  /// Basic DOCX text extraction — reads raw XML and strips tags
   String _extractDocxText(List<int> bytes) {
     try {
-      // DOCX is a ZIP — decode as string and extract text between <w:t> tags
       final raw = String.fromCharCodes(bytes);
       final regex = RegExp(r'<w:t[^>]*>(.*?)<\/w:t>', dotAll: true);
       final matches = regex.allMatches(raw);

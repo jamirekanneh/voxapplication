@@ -46,12 +46,13 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
-  void _listen() async {
+  void listen() async {
     if (_isListening) {
-      setState(() => _isListening = false);
-      _speech.stop();
+      await _speech.stop();
+      if (mounted) setState(() => _isListening = false);
       return;
     }
+
     final status = await Permission.microphone.request();
     if (status != PermissionStatus.granted) {
       if (mounted) {
@@ -59,25 +60,30 @@ class _VoxHomePageState extends State<VoxHomePage> {
           const SnackBar(
             content: Text("Microphone permission denied"),
             backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
           ),
         );
       }
       return;
     }
+
     bool available = await _speech.initialize(
       onError: (e) => setState(() => _isListening = false),
       onStatus: (s) {
         if (s == 'done' || s == 'notListening') {
-          setState(() => _isListening = false);
+          if (mounted) setState(() => _isListening = false);
         }
       },
     );
+
     if (available) {
       final langProvider = context.read<LanguageProvider>();
       setState(() => _isListening = true);
       _speech.listen(
         localeId: langProvider.sttLocale,
-        onResult: (val) => setState(() => _isListening = false),
+        onResult: (val) {
+          // Handle search based on voice result if needed
+        },
       );
     }
   }
@@ -287,7 +293,6 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   },
                 ),
               ),
-              // Mini bar persists via Provider — no setState needed
               const MiniPlayerBar(),
             ],
           ),
