@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:flutter_tts/flutter_tts.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});
@@ -13,159 +13,123 @@ class UploadPage extends StatefulWidget {
 
 class _UploadPageState extends State<UploadPage> {
   bool _isUploading = false;
-  final FlutterTts _tts = FlutterTts();
+  String _statusMessage = "Uploading...";
 
   @override
-  void initState() {
-    super.initState();
-    _tts.setLanguage("en-US");
-    _tts.setPitch(1.0);
-    _tts.setSpeechRate(0.5);
-  }
-
-  @override
-  void dispose() {
-    _tts.stop();
-    super.dispose();
-  }
-
   Future<void> _pickAnyFile() async {
     FilePickerResult? result = await FilePicker.platform.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['pdf', 'doc', 'docx', 'ppt', 'pptx', 'txt'],
-      withData: true, // Needed to read file bytes / text
+      withData: true,
     );
 
     if (result != null) {
-      setState(() => _isUploading = true);
-      String fileName = result.files.first.name;
-      String extension = result.files.first.extension ?? 'file';
-      String userEmail =
+      setState(() {
+        _isUploading = true;
+        _statusMessage = "Reading file...";
+      });
+
+      final file = result.files.first;
+      final String fileName = file.name;
+      final String extension = (file.extension ?? 'file').toLowerCase();
+      final String userEmail =
           FirebaseAuth.instance.currentUser?.email ?? "demo@user.com";
 
-      // Try to extract text content (works best with .txt files)
       String fileContent = "";
-      if (extension == 'txt' && result.files.first.bytes != null) {
-        fileContent = String.fromCharCodes(result.files.first.bytes!);
-      }
 
       try {
+        // ── Extract text based on file type ──
+        if (extension == 'txt' && file.bytes != null) {
+          fileContent = String.fromCharCodes(file.bytes!);
+        } else if (extension == 'pdf' && file.bytes != null) {
+          setState(() => _statusMessage = "Extracting PDF text...");
+          fileContent = await _extractPdfText(file.bytes!);
+        } else if ((extension == 'docx' || extension == 'doc') &&
+            file.bytes != null) {
+          setState(() => _statusMessage = "Extracting document text...");
+          fileContent = _extractDocxText(file.bytes!);
+        } else {
+          fileContent = "";
+        }
+
+        // Clean up extracted text
+        fileContent = fileContent.trim().replaceAll(RegExp(r'\n{3,}'), '\n\n');
+
+        setState(() => _statusMessage = "Saving to library...");
+
         await FirebaseFirestore.instance.collection('library').add({
           'fileName': fileName,
           'fileType': extension,
           'userId': userEmail,
+          'content': fileContent,
           'timestamp': FieldValue.serverTimestamp(),
         });
 
         setState(() => _isUploading = false);
 
         if (mounted) {
-          // Show file viewer bottom sheet then auto-start reading
-          await _showFileAndRead(fileName, fileContent);
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                fileContent.isNotEmpty
+                    ? '"$fileName" uploaded & ready to read!'
+                    : '"$fileName" uploaded (text extraction not available for this format)',
+              ),
+              backgroundColor: Colors.grey[850],
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          Navigator.pop(context); // back to home
         }
       } catch (e) {
-        debugPrint(e.toString());
+        debugPrint("Upload error: $e");
         setState(() => _isUploading = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("Upload failed. Please try again.")),
+            const SnackBar(
+              content: Text("Upload failed. Please try again."),
+              backgroundColor: Colors.red,
+            ),
           );
         }
       }
     }
   }
 
-  Future<void> _showFileAndRead(String fileName, String content) async {
-    await showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: const Color(0xFFF3E5AB),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (_) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.85,
-        maxChildSize: 0.95,
-        builder: (ctx, sc) => Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.green),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      fileName,
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        fontSize: 17,
-                      ),
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    onPressed: () => Navigator.pop(ctx),
-                  ),
-                ],
-              ),
-              const Divider(),
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: sc,
-                  child: Text(
-                    content.isNotEmpty
-                        ? content
-                        : "File uploaded successfully!\n\nNote: Full text extraction is available for .txt files. For PDF/Word/PPT files, reading will announce the file name.",
-                    style: const TextStyle(fontSize: 15, height: 1.7),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  icon: const Icon(Icons.play_arrow),
-                  label: const Text("Start Reading Now"),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                  ),
-                  onPressed: () async {
-                    Navigator.pop(ctx);
-                    final textToRead = content.isNotEmpty
-                        ? content
-                        : "Reading $fileName now.";
-                    await _tts.speak(textToRead);
-                    if (mounted) Navigator.pop(context); // back to home
-                  },
-                ),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: TextButton(
-                  onPressed: () {
-                    Navigator.pop(ctx);
-                    Navigator.pop(context); // back to home without reading
-                  },
-                  child: const Text(
-                    "Go to Library",
-                    style: TextStyle(color: Colors.black54),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+  /// Extract text from PDF bytes using Syncfusion
+  Future<String> _extractPdfText(List<int> bytes) async {
+    try {
+      final PdfDocument document = PdfDocument(inputBytes: bytes);
+      final PdfTextExtractor extractor = PdfTextExtractor(document);
+      final StringBuffer buffer = StringBuffer();
+      for (int i = 0; i < document.pages.count; i++) {
+        final text = extractor.extractText(startPageIndex: i, endPageIndex: i);
+        buffer.writeln(text);
+      }
+      document.dispose();
+      return buffer.toString();
+    } catch (e) {
+      debugPrint("PDF extraction error: $e");
+      return "";
+    }
+  }
+
+  /// Basic DOCX text extraction — reads raw XML and strips tags
+  String _extractDocxText(List<int> bytes) {
+    try {
+      // DOCX is a ZIP — decode as string and extract text between <w:t> tags
+      final raw = String.fromCharCodes(bytes);
+      final regex = RegExp(r'<w:t[^>]*>(.*?)<\/w:t>', dotAll: true);
+      final matches = regex.allMatches(raw);
+      final buffer = StringBuffer();
+      for (final m in matches) {
+        buffer.write('${m.group(1)} ');
+      }
+      return buffer.toString().trim();
+    } catch (e) {
+      debugPrint("DOCX extraction error: $e");
+      return "";
+    }
   }
 
   @override
@@ -183,12 +147,15 @@ class _UploadPageState extends State<UploadPage> {
       ),
       body: Center(
         child: _isUploading
-            ? const Column(
+            ? Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  CircularProgressIndicator(color: Colors.black),
-                  SizedBox(height: 16),
-                  Text("Uploading...", style: TextStyle(color: Colors.black54)),
+                  const CircularProgressIndicator(color: Colors.black),
+                  const SizedBox(height: 16),
+                  Text(
+                    _statusMessage,
+                    style: const TextStyle(color: Colors.black54),
+                  ),
                 ],
               )
             : Column(
@@ -201,12 +168,12 @@ class _UploadPageState extends State<UploadPage> {
                   ),
                   const SizedBox(height: 20),
                   const Text(
-                    "Select any PDF, Word, or PowerPoint file",
+                    "Select any PDF, Word, or Text file",
                     style: TextStyle(color: Colors.black54),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    "File will open and start reading automatically",
+                    "Text will be extracted and saved for reading",
                     style: TextStyle(color: Colors.grey[600], fontSize: 12),
                   ),
                   const SizedBox(height: 30),

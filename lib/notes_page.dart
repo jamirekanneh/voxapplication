@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'language_provider.dart';
 
 class NotesPage extends StatefulWidget {
   const NotesPage({super.key});
@@ -12,74 +15,183 @@ class NotesPage extends StatefulWidget {
 
 class _NotesPageState extends State<NotesPage> {
   final stt.SpeechToText _speech = stt.SpeechToText();
-  bool _isListening = false;
-  String _transcribedText = "";
-  String _noteTitle = "";
+
+  bool _isListeningTitle = false;
   final TextEditingController _titleController = TextEditingController();
 
-  // Use UID — not email — so notes are truly per-user
+  bool _isListeningContent = false;
+  final TextEditingController _contentController = TextEditingController();
+
   String get _userId => FirebaseAuth.instance.currentUser?.uid ?? "anonymous";
 
   @override
   void dispose() {
     _speech.stop();
     _titleController.dispose();
+    _contentController.dispose();
     super.dispose();
   }
 
-  Future<void> _toggleListening() async {
-    if (_isListening) {
-      await _speech.stop();
-      setState(() => _isListening = false);
-    } else {
-      bool available = await _speech.initialize(
-        onError: (e) => setState(() => _isListening = false),
-        onStatus: (s) {
-          if (s == 'done' || s == 'notListening') {
-            setState(() => _isListening = false);
-          }
-        },
-      );
-      if (available) {
-        setState(() => _isListening = true);
-        _speech.listen(
-          onResult: (val) {
-            setState(() => _transcribedText = val.recognizedWords);
-          },
-          listenFor: const Duration(minutes: 5),
-          pauseFor: const Duration(seconds: 4),
-          partialResults: true,
+  // FIX 1: Request mic permission before initializing STT
+  Future<bool> _requestMicPermission() async {
+    final status = await Permission.microphone.request();
+    if (status != PermissionStatus.granted) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Microphone permission denied"),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          ),
         );
       }
+      return false;
+    }
+    return true;
+  }
+
+  // ── Mic for title ──
+  Future<void> _listenForTitle() async {
+    final langProvider = context.read<LanguageProvider>();
+
+    if (_isListeningTitle) {
+      await _speech.stop();
+      setState(() => _isListeningTitle = false);
+      return;
+    }
+    if (_isListeningContent) {
+      await _speech.stop();
+      setState(() => _isListeningContent = false);
+    }
+
+    // FIX 1: Check permission first
+    final granted = await _requestMicPermission();
+    if (!granted) return;
+
+    bool available = await _speech.initialize(
+      onError: (e) => setState(() => _isListeningTitle = false),
+      onStatus: (s) {
+        if (s == 'done' || s == 'notListening') {
+          setState(() => _isListeningTitle = false);
+        }
+      },
+    );
+
+    if (available) {
+      setState(() => _isListeningTitle = true);
+      _speech.listen(
+        localeId: langProvider.sttLocale,
+        onResult: (val) {
+          _titleController.text = val.recognizedWords;
+          _titleController.selection = TextSelection.fromPosition(
+            TextPosition(offset: _titleController.text.length),
+          );
+        },
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 3),
+        partialResults: true,
+      );
+    }
+  }
+
+  // ── Mic for content ──
+  Future<void> _listenForContent() async {
+    final langProvider = context.read<LanguageProvider>();
+
+    if (_isListeningContent) {
+      await _speech.stop();
+      setState(() => _isListeningContent = false);
+      return;
+    }
+    if (_isListeningTitle) {
+      await _speech.stop();
+      setState(() => _isListeningTitle = false);
+    }
+
+    // FIX 1: Check permission first
+    final granted = await _requestMicPermission();
+    if (!granted) return;
+
+    bool available = await _speech.initialize(
+      onError: (e) => setState(() => _isListeningContent = false),
+      onStatus: (s) {
+        if (s == 'done' || s == 'notListening') {
+          setState(() => _isListeningContent = false);
+        }
+      },
+    );
+
+    if (available) {
+      final existingText = _contentController.text;
+      final prefix = existingText.isNotEmpty ? "$existingText " : "";
+
+      setState(() => _isListeningContent = true);
+      _speech.listen(
+        localeId: langProvider.sttLocale,
+        onResult: (val) {
+          final spoken = val.recognizedWords;
+          _contentController.text = "$prefix$spoken";
+          _contentController.selection = TextSelection.fromPosition(
+            TextPosition(offset: _contentController.text.length),
+          );
+          setState(() {});
+        },
+        listenFor: const Duration(minutes: 5),
+        pauseFor: const Duration(seconds: 4),
+        partialResults: true,
+      );
     }
   }
 
   Future<void> _saveNote() async {
-    if (_transcribedText.trim().isEmpty) return;
+    final content = _contentController.text.trim();
+    final title = _titleController.text.trim();
 
-    // Save under userId (UID) so only this user sees their notes
-    await FirebaseFirestore.instance.collection('notes').add({
-      'userId': _userId, // UID not email
-      'title': _noteTitle.isNotEmpty ? _noteTitle : "Note",
-      'content': _transcribedText,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
-
-    setState(() {
-      _transcribedText = "";
-      _noteTitle = "";
-      _titleController.clear();
-    });
-
-    if (mounted) {
+    if (content.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text("Note saved!"),
+          content: Text("Please add some content before saving."),
+          backgroundColor: Colors.red,
           behavior: SnackBarBehavior.floating,
-          backgroundColor: Color(0xFF333333),
           margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
         ),
       );
+      return;
+    }
+
+    try {
+      await FirebaseFirestore.instance.collection('notes').add({
+        'userId': _userId,
+        'title': title.isNotEmpty ? title : "Note",
+        'content': content,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      setState(() {
+        _contentController.clear();
+        _titleController.clear();
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Note saved!"),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: Color(0xFF333333),
+            margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text("Error saving: $e"),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          ),
+        );
+      }
     }
   }
 
@@ -89,6 +201,8 @@ class _NotesPageState extends State<NotesPage> {
 
   @override
   Widget build(BuildContext context) {
+    final langProvider = context.watch<LanguageProvider>();
+
     return Scaffold(
       backgroundColor: const Color(0xFFF3E5AB),
       appBar: AppBar(
@@ -98,117 +212,187 @@ class _NotesPageState extends State<NotesPage> {
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
+        automaticallyImplyLeading: false,
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  langProvider.selectedLanguage,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
       body: Column(
         children: [
-          // New note area
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                TextField(
-                  controller: _titleController,
-                  onChanged: (v) => _noteTitle = v,
-                  decoration: InputDecoration(
-                    hintText: "Note title (optional)",
-                    filled: true,
-                    fillColor: Colors.white.withOpacity(0.7),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 10),
-
-                GestureDetector(
-                  onTap: _toggleListening,
-                  child: AnimatedContainer(
-                    duration: const Duration(milliseconds: 300),
-                    width: double.infinity,
-                    constraints: const BoxConstraints(minHeight: 130),
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: _isListening
-                          ? Colors.grey[200]
-                          : Colors.white.withOpacity(0.7),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: _isListening
-                            ? Colors.grey[600]!
-                            : Colors.transparent,
-                        width: 1.5,
+                // ── Title field with mic ──
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _titleController,
+                        decoration: InputDecoration(
+                          hintText: _isListeningTitle
+                              ? "Listening for title..."
+                              : "Note title (optional)",
+                          filled: true,
+                          fillColor: _isListeningTitle
+                              ? Colors.grey[200]
+                              : Colors.white.withOpacity(0.7),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(16),
+                            borderSide: BorderSide.none,
+                          ),
+                        ),
                       ),
                     ),
-                    child: _transcribedText.isEmpty
-                        ? Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(
-                                _isListening
-                                    ? Icons.graphic_eq
-                                    : Icons.mic_none,
-                                size: 40,
-                                color: _isListening
-                                    ? Colors.grey[700]
-                                    : Colors.grey[400],
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                _isListening
-                                    ? "Listening... tap to stop"
-                                    : "Tap to speak your note",
-                                style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 14,
-                                ),
-                              ),
-                            ],
-                          )
-                        : Text(
-                            _transcribedText,
-                            style: const TextStyle(
-                              fontSize: 15,
-                              height: 1.6,
-                              color: Colors.black87,
-                            ),
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: _listenForTitle,
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        width: 46,
+                        height: 46,
+                        decoration: BoxDecoration(
+                          color: _isListeningTitle
+                              ? Colors.red
+                              : Colors.grey[700],
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(
+                          _isListeningTitle ? Icons.stop : Icons.mic,
+                          color: Colors.white,
+                          size: 22,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 10),
+
+                // ── Content area ──
+                Stack(
+                  children: [
+                    TextField(
+                      controller: _contentController,
+                      maxLines: 6,
+                      minLines: 4,
+                      onChanged: (_) => setState(() {}),
+                      decoration: InputDecoration(
+                        hintText: _isListeningContent
+                            ? "Listening in ${langProvider.selectedLanguage}..."
+                            : "Speak or type your note here...",
+                        filled: true,
+                        fillColor: _isListeningContent
+                            ? Colors.grey[200]
+                            : Colors.white.withOpacity(0.7),
+                        contentPadding: const EdgeInsets.fromLTRB(
+                          16,
+                          14,
+                          56,
+                          14,
+                        ),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: _isListeningContent
+                              ? BorderSide(color: Colors.grey[600]!, width: 1.5)
+                              : BorderSide.none,
+                        ),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide.none,
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(20),
+                          borderSide: BorderSide(
+                            color: Colors.grey[400]!,
+                            width: 1,
                           ),
-                  ),
+                        ),
+                      ),
+                    ),
+                    Positioned(
+                      right: 8,
+                      bottom: 8,
+                      child: GestureDetector(
+                        onTap: _listenForContent,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 38,
+                          height: 38,
+                          decoration: BoxDecoration(
+                            color: _isListeningContent
+                                ? Colors.red
+                                : Colors.grey[700],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            _isListeningContent ? Icons.stop : Icons.mic,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
 
                 const SizedBox(height: 12),
 
+                // ── Save & Clear ──
                 Row(
                   children: [
-                    Expanded(
-                      child: ElevatedButton.icon(
-                        onPressed: _toggleListening,
-                        icon: Icon(_isListening ? Icons.stop : Icons.mic),
-                        label: Text(_isListening ? "Stop" : "Speak"),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: _isListening
-                              ? Colors.grey[700]
-                              : Colors.grey[600],
-                          foregroundColor: Colors.white,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(30),
+                    if (_contentController.text.isNotEmpty)
+                      Expanded(
+                        flex: 1,
+                        child: OutlinedButton(
+                          onPressed: () =>
+                              setState(() => _contentController.clear()),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: Colors.black,
+                            side: BorderSide(color: Colors.grey[400]!),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: const Text("Clear"),
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 10),
+                    if (_contentController.text.isNotEmpty)
+                      const SizedBox(width: 10),
                     Expanded(
+                      flex: 2,
                       child: ElevatedButton.icon(
-                        onPressed: _transcribedText.trim().isEmpty
-                            ? null
-                            : _saveNote,
+                        onPressed: _contentController.text.trim().isNotEmpty
+                            ? _saveNote
+                            : null,
                         icon: const Icon(Icons.save_alt),
                         label: const Text("Save Note"),
                         style: ElevatedButton.styleFrom(
@@ -224,19 +408,11 @@ class _NotesPageState extends State<NotesPage> {
                     ),
                   ],
                 ),
-
-                if (_transcribedText.isNotEmpty)
-                  TextButton(
-                    onPressed: () => setState(() => _transcribedText = ""),
-                    child: Text(
-                      "Clear",
-                      style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                    ),
-                  ),
               ],
             ),
           ),
 
+          // Divider
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
@@ -258,23 +434,37 @@ class _NotesPageState extends State<NotesPage> {
             ),
           ),
 
-          // Saved notes — filtered by UID
+          // ── Saved notes ──
           Expanded(
             child: StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('notes')
-                  .where('userId', isEqualTo: _userId) // UID filter
-                  .orderBy('timestamp', descending: true)
+                  .where('userId', isEqualTo: _userId)
                   .snapshots(),
               builder: (context, snapshot) {
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      "Error: ${snapshot.error}",
+                      style: const TextStyle(color: Colors.red),
+                    ),
+                  );
+                }
                 if (!snapshot.hasData) {
                   return const Center(child: CircularProgressIndicator());
                 }
-                final docs = snapshot.data!.docs;
+                final docs = snapshot.data!.docs.toList()
+                  ..sort((a, b) {
+                    final aTime = (a.data() as Map)['timestamp'];
+                    final bTime = (b.data() as Map)['timestamp'];
+                    if (aTime == null || bTime == null) return 0;
+                    return bTime.compareTo(aTime);
+                  });
+
                 if (docs.isEmpty) {
                   return Center(
                     child: Text(
-                      "No notes yet. Start speaking!",
+                      "No notes yet. Start speaking or typing!",
                       style: TextStyle(color: Colors.grey[500]),
                     ),
                   );
@@ -290,7 +480,6 @@ class _NotesPageState extends State<NotesPage> {
                     final title = data['title'] ?? 'Note';
                     final content = data['content'] ?? '';
                     final docId = docs[i].id;
-
                     return Container(
                       margin: const EdgeInsets.only(bottom: 10),
                       decoration: BoxDecoration(
@@ -327,6 +516,72 @@ class _NotesPageState extends State<NotesPage> {
                   },
                 );
               },
+            ),
+          ),
+        ],
+      ),
+
+      bottomNavigationBar: BottomAppBar(
+        color: Colors.grey[850],
+        shape: const CircularNotchedRectangle(),
+        notchMargin: 8,
+        child: SizedBox(
+          height: 65,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _navItem(
+                Icons.home,
+                "Home",
+                Colors.grey[400]!,
+                onTap: () => Navigator.pushReplacementNamed(context, '/home'),
+              ),
+              _navItem(Icons.note_alt_outlined, "Notes", Colors.white),
+              const SizedBox(width: 48),
+              _navItem(
+                Icons.book,
+                "Dictionary",
+                Colors.grey[400]!,
+                onTap: () =>
+                    Navigator.pushReplacementNamed(context, '/dictionary'),
+              ),
+              _navItem(
+                Icons.menu,
+                "Menu",
+                Colors.grey[400]!,
+                onTap: () => Navigator.pushReplacementNamed(context, '/menu'),
+              ),
+            ],
+          ),
+        ),
+      ),
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.black,
+        onPressed: () => Navigator.pushNamed(context, '/upload'),
+        child: const Icon(Icons.file_upload_outlined, color: Colors.white),
+      ),
+    );
+  }
+
+  Widget _navItem(
+    IconData icon,
+    String label,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 24),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
             ),
           ),
         ],

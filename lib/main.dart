@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import "dictionary_page.dart";
 import 'package:firebase_core/firebase_core.dart';
 import 'firebase_options.dart';
@@ -7,11 +8,17 @@ import 'home_page.dart';
 import 'upload_page.dart';
 import 'menu_page.dart';
 import 'notes_page.dart';
+import 'language_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  runApp(const TheVoxApp());
+  runApp(
+    ChangeNotifierProvider(
+      create: (_) => LanguageProvider(),
+      child: const TheVoxApp(),
+    ),
+  );
 }
 
 class TheVoxApp extends StatelessWidget {
