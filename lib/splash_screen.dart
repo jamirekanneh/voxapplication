@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'user_profile.dart';
 import 'home_page.dart';
 
@@ -24,62 +23,38 @@ class _SplashScreenState extends State<SplashScreen>
       vsync: this,
       duration: const Duration(milliseconds: 1500),
     );
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeIn));
-    _scaleAnimation = Tween<double>(
-      begin: 0.8,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.bounceInOut));
+    _fadeAnimation = Tween<double>(begin: 0.0, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.easeIn),
+    );
+    _scaleAnimation = Tween<double>(begin: 0.8, end: 1.0).animate(
+      CurvedAnimation(parent: _controller, curve: Curves.bounceInOut),
+    );
     _controller.forward();
     _checkUserStatus();
   }
 
-  void _checkUserStatus() async {
+  Future<void> _checkUserStatus() async {
+    // Wait for splash animation
     await Future.delayed(const Duration(milliseconds: 3500));
     if (!mounted) return;
 
-    User? user = FirebaseAuth.instance.currentUser;
-
-    // If no user at all, sign in anonymously so we always have a UID
-    if (user == null) {
-      try {
-        final credential = await FirebaseAuth.instance.signInAnonymously();
-        user = credential.user;
-      } catch (e) {
-        debugPrint("Anonymous sign-in failed: $e");
-      }
-    }
+    // Check if this phone has been here before
+    final prefs = await SharedPreferences.getInstance();
+    final bool hasProfile = prefs.getBool('hasProfile') ?? false;
 
     if (!mounted) return;
 
-    // If user has a profile saved already (non-anonymous or returning), go home
-    // If brand new anonymous user, go to profile page to fill in details
-    Widget nextScreen;
-    if (user != null && !user.isAnonymous) {
-      // Returning user who completed profile — go straight home
-      nextScreen = const VoxHomePage();
-    } else if (user != null && user.isAnonymous) {
-      // Check if they already filled in their profile
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      nextScreen = doc.exists ? const VoxHomePage() : const UserProfilePage();
-    } else {
-      nextScreen = const UserProfilePage();
-    }
-
-    if (!mounted) return;
+    // If phone recognises the user → straight to home
+    // If not → profile setup page
+    final Widget nextScreen =
+        hasProfile ? const VoxHomePage() : const UserProfilePage();
 
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
+        pageBuilder: (_, animation, __) => nextScreen,
+        transitionsBuilder: (_, animation, __, child) =>
+            FadeTransition(opacity: animation, child: child),
         transitionDuration: const Duration(milliseconds: 800),
       ),
     );

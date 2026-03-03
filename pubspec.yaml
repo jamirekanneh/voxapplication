@@ -12,6 +12,7 @@ dependencies:
   firebase_core: ^4.4.0
   firebase_auth: ^6.1.4
   cloud_firestore: ^6.1.2
+
   image_picker: ^1.0.7
   firebase_storage: ^13.0.6
   file_picker: ^10.3.10
@@ -21,6 +22,11 @@ dependencies:
   permission_handler: ^12.0.1
   syncfusion_flutter_pdf: ^32.2.7
   provider: ^6.1.2
+  google_sign_in: ^6.2.1
+  app_links: ^6.3.2  
+  shared_preferences: ^2.3.2 
+  just_audio: ^0.9.36
+  http: ^1.2.0
 
 dev_dependencies:
   flutter_test:

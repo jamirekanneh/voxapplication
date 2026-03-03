@@ -1,40 +1,66 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'app_strings.dart';
 
 class LanguageProvider extends ChangeNotifier {
-  // Map: display name → TTS locale code
-  static const Map<String, String> languageLocales = {
-    "English": "en-US",
-    "Spanish": "es-ES",
-    "Chinese": "zh-CN",
-    "Turkish": "tr-TR",
-    "Arabic": "ar-SA",
-    "French": "fr-FR",
+  static const _prefKey = 'selected_language';
+
+  String _selectedLanguage = 'English';
+
+  final List<String> languages = [
+    'English',
+    'Spanish',
+    'French',
+    'Arabic',
+    'Turkish',
+    'Chinese',
+  ];
+
+  // TTS locale map
+  static const Map<String, String> _ttsLocales = {
+    'English':  'en-US',
+    'Spanish':  'es-ES',
+    'French':   'fr-FR',
+    'Arabic':   'ar-SA',
+    'Turkish':  'tr-TR',
+    'Chinese':  'zh-CN',
   };
 
-  // Map: display name → STT locale code
-  static const Map<String, String> sttLocales = {
-    "English": "en_US",
-    "Spanish": "es_ES",
-    "Chinese": "zh_CN",
-    "Turkish": "tr_TR",
-    "Arabic": "ar_SA",
-    "French": "fr_FR",
+  // STT locale map
+  static const Map<String, String> _sttLocales = {
+    'English':  'en_US',
+    'Spanish':  'es_ES',
+    'French':   'fr_FR',
+    'Arabic':   'ar_SA',
+    'Turkish':  'tr_TR',
+    'Chinese':  'zh_CN',
   };
-
-  String _selectedLanguage = "English";
 
   String get selectedLanguage => _selectedLanguage;
+  String get ttsLocale => _ttsLocales[_selectedLanguage] ?? 'en-US';
+  String get sttLocale => _sttLocales[_selectedLanguage] ?? 'en_US';
 
-  String get ttsLocale => languageLocales[_selectedLanguage] ?? "en-US";
+  // Translate shortcut
+  String t(String key) => AppStrings.of(_selectedLanguage)[key] ?? key;
 
-  String get sttLocale => sttLocales[_selectedLanguage] ?? "en_US";
+  LanguageProvider() {
+    _loadSavedLanguage();
+  }
 
-  void setLanguage(String language) {
-    if (languageLocales.containsKey(language)) {
-      _selectedLanguage = language;
+  Future<void> _loadSavedLanguage() async {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_prefKey);
+    if (saved != null && languages.contains(saved)) {
+      _selectedLanguage = saved;
       notifyListeners();
     }
   }
 
-  List<String> get languages => languageLocales.keys.toList();
+  Future<void> setLanguage(String language) async {
+    if (_selectedLanguage == language) return;
+    _selectedLanguage = language;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefKey, language);
+  }
 }

@@ -1,9 +1,16 @@
 import 'dart:convert';
+import 'dart:math';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
+// ─────────────────────────────────────────────
+//  ENTRY POINT
+// ─────────────────────────────────────────────
 class UserProfilePage extends StatefulWidget {
   const UserProfilePage({super.key});
 
@@ -12,282 +19,1300 @@ class UserProfilePage extends StatefulWidget {
 }
 
 class _UserProfilePageState extends State<UserProfilePage> {
-  final _emailController = TextEditingController();
-  final _nameController = TextEditingController();
-  final _phoneController = TextEditingController();
+  // Stages:
+  // 'form'          → first time on this phone, filling in name + email
+  // 'returning'     → email already exists in DB, ask what they want to do
+  // 'awaiting_link' → magic link sent, waiting for them to tap it
+  String _stage = 'form';
 
+  final _nameController = TextEditingController();
+  final _emailController = TextEditingController();
   String? _base64Image;
   bool _isLoading = false;
+  bool _googleLoading = false;
 
-  // Use UID as the document ID — matches Firestore rules
-  String get _userId => FirebaseAuth.instance.currentUser?.uid ?? "anonymous";
-
-  Future<void> _pickAndConvertImage() async {
-    final ImagePicker picker = ImagePicker();
-    final XFile? image = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 400,
-      maxHeight: 400,
-      imageQuality: 50,
-    );
-
-    if (image != null) {
-      final imageBytes = await image.readAsBytes();
-      setState(() {
-        _base64Image = base64Encode(imageBytes);
-      });
-    }
+  @override
+  void dispose() {
+    _nameController.dispose();
+    _emailController.dispose();
+    super.dispose();
   }
 
-  Future<void> _saveToFirestore() async {
+  // ─────────────────────────────────────────────
+  //  SAVE BUTTON TAPPED
+  // ─────────────────────────────────────────────
+  Future<void> _onSaveTapped() async {
+    final name = _nameController.text.trim();
     final email = _emailController.text.trim();
-    if (email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("Please enter an email address")),
-      );
+
+    if (name.isEmpty || email.isEmpty) {
+      _showSnack("Please fill in your name and email");
+      return;
+    }
+    if (!email.contains('@') || !email.contains('.')) {
+      _showSnack("Please enter a valid email address");
       return;
     }
 
     setState(() => _isLoading = true);
 
+    final snapshot = await FirebaseFirestore.instance
+        .collection('users')
+        .where('email', isEqualTo: email)
+        .limit(1)
+        .get();
+
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+
+    if (snapshot.docs.isNotEmpty) {
+      // Email already in Firebase — show returning user screen
+      setState(() => _stage = 'returning');
+    } else {
+      // Brand new user — save and go home
+      await _saveNewProfileAndGoHome();
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  NEW USER — save profile to Firebase
+  // ─────────────────────────────────────────────
+  Future<void> _saveNewProfileAndGoHome() async {
+    setState(() => _isLoading = true);
     try {
-      // FIX: Use UID as document ID (matches Firestore rule: match /users/{userId})
+      User? user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        final credential = await FirebaseAuth.instance.signInAnonymously();
+        user = credential.user;
+      }
+
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(_userId) // was: .doc(email) — now uses UID
+          .doc(user!.uid)
           .set({
-            'username': _nameController.text.trim(),
-            'email': email,
-            'phone': _phoneController.text.trim(),
-            'photoBase64': _base64Image ?? "",
-            'createdAt': FieldValue.serverTimestamp(),
-            'userId': _userId, // store UID in doc for reference
-          });
+        'username': _nameController.text.trim(),
+        'email': _emailController.text.trim(),
+        'photoBase64': _base64Image ?? '',
+        'createdAt': FieldValue.serverTimestamp(),
+        'userId': user.uid,
+      });
+
+      // Mark this phone as recognised
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('hasProfile', true);
+      await prefs.setString('userEmail', _emailController.text.trim());
 
       if (!mounted) return;
-
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text("Profile Saved!")));
-
       Navigator.pushReplacementNamed(context, '/home');
     } catch (e) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text("Error: $e")));
+      _showSnack("Error saving profile: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.white,
-      body: Stack(
-        children: [
-          // Backdrop decoration
-          Positioned(
-            top: -100,
-            right: -50,
-            child: Container(
-              width: 300,
-              height: 300,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFFF3E5AB).withOpacity(0.4),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: -150,
-            left: -100,
-            child: Container(
-              width: 400,
-              height: 400,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: const Color(0xFFF3E5AB).withOpacity(0.2),
-              ),
-            ),
-          ),
-
-          // Main content
-          Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 500),
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 30,
-                    vertical: 60,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "USER\nPROFILE",
-                        style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.w900,
-                          height: 1.1,
-                          letterSpacing: -1,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      const Text(
-                        "Fill in your details to join the community.",
-                        style: TextStyle(
-                          color: Colors.black54,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      const SizedBox(height: 40),
-
-                      // Photo upload
-                      Center(
-                        child: GestureDetector(
-                          onTap: _pickAndConvertImage,
-                          child: Stack(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: Colors.white,
-                                  border: Border.all(
-                                    color: const Color(0xFFF3E5AB),
-                                    width: 3,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: Colors.black.withOpacity(0.05),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 5),
-                                    ),
-                                  ],
-                                ),
-                                child: CircleAvatar(
-                                  radius: 55,
-                                  backgroundColor: const Color(0xFFF9F9F9),
-                                  backgroundImage: _base64Image != null
-                                      ? MemoryImage(base64Decode(_base64Image!))
-                                      : null,
-                                  child: _base64Image == null
-                                      ? const Icon(
-                                          Icons.camera_alt_outlined,
-                                          color: Colors.black26,
-                                          size: 30,
-                                        )
-                                      : null,
-                                ),
-                              ),
-                              Positioned(
-                                bottom: 5,
-                                right: 5,
-                                child: Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: const BoxDecoration(
-                                    color: Colors.black,
-                                    shape: BoxShape.circle,
-                                  ),
-                                  child: const Icon(
-                                    Icons.edit,
-                                    color: Color(0xFFF3E5AB),
-                                    size: 14,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 40),
-
-                      _buildElegantField(
-                        "Full Name",
-                        _nameController,
-                        Icons.person_outline,
-                      ),
-                      _buildElegantField(
-                        "Email Address",
-                        _emailController,
-                        Icons.alternate_email,
-                      ),
-                      _buildElegantField(
-                        "Phone Number",
-                        _phoneController,
-                        Icons.phone_android_outlined,
-                      ),
-
-                      const SizedBox(height: 50),
-
-                      Center(
-                        child: _isLoading
-                            ? const CircularProgressIndicator(
-                                color: Colors.black,
-                              )
-                            : SizedBox(
-                                width: 220,
-                                height: 55,
-                                child: ElevatedButton(
-                                  onPressed: _saveToFirestore,
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.black,
-                                    foregroundColor: const Color(0xFFF3E5AB),
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(30),
-                                    ),
-                                    elevation: 8,
-                                  ),
-                                  child: const Text(
-                                    "SAVE PROFILE",
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: 1.2,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                      ),
-                    ],
+  // ─────────────────────────────────────────────
+  //  RETURNING USER — "START FRESH" WARNING DIALOG
+  // ─────────────────────────────────────────────
+  Future<void> _onStartFreshTapped() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.6),
+      builder: (ctx) => Dialog(
+        backgroundColor: Colors.white,
+        shape:
+            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade700,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  "WARNING",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 2,
                   ),
                 ),
               ),
-            ),
+              const SizedBox(height: 16),
+              const Text(
+                "This will delete\nyour old data.",
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: -1,
+                  height: 1.1,
+                  color: Colors.black,
+                ),
+              ),
+              const SizedBox(height: 12),
+              const Text(
+                "All your previous Vox activity, history, and saved content linked to this email will be permanently deleted. This cannot be undone.",
+                style: TextStyle(
+                  color: Colors.black54,
+                  fontSize: 14,
+                  height: 1.6,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 10),
+                decoration: BoxDecoration(
+                  color: Colors.red.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                      color: Colors.red.withOpacity(0.2), width: 1),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(Icons.info_outline_rounded,
+                        size: 15, color: Colors.red),
+                    SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Your new profile will still be saved under this email address.",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.red,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.black,
+                        side: const BorderSide(color: Colors.black26),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text("Go Back",
+                          style:
+                              TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade700,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14)),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 14),
+                        elevation: 0,
+                      ),
+                      child: const Text("Delete & Reset",
+                          style:
+                              TextStyle(fontWeight: FontWeight.w700)),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-        ],
+        ),
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+
+    setState(() => _isLoading = true);
+    try {
+      final email = _emailController.text.trim();
+
+      // Delete old Firestore profile docs for this email
+      final oldDocs = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: email)
+          .get();
+      for (final doc in oldDocs.docs) {
+        await doc.reference.delete();
+      }
+
+      // Save fresh profile under current UID
+      await _saveNewProfileAndGoHome();
+    } catch (e) {
+      _showSnack("Error resetting profile: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  SEND MAGIC LINK — returning user wants data back
+  // ─────────────────────────────────────────────
+  Future<void> _sendMagicLink() async {
+    setState(() => _isLoading = true);
+    try {
+      final email = _emailController.text.trim();
+
+      final acs = ActionCodeSettings(
+        url:
+            'https://vox-application-76ecd.firebaseapp.com/verify?email=$email',
+        handleCodeInApp: true,
+        androidPackageName: 'com.example.voxapplication',
+        androidInstallApp: true,
+        androidMinimumVersion: '21',
+      );
+
+      await FirebaseAuth.instance.sendSignInLinkToEmail(
+        email: email,
+        actionCodeSettings: acs,
+      );
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('pendingEmailLink', email);
+
+      if (!mounted) return;
+      setState(() => _stage = 'awaiting_link');
+    } catch (e) {
+      _showSnack("Error sending link: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  MAGIC LINK VERIFIED
+  // ─────────────────────────────────────────────
+  Future<void> _onMagicLinkVerified() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('hasProfile', true);
+    await prefs.setString('userEmail', _emailController.text.trim());
+    if (!mounted) return;
+    Navigator.pushReplacementNamed(context, '/home');
+  }
+
+  // ─────────────────────────────────────────────
+  //  GOOGLE SIGN-IN
+  // ─────────────────────────────────────────────
+  Future<void> _handleGoogleSignIn() async {
+    setState(() => _googleLoading = true);
+    try {
+      final googleUser = await GoogleSignIn().signIn();
+      if (googleUser == null) {
+        setState(() => _googleLoading = false);
+        return;
+      }
+
+      final googleAuth = await googleUser.authentication;
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      final result =
+          await FirebaseAuth.instance.signInWithCredential(credential);
+      final uid = result.user!.uid;
+
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .get();
+      if (!doc.exists) {
+        await FirebaseFirestore.instance.collection('users').doc(uid).set({
+          'username': googleUser.displayName ?? '',
+          'email': googleUser.email,
+          'photoBase64': '',
+          'photoUrl': googleUser.photoUrl ?? '',
+          'createdAt': FieldValue.serverTimestamp(),
+          'userId': uid,
+        });
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('hasProfile', true);
+      await prefs.setString('userEmail', googleUser.email);
+
+      if (!mounted) return;
+      Navigator.pushReplacementNamed(context, '/home');
+    } catch (e) {
+      _showSnack("Google sign-in failed: $e");
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  IMAGE PICKER
+  // ─────────────────────────────────────────────
+  Future<void> _pickImage() async {
+    final picker = ImagePicker();
+    final image = await picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 400,
+      maxHeight: 400,
+      imageQuality: 50,
+    );
+    if (image != null) {
+      final bytes = await image.readAsBytes();
+      setState(() => _base64Image = base64Encode(bytes));
+    }
+  }
+
+  void _showSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
+  }
+
+  // ─────────────────────────────────────────────
+  //  BUILD
+  // ─────────────────────────────────────────────
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: VoxColors.white,
+      body: AnimatedSwitcher(
+        duration: const Duration(milliseconds: 400),
+        transitionBuilder: (child, anim) => FadeTransition(
+          opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
+          child: child,
+        ),
+        child: switch (_stage) {
+          'form' => _ProfileFormView(
+              key: const ValueKey('form'),
+              nameController: _nameController,
+              emailController: _emailController,
+              base64Image: _base64Image,
+              isLoading: _isLoading,
+              googleLoading: _googleLoading,
+              onPickImage: _pickImage,
+              onSave: _onSaveTapped,
+              onGoogleSignIn: _handleGoogleSignIn,
+            ),
+          'returning' => _ReturningUserView(
+              key: const ValueKey('returning'),
+              email: _emailController.text.trim(),
+              onConfirm: _sendMagicLink,
+              onStartFresh: _onStartFreshTapped,
+              isLoading: _isLoading,
+            ),
+          'awaiting_link' => _AwaitingLinkView(
+              key: const ValueKey('awaiting_link'),
+              email: _emailController.text.trim(),
+              onResend: _sendMagicLink,
+              onVerified: _onMagicLinkVerified,
+            ),
+          _ => const SizedBox.shrink(),
+        },
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+//  STAGE 1 — Profile form
+// ─────────────────────────────────────────────
+class _ProfileFormView extends StatelessWidget {
+  final TextEditingController nameController;
+  final TextEditingController emailController;
+  final String? base64Image;
+  final bool isLoading;
+  final bool googleLoading;
+  final VoidCallback onPickImage;
+  final VoidCallback onSave;
+  final VoidCallback onGoogleSignIn;
+
+  const _ProfileFormView({
+    super.key,
+    required this.nameController,
+    required this.emailController,
+    required this.base64Image,
+    required this.isLoading,
+    required this.googleLoading,
+    required this.onPickImage,
+    required this.onSave,
+    required this.onGoogleSignIn,
+  });
+
+  void _showGuestWarning(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
+      builder: (_) => Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 32),
+        padding: const EdgeInsets.all(28),
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.all(Radius.circular(28)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Handle bar
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 24),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.black,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.warning_amber_rounded,
+                      color: VoxColors.yellow, size: 22),
+                ),
+                const SizedBox(width: 14),
+                const Text(
+                  "Heads up.",
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: -0.5,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 20),
+            const Text(
+              "Without an account, nothing you do in Vox will be saved. If you close the app your activity is gone forever.",
+              style: TextStyle(
+                color: Colors.black54,
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                height: 1.6,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: VoxColors.yellow.withOpacity(0.2),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Row(
+                children: [
+                  Icon(Icons.info_outline_rounded,
+                      size: 15, color: Colors.black54),
+                  SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      "You can always add your details later from the menu.",
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black54,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 28),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.black,
+                      side: const BorderSide(color: Colors.black26),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                    ),
+                    child: const Text("Add Email",
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(context);
+                      Navigator.pushReplacementNamed(context, '/home');
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.black,
+                      foregroundColor: VoxColors.yellow,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16)),
+                      padding: const EdgeInsets.symmetric(vertical: 15),
+                      elevation: 0,
+                    ),
+                    child: const Text("Continue Anyway",
+                        style: TextStyle(fontWeight: FontWeight.w700)),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildElegantField(
-    String label,
-    TextEditingController controller,
-    IconData icon,
-  ) {
+  @override
+  Widget build(BuildContext context) {
+    return VoxScaffoldWrapper(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _VoxHeader(
+            tag: "WELCOME",
+            title: "JOIN\nTHE VOX.",
+            subtitle: "Set up your profile to get started.",
+          ),
+          const SizedBox(height: 36),
+
+          // Avatar picker
+          Center(
+            child: GestureDetector(
+              onTap: onPickImage,
+              child: Stack(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: VoxColors.yellow, width: 3),
+                      boxShadow: [
+                        BoxShadow(
+                          color: VoxColors.yellow.withOpacity(0.4),
+                          blurRadius: 20,
+                          offset: const Offset(0, 6),
+                        ),
+                      ],
+                    ),
+                    child: CircleAvatar(
+                      radius: 52,
+                      backgroundColor: VoxColors.yellow.withOpacity(0.1),
+                      backgroundImage: base64Image != null
+                          ? MemoryImage(base64Decode(base64Image!))
+                          : null,
+                      child: base64Image == null
+                          ? const Icon(Icons.camera_alt_outlined,
+                              color: Colors.black26, size: 28)
+                          : null,
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 4,
+                    right: 4,
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: const BoxDecoration(
+                          color: Colors.black, shape: BoxShape.circle),
+                      child: const Icon(Icons.edit,
+                          color: VoxColors.yellow, size: 13),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+
+          _VoxTextField(
+            controller: nameController,
+            label: "Full Name",
+            icon: Icons.person_outline_rounded,
+          ),
+          _VoxTextField(
+            controller: emailController,
+            label: "Email Address",
+            icon: Icons.alternate_email_rounded,
+            keyboardType: TextInputType.emailAddress,
+          ),
+          const SizedBox(height: 24),
+          _VoxButton(
+            label: "SAVE PROFILE",
+            isLoading: isLoading,
+            onTap: onSave,
+          ),
+          const SizedBox(height: 24),
+          _DividerRow(),
+          const SizedBox(height: 24),
+          _GoogleButton(
+            isLoading: googleLoading,
+            onTap: onGoogleSignIn,
+          ),
+          const SizedBox(height: 16),
+          _DividerRow(),
+          const SizedBox(height: 16),
+
+          // Continue without account
+          Center(
+            child: TextButton(
+              onPressed: () => _showGuestWarning(context),
+              child: const Text(
+                "Continue without account",
+                style: TextStyle(
+                  color: Colors.black38,
+                  fontWeight: FontWeight.w600,
+                  decoration: TextDecoration.underline,
+                  decorationColor: Colors.black26,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+//  STAGE 2 — Returning user: restore or start fresh
+// ─────────────────────────────────────────────
+class _ReturningUserView extends StatelessWidget {
+  final String email;
+  final VoidCallback onConfirm;
+  final VoidCallback onStartFresh;
+  final bool isLoading;
+
+  const _ReturningUserView({
+    super.key,
+    required this.email,
+    required this.onConfirm,
+    required this.onStartFresh,
+    required this.isLoading,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return VoxScaffoldWrapper(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _VoxHeader(
+            tag: "HOLD ON",
+            title: "WE KNOW\nTHIS EMAIL.",
+            subtitle:
+                "Looks like you've used Vox before.\nWant your history back?",
+          ),
+          const SizedBox(height: 48),
+
+          // Email chip
+          Container(
+            width: double.infinity,
+            padding:
+                const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            decoration: BoxDecoration(
+              color: VoxColors.yellow.withOpacity(0.2),
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: VoxColors.yellow, width: 1.5),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: const BoxDecoration(
+                      color: Colors.black, shape: BoxShape.circle),
+                  child: const Icon(Icons.mail_outline_rounded,
+                      color: VoxColors.yellow, size: 18),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text("YOUR EMAIL",
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1.5,
+                              color: Colors.black38)),
+                      const SizedBox(height: 3),
+                      Text(email,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: Colors.black87),
+                          overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.black.withOpacity(0.04),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: const Row(
+              children: [
+                Icon(Icons.touch_app_rounded,
+                    size: 15, color: Colors.black38),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    "We'll send a link to your email. Tap it and all your data comes back.",
+                    style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.black45,
+                        fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 40),
+
+          _VoxButton(
+            label: "YES, RESTORE MY DATA",
+            isLoading: isLoading,
+            onTap: onConfirm,
+          ),
+          const SizedBox(height: 14),
+
+          SizedBox(
+            width: double.infinity,
+            height: 56,
+            child: OutlinedButton(
+              onPressed: isLoading ? null : onStartFresh,
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.black54,
+                side: const BorderSide(color: Colors.black12),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(18)),
+              ),
+              child: const Text(
+                "NO, START FRESH",
+                style: TextStyle(
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    fontSize: 14),
+              ),
+            ),
+          ),
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+}
+
+// ─────────────────────────────────────────────
+//  STAGE 3 — Waiting for magic link tap
+// ─────────────────────────────────────────────
+class _AwaitingLinkView extends StatefulWidget {
+  final String email;
+  final Future<void> Function() onResend;
+  final Future<void> Function() onVerified;
+
+  const _AwaitingLinkView({
+    super.key,
+    required this.email,
+    required this.onResend,
+    required this.onVerified,
+  });
+
+  @override
+  State<_AwaitingLinkView> createState() => _AwaitingLinkViewState();
+}
+
+class _AwaitingLinkViewState extends State<_AwaitingLinkView>
+    with SingleTickerProviderStateMixin {
+  bool _resendLoading = false;
+  late AnimationController _rotateController;
+
+  @override
+  void initState() {
+    super.initState();
+    _rotateController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 3),
+    )..repeat();
+
+    // Fires when user taps the magic link and Firebase completes sign-in
+    FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user != null && !user.isAnonymous && mounted) {
+        widget.onVerified();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _rotateController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return VoxScaffoldWrapper(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const _VoxHeader(
+            tag: "CHECK YOUR EMAIL",
+            title: "LINK\nSENT.",
+            subtitle:
+                "Tap the link in your email and all your Vox data will come back.",
+          ),
+          const SizedBox(height: 64),
+
+          // Spinning ring
+          Center(
+            child: SizedBox(
+              width: 100,
+              height: 100,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  AnimatedBuilder(
+                    animation: _rotateController,
+                    builder: (_, __) => Transform.rotate(
+                      angle: _rotateController.value * 2 * pi,
+                      child: CustomPaint(
+                        size: const Size(100, 100),
+                        painter: _SweepRingPainter(),
+                      ),
+                    ),
+                  ),
+                  Container(
+                    width: 62,
+                    height: 62,
+                    decoration: BoxDecoration(
+                      color: VoxColors.yellow.withOpacity(0.15),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.mail_rounded,
+                        color: Colors.black, size: 28),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 24),
+          Center(
+            child: Text(
+              "Waiting for you to tap the link…",
+              style: TextStyle(
+                color: Colors.black.withOpacity(0.35),
+                fontWeight: FontWeight.w600,
+                fontSize: 13,
+              ),
+            ),
+          ),
+          const SizedBox(height: 48),
+
+          // Resend
+          Center(
+            child: _resendLoading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                        color: Colors.black38, strokeWidth: 2))
+                : TextButton(
+                    onPressed: () async {
+                      setState(() => _resendLoading = true);
+                      await widget.onResend();
+                      if (mounted) setState(() => _resendLoading = false);
+                    },
+                    child: const Text(
+                      "Resend link",
+                      style: TextStyle(
+                        color: Colors.black45,
+                        fontWeight: FontWeight.w600,
+                        decoration: TextDecoration.underline,
+                        decorationColor: Colors.black26,
+                      ),
+                    ),
+                  ),
+          ),
+
+          // ── DEBUG ONLY ───────────────────────────
+          if (kDebugMode) ...[
+            const SizedBox(height: 16),
+            Center(
+              child: TextButton(
+                onPressed: () async {
+                  final prefs = await SharedPreferences.getInstance();
+                  await prefs.setBool('hasProfile', true);
+                  if (context.mounted) {
+                    Navigator.pushReplacementNamed(context, '/home');
+                  }
+                },
+                child: const Text(
+                  "⚠ Skip (debug only)",
+                  style: TextStyle(
+                    color: Colors.red,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+          ],
+          // ── END DEBUG ────────────────────────────
+
+          const SizedBox(height: 32),
+        ],
+      ),
+    );
+  }
+}
+
+class _SweepRingPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final rect = Rect.fromCircle(
+        center: Offset(size.width / 2, size.height / 2),
+        radius: size.width / 2 - 4);
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 3
+      ..shader = SweepGradient(
+        colors: [
+          VoxColors.yellow.withOpacity(0),
+          VoxColors.yellow,
+        ],
+      ).createShader(rect);
+    canvas.drawArc(rect, 0, pi * 1.8, false, paint);
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
+}
+
+// ─────────────────────────────────────────────
+//  SHARED DESIGN SYSTEM
+// ─────────────────────────────────────────────
+class VoxColors {
+  static const yellow = Color(0xFFF3E5AB);
+  static const white = Colors.white;
+}
+
+class VoxScaffoldWrapper extends StatelessWidget {
+  final Widget child;
+  const VoxScaffoldWrapper({super.key, required this.child});
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        Positioned(
+          top: -80,
+          right: -60,
+          child: Container(
+            width: 260,
+            height: 260,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: VoxColors.yellow.withOpacity(0.35),
+            ),
+          ),
+        ),
+        Positioned(
+          bottom: -120,
+          left: -80,
+          child: Container(
+            width: 320,
+            height: 320,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: VoxColors.yellow.withOpacity(0.15),
+            ),
+          ),
+        ),
+        Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: SingleChildScrollView(
+              physics: const BouncingScrollPhysics(),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 28, vertical: 64),
+              child: child,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _VoxHeader extends StatelessWidget {
+  final String tag;
+  final String title;
+  final String subtitle;
+  const _VoxHeader(
+      {required this.tag, required this.title, required this.subtitle});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding:
+              const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: BorderRadius.circular(6),
+          ),
+          child: Text(tag,
+              style: const TextStyle(
+                  color: VoxColors.yellow,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 2)),
+        ),
+        const SizedBox(height: 12),
+        Text(title,
+            style: const TextStyle(
+                fontSize: 38,
+                fontWeight: FontWeight.w900,
+                height: 1.05,
+                letterSpacing: -1.5,
+                color: Colors.black)),
+        const SizedBox(height: 10),
+        Text(subtitle,
+            style: const TextStyle(
+                color: Colors.black45,
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+                height: 1.5)),
+      ],
+    );
+  }
+}
+
+class _VoxTextField extends StatelessWidget {
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final TextInputType keyboardType;
+  final bool enabled;
+
+  const _VoxTextField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    this.keyboardType = TextInputType.text,
+    this.enabled = true,
+  });
+
+  @override
+  Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20),
+      padding: const EdgeInsets.only(bottom: 16),
       child: TextField(
         controller: controller,
-        style: const TextStyle(fontWeight: FontWeight.w600),
+        keyboardType: keyboardType,
+        enabled: enabled,
+        style: const TextStyle(
+            fontWeight: FontWeight.w600, fontSize: 15, color: Colors.black),
         decoration: InputDecoration(
-          prefixIcon: Icon(icon, color: Colors.black, size: 20),
+          prefixIcon: Icon(icon, color: Colors.black54, size: 20),
           labelText: label,
-          labelStyle: const TextStyle(color: Colors.black54, fontSize: 14),
+          labelStyle: const TextStyle(
+              color: Colors.black38,
+              fontSize: 14,
+              fontWeight: FontWeight.w500),
           filled: true,
-          fillColor: const Color(0xFFF3E5AB).withOpacity(0.1),
+          fillColor: enabled
+              ? VoxColors.yellow.withOpacity(0.12)
+              : Colors.black.withOpacity(0.04),
           enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
+            borderRadius: BorderRadius.circular(16),
             borderSide: const BorderSide(color: Colors.transparent),
           ),
           focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(15),
-            borderSide: const BorderSide(color: Color(0xFFF3E5AB), width: 2),
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: VoxColors.yellow, width: 2),
+          ),
+          disabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: const BorderSide(color: Colors.transparent),
           ),
         ),
       ),
     );
   }
+}
+
+class _VoxButton extends StatelessWidget {
+  final String label;
+  final VoidCallback onTap;
+  final bool isLoading;
+
+  const _VoxButton(
+      {required this.label, required this.onTap, this.isLoading = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: ElevatedButton(
+        onPressed: isLoading ? null : onTap,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.black,
+          foregroundColor: VoxColors.yellow,
+          disabledBackgroundColor: Colors.black54,
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18)),
+          elevation: 6,
+          shadowColor: Colors.black.withOpacity(0.3),
+        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 22,
+                height: 22,
+                child: CircularProgressIndicator(
+                    color: VoxColors.yellow, strokeWidth: 2.5))
+            : Text(label,
+                style: const TextStyle(
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.5,
+                    fontSize: 14)),
+      ),
+    );
+  }
+}
+
+class _DividerRow extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      children: [
+        Expanded(
+            child: Divider(
+                color: Colors.black.withOpacity(0.1), thickness: 1)),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text("OR",
+              style: TextStyle(
+                  color: Colors.black.withOpacity(0.3),
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                  letterSpacing: 1.5)),
+        ),
+        Expanded(
+            child: Divider(
+                color: Colors.black.withOpacity(0.1), thickness: 1)),
+      ],
+    );
+  }
+}
+
+class _GoogleButton extends StatelessWidget {
+  final VoidCallback onTap;
+  final bool isLoading;
+  const _GoogleButton({required this.onTap, this.isLoading = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: double.infinity,
+      height: 56,
+      child: OutlinedButton(
+        onPressed: isLoading ? null : onTap,
+        style: OutlinedButton.styleFrom(
+          foregroundColor: Colors.black,
+          side:
+              BorderSide(color: Colors.black.withOpacity(0.15), width: 1.5),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(18)),
+          backgroundColor: Colors.white,
+        ),
+        child: isLoading
+            ? const SizedBox(
+                width: 20,
+                height: 20,
+                child: CircularProgressIndicator(
+                    color: Colors.black54, strokeWidth: 2))
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CustomPaint(painter: _GoogleLogoPainter()),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text("Continue with Google",
+                      style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: Colors.black87)),
+                ],
+              ),
+      ),
+    );
+  }
+}
+
+class _GoogleLogoPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final cx = size.width / 2;
+    final cy = size.height / 2;
+    final r = size.width / 2;
+    const colors = [
+      Color(0xFF4285F4),
+      Color(0xFF34A853),
+      Color(0xFFFBBC04),
+      Color(0xFFEA4335),
+    ];
+    final starts = [0.0, pi / 2, pi, 3 * pi / 2];
+    for (int i = 0; i < 4; i++) {
+      canvas.drawArc(
+        Rect.fromCircle(center: Offset(cx, cy), radius: r * 0.72),
+        starts[i],
+        pi / 2,
+        false,
+        Paint()
+          ..color = colors[i]
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = size.width * 0.18,
+      );
+    }
+    canvas.drawRect(
+      Rect.fromLTWH(
+          cx, cy - size.height * 0.1, r * 0.85, size.height * 0.2),
+      Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_) => false;
 }
