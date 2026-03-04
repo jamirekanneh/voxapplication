@@ -19,9 +19,8 @@ import 'temp_notes_provider.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+
   runApp(
-    
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
@@ -34,7 +33,8 @@ void main() async {
   );
 }
 
-class TheVoxApp extends StatefulWidget {        // ← changed to StatefulWidget
+class TheVoxApp extends StatefulWidget {
+  // ← changed to StatefulWidget
   const TheVoxApp({super.key});
 
   @override
@@ -42,11 +42,10 @@ class TheVoxApp extends StatefulWidget {        // ← changed to StatefulWidget
 }
 
 class _TheVoxAppState extends State<TheVoxApp> {
-
   @override
   void initState() {
     super.initState();
-    _handleIncomingLinks();                     // ← starts listening for magic links
+    _handleIncomingLinks(); // ← starts listening for magic links
   }
 
   Future<void> _handleIncomingLinks() async {
@@ -97,7 +96,6 @@ class _TheVoxAppState extends State<TheVoxApp> {
         '/menu': (context) => const MenuPage(),
         '/dictionary': (context) => const DictionaryPage(),
         '/notes': (context) => const NotesPage(),
-        
       },
     );
   }

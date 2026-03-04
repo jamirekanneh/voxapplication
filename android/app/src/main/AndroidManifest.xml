@@ -35,10 +35,19 @@
             android:name="flutterEmbedding"
             android:value="2" />
     </application>
+
     <queries>
+        <!-- Existing: Firebase dynamic links / process text -->
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT"/>
-           <data android:scheme="https" android:host="vox-application-76ecd.firebaseapp.com"/>
+            <data android:scheme="https" android:host="vox-application-76ecd.firebaseapp.com"/>
+        </intent>
+
+        <!-- Added: allows url_launcher to open the device email app via mailto: -->
+        <intent>
+            <action android:name="android.intent.action.SENDTO" />
+            <data android:scheme="mailto" />
         </intent>
     </queries>
+
 </manifest>

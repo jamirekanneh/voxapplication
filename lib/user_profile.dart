@@ -86,10 +86,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         user = credential.user;
       }
 
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user!.uid)
-          .set({
+      await FirebaseFirestore.instance.collection('users').doc(user!.uid).set({
         'username': _nameController.text.trim(),
         'email': _emailController.text.trim(),
         'photoBase64': _base64Image ?? '',
@@ -120,8 +117,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       barrierColor: Colors.black.withOpacity(0.6),
       builder: (ctx) => Dialog(
         backgroundColor: Colors.white,
-        shape:
-            RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Padding(
           padding: const EdgeInsets.all(28),
           child: Column(
@@ -130,7 +126,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
             children: [
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 5),
+                  horizontal: 10,
+                  vertical: 5,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.red.shade700,
                   borderRadius: BorderRadius.circular(6),
@@ -169,17 +167,24 @@ class _UserProfilePageState extends State<UserProfilePage> {
               const SizedBox(height: 8),
               Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 14, vertical: 10),
+                  horizontal: 14,
+                  vertical: 10,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.red.withOpacity(0.06),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
-                      color: Colors.red.withOpacity(0.2), width: 1),
+                    color: Colors.red.withOpacity(0.2),
+                    width: 1,
+                  ),
                 ),
                 child: const Row(
                   children: [
-                    Icon(Icons.info_outline_rounded,
-                        size: 15, color: Colors.red),
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 15,
+                      color: Colors.red,
+                    ),
                     SizedBox(width: 8),
                     Expanded(
                       child: Text(
@@ -204,13 +209,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         foregroundColor: Colors.black,
                         side: const BorderSide(color: Colors.black26),
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                       ),
-                      child: const Text("Go Back",
-                          style:
-                              TextStyle(fontWeight: FontWeight.w700)),
+                      child: const Text(
+                        "Go Back",
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -221,14 +227,15 @@ class _UserProfilePageState extends State<UserProfilePage> {
                         backgroundColor: Colors.red.shade700,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(14)),
-                        padding:
-                            const EdgeInsets.symmetric(vertical: 14),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         elevation: 0,
                       ),
-                      child: const Text("Delete & Reset",
-                          style:
-                              TextStyle(fontWeight: FontWeight.w700)),
+                      child: const Text(
+                        "Delete & Reset",
+                        style: TextStyle(fontWeight: FontWeight.w700),
+                      ),
                     ),
                   ),
                 ],
@@ -325,8 +332,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
         idToken: googleAuth.idToken,
       );
 
-      final result =
-          await FirebaseAuth.instance.signInWithCredential(credential);
+      final result = await FirebaseAuth.instance.signInWithCredential(
+        credential,
+      );
       final uid = result.user!.uid;
 
       final doc = await FirebaseFirestore.instance
@@ -376,8 +384,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   void _showSnack(String message) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(
+      context,
+    ).showSnackBar(SnackBar(content: Text(message)));
   }
 
   // ─────────────────────────────────────────────
@@ -395,29 +404,29 @@ class _UserProfilePageState extends State<UserProfilePage> {
         ),
         child: switch (_stage) {
           'form' => _ProfileFormView(
-              key: const ValueKey('form'),
-              nameController: _nameController,
-              emailController: _emailController,
-              base64Image: _base64Image,
-              isLoading: _isLoading,
-              googleLoading: _googleLoading,
-              onPickImage: _pickImage,
-              onSave: _onSaveTapped,
-              onGoogleSignIn: _handleGoogleSignIn,
-            ),
+            key: const ValueKey('form'),
+            nameController: _nameController,
+            emailController: _emailController,
+            base64Image: _base64Image,
+            isLoading: _isLoading,
+            googleLoading: _googleLoading,
+            onPickImage: _pickImage,
+            onSave: _onSaveTapped,
+            onGoogleSignIn: _handleGoogleSignIn,
+          ),
           'returning' => _ReturningUserView(
-              key: const ValueKey('returning'),
-              email: _emailController.text.trim(),
-              onConfirm: _sendMagicLink,
-              onStartFresh: _onStartFreshTapped,
-              isLoading: _isLoading,
-            ),
+            key: const ValueKey('returning'),
+            email: _emailController.text.trim(),
+            onConfirm: _sendMagicLink,
+            onStartFresh: _onStartFreshTapped,
+            isLoading: _isLoading,
+          ),
           'awaiting_link' => _AwaitingLinkView(
-              key: const ValueKey('awaiting_link'),
-              email: _emailController.text.trim(),
-              onResend: _sendMagicLink,
-              onVerified: _onMagicLinkVerified,
-            ),
+            key: const ValueKey('awaiting_link'),
+            email: _emailController.text.trim(),
+            onResend: _sendMagicLink,
+            onVerified: _onMagicLinkVerified,
+          ),
           _ => const SizedBox.shrink(),
         },
       ),
@@ -486,8 +495,11 @@ class _ProfileFormView extends StatelessWidget {
                     color: Colors.black,
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(Icons.warning_amber_rounded,
-                      color: VoxColors.yellow, size: 22),
+                  child: const Icon(
+                    Icons.warning_amber_rounded,
+                    color: VoxColors.yellow,
+                    size: 22,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 const Text(
@@ -512,16 +524,18 @@ class _ProfileFormView extends StatelessWidget {
             ),
             const SizedBox(height: 10),
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
                 color: VoxColors.yellow.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Row(
                 children: [
-                  Icon(Icons.info_outline_rounded,
-                      size: 15, color: Colors.black54),
+                  Icon(
+                    Icons.info_outline_rounded,
+                    size: 15,
+                    color: Colors.black54,
+                  ),
                   SizedBox(width: 8),
                   Expanded(
                     child: Text(
@@ -546,11 +560,14 @@ class _ProfileFormView extends StatelessWidget {
                       foregroundColor: Colors.black,
                       side: const BorderSide(color: Colors.black26),
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 15),
                     ),
-                    child: const Text("Add Email",
-                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      "Add Email",
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -564,12 +581,15 @@ class _ProfileFormView extends StatelessWidget {
                       backgroundColor: Colors.black,
                       foregroundColor: VoxColors.yellow,
                       shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16)),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
                       padding: const EdgeInsets.symmetric(vertical: 15),
                       elevation: 0,
                     ),
-                    child: const Text("Continue Anyway",
-                        style: TextStyle(fontWeight: FontWeight.w700)),
+                    child: const Text(
+                      "Continue Anyway",
+                      style: TextStyle(fontWeight: FontWeight.w700),
+                    ),
                   ),
                 ),
               ],
@@ -619,8 +639,11 @@ class _ProfileFormView extends StatelessWidget {
                           ? MemoryImage(base64Decode(base64Image!))
                           : null,
                       child: base64Image == null
-                          ? const Icon(Icons.camera_alt_outlined,
-                              color: Colors.black26, size: 28)
+                          ? const Icon(
+                              Icons.camera_alt_outlined,
+                              color: Colors.black26,
+                              size: 28,
+                            )
                           : null,
                     ),
                   ),
@@ -630,9 +653,14 @@ class _ProfileFormView extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: const BoxDecoration(
-                          color: Colors.black, shape: BoxShape.circle),
-                      child: const Icon(Icons.edit,
-                          color: VoxColors.yellow, size: 13),
+                        color: Colors.black,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.edit,
+                        color: VoxColors.yellow,
+                        size: 13,
+                      ),
                     ),
                   ),
                 ],
@@ -661,10 +689,7 @@ class _ProfileFormView extends StatelessWidget {
           const SizedBox(height: 24),
           _DividerRow(),
           const SizedBox(height: 24),
-          _GoogleButton(
-            isLoading: googleLoading,
-            onTap: onGoogleSignIn,
-          ),
+          _GoogleButton(isLoading: googleLoading, onTap: onGoogleSignIn),
           const SizedBox(height: 16),
           _DividerRow(),
           const SizedBox(height: 16),
@@ -725,8 +750,7 @@ class _ReturningUserView extends StatelessWidget {
           // Email chip
           Container(
             width: double.infinity,
-            padding:
-                const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             decoration: BoxDecoration(
               color: VoxColors.yellow.withOpacity(0.2),
               borderRadius: BorderRadius.circular(18),
@@ -737,28 +761,39 @@ class _ReturningUserView extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: const BoxDecoration(
-                      color: Colors.black, shape: BoxShape.circle),
-                  child: const Icon(Icons.mail_outline_rounded,
-                      color: VoxColors.yellow, size: 18),
+                    color: Colors.black,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.mail_outline_rounded,
+                    color: VoxColors.yellow,
+                    size: 18,
+                  ),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text("YOUR EMAIL",
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.5,
-                              color: Colors.black38)),
+                      const Text(
+                        "YOUR EMAIL",
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.5,
+                          color: Colors.black38,
+                        ),
+                      ),
                       const SizedBox(height: 3),
-                      Text(email,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              color: Colors.black87),
-                          overflow: TextOverflow.ellipsis),
+                      Text(
+                        email,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: Colors.black87,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
                     ],
                   ),
                 ),
@@ -767,24 +802,23 @@ class _ReturningUserView extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
               color: Colors.black.withOpacity(0.04),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Row(
               children: [
-                Icon(Icons.touch_app_rounded,
-                    size: 15, color: Colors.black38),
+                Icon(Icons.touch_app_rounded, size: 15, color: Colors.black38),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     "We'll send a link to your email. Tap it and all your data comes back.",
                     style: TextStyle(
-                        fontSize: 12,
-                        color: Colors.black45,
-                        fontWeight: FontWeight.w500),
+                      fontSize: 12,
+                      color: Colors.black45,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ],
@@ -808,14 +842,16 @@ class _ReturningUserView extends StatelessWidget {
                 foregroundColor: Colors.black54,
                 side: const BorderSide(color: Colors.black12),
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18)),
+                  borderRadius: BorderRadius.circular(18),
+                ),
               ),
               child: const Text(
                 "NO, START FRESH",
                 style: TextStyle(
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.2,
-                    fontSize: 14),
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.2,
+                  fontSize: 14,
+                ),
               ),
             ),
           ),
@@ -911,8 +947,11 @@ class _AwaitingLinkViewState extends State<_AwaitingLinkView>
                       color: VoxColors.yellow.withOpacity(0.15),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(Icons.mail_rounded,
-                        color: Colors.black, size: 28),
+                    child: const Icon(
+                      Icons.mail_rounded,
+                      color: Colors.black,
+                      size: 28,
+                    ),
                   ),
                 ],
               ),
@@ -938,7 +977,10 @@ class _AwaitingLinkViewState extends State<_AwaitingLinkView>
                     width: 20,
                     height: 20,
                     child: CircularProgressIndicator(
-                        color: Colors.black38, strokeWidth: 2))
+                      color: Colors.black38,
+                      strokeWidth: 2,
+                    ),
+                  )
                 : TextButton(
                     onPressed: () async {
                       setState(() => _resendLoading = true);
@@ -980,8 +1022,8 @@ class _AwaitingLinkViewState extends State<_AwaitingLinkView>
               ),
             ),
           ],
-          // ── END DEBUG ────────────────────────────
 
+          // ── END DEBUG ────────────────────────────
           const SizedBox(height: 32),
         ],
       ),
@@ -993,16 +1035,14 @@ class _SweepRingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final rect = Rect.fromCircle(
-        center: Offset(size.width / 2, size.height / 2),
-        radius: size.width / 2 - 4);
+      center: Offset(size.width / 2, size.height / 2),
+      radius: size.width / 2 - 4,
+    );
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3
       ..shader = SweepGradient(
-        colors: [
-          VoxColors.yellow.withOpacity(0),
-          VoxColors.yellow,
-        ],
+        colors: [VoxColors.yellow.withOpacity(0), VoxColors.yellow],
       ).createShader(rect);
     canvas.drawArc(rect, 0, pi * 1.8, false, paint);
   }
@@ -1056,8 +1096,7 @@ class VoxScaffoldWrapper extends StatelessWidget {
             constraints: const BoxConstraints(maxWidth: 480),
             child: SingleChildScrollView(
               physics: const BouncingScrollPhysics(),
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 28, vertical: 64),
+              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 64),
               child: child,
             ),
           ),
@@ -1071,8 +1110,11 @@ class _VoxHeader extends StatelessWidget {
   final String tag;
   final String title;
   final String subtitle;
-  const _VoxHeader(
-      {required this.tag, required this.title, required this.subtitle});
+  const _VoxHeader({
+    required this.tag,
+    required this.title,
+    required this.subtitle,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1080,34 +1122,42 @@ class _VoxHeader extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding:
-              const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
             color: Colors.black,
             borderRadius: BorderRadius.circular(6),
           ),
-          child: Text(tag,
-              style: const TextStyle(
-                  color: VoxColors.yellow,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 2)),
+          child: Text(
+            tag,
+            style: const TextStyle(
+              color: VoxColors.yellow,
+              fontSize: 10,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 2,
+            ),
+          ),
         ),
         const SizedBox(height: 12),
-        Text(title,
-            style: const TextStyle(
-                fontSize: 38,
-                fontWeight: FontWeight.w900,
-                height: 1.05,
-                letterSpacing: -1.5,
-                color: Colors.black)),
+        Text(
+          title,
+          style: const TextStyle(
+            fontSize: 38,
+            fontWeight: FontWeight.w900,
+            height: 1.05,
+            letterSpacing: -1.5,
+            color: Colors.black,
+          ),
+        ),
         const SizedBox(height: 10),
-        Text(subtitle,
-            style: const TextStyle(
-                color: Colors.black45,
-                fontWeight: FontWeight.w500,
-                fontSize: 14,
-                height: 1.5)),
+        Text(
+          subtitle,
+          style: const TextStyle(
+            color: Colors.black45,
+            fontWeight: FontWeight.w500,
+            fontSize: 14,
+            height: 1.5,
+          ),
+        ),
       ],
     );
   }
@@ -1137,14 +1187,18 @@ class _VoxTextField extends StatelessWidget {
         keyboardType: keyboardType,
         enabled: enabled,
         style: const TextStyle(
-            fontWeight: FontWeight.w600, fontSize: 15, color: Colors.black),
+          fontWeight: FontWeight.w600,
+          fontSize: 15,
+          color: Colors.black,
+        ),
         decoration: InputDecoration(
           prefixIcon: Icon(icon, color: Colors.black54, size: 20),
           labelText: label,
           labelStyle: const TextStyle(
-              color: Colors.black38,
-              fontSize: 14,
-              fontWeight: FontWeight.w500),
+            color: Colors.black38,
+            fontSize: 14,
+            fontWeight: FontWeight.w500,
+          ),
           filled: true,
           fillColor: enabled
               ? VoxColors.yellow.withOpacity(0.12)
@@ -1172,8 +1226,11 @@ class _VoxButton extends StatelessWidget {
   final VoidCallback onTap;
   final bool isLoading;
 
-  const _VoxButton(
-      {required this.label, required this.onTap, this.isLoading = false});
+  const _VoxButton({
+    required this.label,
+    required this.onTap,
+    this.isLoading = false,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -1187,7 +1244,8 @@ class _VoxButton extends StatelessWidget {
           foregroundColor: VoxColors.yellow,
           disabledBackgroundColor: Colors.black54,
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18)),
+            borderRadius: BorderRadius.circular(18),
+          ),
           elevation: 6,
           shadowColor: Colors.black.withOpacity(0.3),
         ),
@@ -1196,12 +1254,18 @@ class _VoxButton extends StatelessWidget {
                 width: 22,
                 height: 22,
                 child: CircularProgressIndicator(
-                    color: VoxColors.yellow, strokeWidth: 2.5))
-            : Text(label,
+                  color: VoxColors.yellow,
+                  strokeWidth: 2.5,
+                ),
+              )
+            : Text(
+                label,
                 style: const TextStyle(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.5,
-                    fontSize: 14)),
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: 1.5,
+                  fontSize: 14,
+                ),
+              ),
       ),
     );
   }
@@ -1213,20 +1277,23 @@ class _DividerRow extends StatelessWidget {
     return Row(
       children: [
         Expanded(
-            child: Divider(
-                color: Colors.black.withOpacity(0.1), thickness: 1)),
+          child: Divider(color: Colors.black.withOpacity(0.1), thickness: 1),
+        ),
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text("OR",
-              style: TextStyle(
-                  color: Colors.black.withOpacity(0.3),
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
-                  letterSpacing: 1.5)),
+          child: Text(
+            "OR",
+            style: TextStyle(
+              color: Colors.black.withOpacity(0.3),
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              letterSpacing: 1.5,
+            ),
+          ),
         ),
         Expanded(
-            child: Divider(
-                color: Colors.black.withOpacity(0.1), thickness: 1)),
+          child: Divider(color: Colors.black.withOpacity(0.1), thickness: 1),
+        ),
       ],
     );
   }
@@ -1246,10 +1313,10 @@ class _GoogleButton extends StatelessWidget {
         onPressed: isLoading ? null : onTap,
         style: OutlinedButton.styleFrom(
           foregroundColor: Colors.black,
-          side:
-              BorderSide(color: Colors.black.withOpacity(0.15), width: 1.5),
+          side: BorderSide(color: Colors.black.withOpacity(0.15), width: 1.5),
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18)),
+            borderRadius: BorderRadius.circular(18),
+          ),
           backgroundColor: Colors.white,
         ),
         child: isLoading
@@ -1257,7 +1324,10 @@ class _GoogleButton extends StatelessWidget {
                 width: 20,
                 height: 20,
                 child: CircularProgressIndicator(
-                    color: Colors.black54, strokeWidth: 2))
+                  color: Colors.black54,
+                  strokeWidth: 2,
+                ),
+              )
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -1267,11 +1337,14 @@ class _GoogleButton extends StatelessWidget {
                     child: CustomPaint(painter: _GoogleLogoPainter()),
                   ),
                   const SizedBox(width: 12),
-                  const Text("Continue with Google",
-                      style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          color: Colors.black87)),
+                  const Text(
+                    "Continue with Google",
+                    style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                      color: Colors.black87,
+                    ),
+                  ),
                 ],
               ),
       ),
@@ -1305,8 +1378,7 @@ class _GoogleLogoPainter extends CustomPainter {
       );
     }
     canvas.drawRect(
-      Rect.fromLTWH(
-          cx, cy - size.height * 0.1, r * 0.85, size.height * 0.2),
+      Rect.fromLTWH(cx, cy - size.height * 0.1, r * 0.85, size.height * 0.2),
       Paint()
         ..color = Colors.white
         ..style = PaintingStyle.fill,
