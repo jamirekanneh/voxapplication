@@ -13,7 +13,7 @@ import 'dictionary_page.dart';
 import 'notes_page.dart';
 import 'language_provider.dart';
 import 'reader_provider.dart';
-
+import 'temp_library_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -25,6 +25,7 @@ void main() async {
       providers: [
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
         ChangeNotifierProvider(create: (_) => ReaderProvider()),
+        ChangeNotifierProvider(create: (_) => TempLibraryProvider()),
       ],
       child: const TheVoxApp(),
     ),

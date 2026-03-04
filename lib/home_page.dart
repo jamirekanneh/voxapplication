@@ -3,11 +3,12 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'language_provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'language_provider.dart';
 import 'reader_provider.dart';
 import 'reader_page.dart';
 import 'mini_player_bar.dart';
+import 'temp_library_provider.dart';
 
 class VoxHomePage extends StatefulWidget {
   const VoxHomePage({super.key});
@@ -29,6 +30,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
     super.dispose();
   }
 
+  bool get _isAnonymous {
+    final user = FirebaseAuth.instance.currentUser;
+    return user == null || user.isAnonymous;
+  }
+
   Future<void> _openReader(String fileName, String content) async {
     final locale = context.read<LanguageProvider>().ttsLocale;
     await Navigator.push(
@@ -41,8 +47,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
             ChangeNotifierProvider.value(
                 value: context.read<LanguageProvider>()),
           ],
-          child:
-              ReaderPage(title: fileName, content: content, locale: locale),
+          child: ReaderPage(title: fileName, content: content, locale: locale),
         ),
       ),
     );
@@ -80,9 +85,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
     }
   }
 
+  // ── Delete for Firestore (logged-in users) ────────────
   void _confirmDelete(BuildContext context, String docId, String fileName) {
     final lang = context.read<LanguageProvider>();
-    // Sanitize filename for display — truncate if too long
     final displayName = fileName.length > 40
         ? '${fileName.substring(0, 40)}...'
         : fileName;
@@ -104,17 +109,14 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   color: Colors.grey[600],
                   borderRadius: BorderRadius.circular(10)),
             ),
-            const Icon(Icons.delete_outline,
-                color: Colors.redAccent, size: 40),
+            const Icon(Icons.delete_outline, color: Colors.redAccent, size: 40),
             const SizedBox(height: 12),
-            Text(
-              'Delete "$displayName"?',
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16),
-              textAlign: TextAlign.center,
-            ),
+            Text('Delete "$displayName"?',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
+                textAlign: TextAlign.center),
             const SizedBox(height: 6),
             Text(lang.t('remove_library'),
                 style: TextStyle(color: Colors.grey[400], fontSize: 13)),
@@ -146,8 +148,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             .delete();
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content: Text(
-                                '"$displayName" ${lang.t('deleted')}'),
+                            content:
+                                Text('"$displayName" ${lang.t('deleted')}'),
                             behavior: SnackBarBehavior.floating,
                             backgroundColor: Colors.grey[850],
                             margin: const EdgeInsets.only(
@@ -184,6 +186,91 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
+  // ── Delete for temp/anonymous users ──────────────────
+  void _confirmDeleteTemp(
+      BuildContext context, String id, String fileName,
+      TempLibraryProvider tempLibrary) {
+    final lang = context.read<LanguageProvider>();
+    final displayName = fileName.length > 40
+        ? '${fileName.substring(0, 40)}...'
+        : fileName;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetCtx) => Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40, height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            const Icon(Icons.delete_outline, color: Colors.redAccent, size: 40),
+            const SizedBox(height: 12),
+            Text('Delete "$displayName"?',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
+                textAlign: TextAlign.center),
+            const SizedBox(height: 6),
+            Text(lang.t('remove_library'),
+                style: TextStyle(color: Colors.grey[400], fontSize: 13)),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: OutlinedButton(
+                    onPressed: () => Navigator.pop(sheetCtx),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(color: Colors.grey[600]!),
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: Text(lang.t('cancel')),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: ElevatedButton(
+                    onPressed: () {
+                      Navigator.pop(sheetCtx);
+                      tempLibrary.remove(id);
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('"$displayName" ${lang.t('deleted')}'),
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: Colors.grey[850],
+                        margin: const EdgeInsets.only(
+                            bottom: 90, left: 20, right: 20),
+                      ));
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                    child: Text(lang.t('delete_confirm')),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
@@ -197,6 +284,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Header row ──────────────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -208,8 +296,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
                     child: TextField(
                       controller: _searchController,
                       maxLength: 100,
-                      onChanged: (v) => setState(
-                          () => _searchQuery = v.trim().toLowerCase()),
+                      onChanged: (v) =>
+                          setState(() => _searchQuery = v.trim().toLowerCase()),
                       decoration: InputDecoration(
                         hintText: lang.t('search_hint'),
                         counterText: '',
@@ -233,115 +321,187 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
               Text(lang.t('tap_hint'),
-                  style:
-                      TextStyle(color: Colors.grey[600], fontSize: 11)),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 11)),
+
+              // ── Guest temp warning banner ────────────────
+              if (_isAnonymous) ...[
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[800]!.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                        color: Colors.orange[800]!.withOpacity(0.3)),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          color: Colors.orange[800], size: 15),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Guest mode — files are temporary. Create an account to save them.',
+                          style: TextStyle(
+                              color: Colors.orange[900],
+                              fontSize: 11,
+                              height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+
               const SizedBox(height: 8),
+
+              // ── Library content ──────────────────────────
               Expanded(
-                child: StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('library')
-                      .snapshots(),
-                  builder: (context, snapshot) {
-                    // Offline with no cache
-                   
-if (snapshot.hasError) {
-  final user = FirebaseAuth.instance.currentUser;
-  final isAnonymous = user == null || user.isAnonymous;
+                child: Consumer<TempLibraryProvider>(
+                  builder: (context, tempLibrary, _) {
+                    // Anonymous: show in-memory items
+                    if (_isAnonymous) {
+                      final items = tempLibrary.items.where((item) {
+                        return item.fileName
+                            .toLowerCase()
+                            .contains(_searchQuery);
+                      }).toList();
 
-  if (isAnonymous) {
-    return Center(
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.folder_off_outlined, color: Colors.grey[400], size: 48),
-          const SizedBox(height: 14),
-          Text(
-            'No library yet.',
-            style: TextStyle(
-              color: Colors.grey[700],
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            'Create an account to save\nand access your files.',
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.grey[500], fontSize: 13),
-          ),
-        ],
-      ),
-    );
-  }
+                      if (items.isEmpty) {
+                        return Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.folder_off_outlined,
+                                  color: Colors.grey[400], size: 48),
+                              const SizedBox(height: 14),
+                              Text('No files yet.',
+                                  style: TextStyle(
+                                      color: Colors.grey[700],
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700)),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Tap + to upload.\nFiles are temporary until you create an account.',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Colors.grey[500], fontSize: 13),
+                              ),
+                            ],
+                          ),
+                        );
+                      }
 
-  final isOffline = snapshot.error.toString().contains('unavailable') ||
-      snapshot.error.toString().contains('Failed to get document');
-  return Center(
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(
-          isOffline ? Icons.wifi_off : Icons.error_outline,
-          color: Colors.grey[500], size: 40,
-        ),
-        const SizedBox(height: 12),
-        Text(
-          isOffline
-              ? 'You\'re offline.\nShowing cached library.'
-              : 'Something went wrong.',
-          textAlign: TextAlign.center,
-          style: TextStyle(color: Colors.grey[600], fontSize: 14),
-        ),
-      ],
-    ),
-  );
-}
-                    if (!snapshot.hasData) {
-                      return const Center(
-                          child: CircularProgressIndicator());
-                    }
-
-                    final docs = snapshot.data!.docs.where((doc) {
-                      final data =
-                          doc.data() as Map<String, dynamic>? ?? {};
-                      final name =
-                          (data['fileName'] as String? ?? '').toLowerCase();
-                      return name.contains(_searchQuery);
-                    }).toList();
-
-                    if (docs.isEmpty) {
-                      return Center(
-                        child: Text(lang.t('no_files'),
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                                color: Colors.grey[600], fontSize: 14)),
+                      return GridView.builder(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 3,
+                          crossAxisSpacing: 10,
+                          mainAxisSpacing: 10,
+                          childAspectRatio: 1.1,
+                        ),
+                        itemCount: items.length,
+                        itemBuilder: (context, index) {
+                          final item = items[index];
+                          return GestureDetector(
+                            onTap: () =>
+                                _openReader(item.fileName, item.content),
+                            onLongPress: () => _confirmDeleteTemp(
+                                context, item.id, item.fileName, tempLibrary),
+                            child:
+                                _buildFileCard(item.fileName, item.fileType),
+                          );
+                        },
                       );
                     }
 
-                    return GridView.builder(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 3,
-                        crossAxisSpacing: 10,
-                        mainAxisSpacing: 10,
-                        childAspectRatio: 1.1,
-                      ),
-                      itemCount: docs.length,
-                      itemBuilder: (context, index) {
-                        final data = docs[index].data()
-                            as Map<String, dynamic>? ?? {};
-                        final String name =
-                            (data['fileName'] as String? ?? 'File');
-                        final String type =
-                            (data['fileType'] as String? ?? 'pdf');
-                        final String content =
-                            (data['content'] as String? ?? '');
-                        final String docId = docs[index].id;
-                        return GestureDetector(
-                          onTap: () => _openReader(name, content),
-                          onLongPress: () =>
-                              _confirmDelete(context, docId, name),
-                          child: _buildFileCard(name, type),
+                    // Logged in: Firestore stream
+                    return StreamBuilder<QuerySnapshot>(
+                      stream: FirebaseFirestore.instance
+                          .collection('library')
+                          .snapshots(),
+                      builder: (context, snapshot) {
+                        if (snapshot.hasError) {
+                          final isOffline = snapshot.error
+                                  .toString()
+                                  .contains('unavailable') ||
+                              snapshot.error
+                                  .toString()
+                                  .contains('Failed to get document');
+                          return Center(
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                    isOffline
+                                        ? Icons.wifi_off
+                                        : Icons.error_outline,
+                                    color: Colors.grey[500],
+                                    size: 40),
+                                const SizedBox(height: 12),
+                                Text(
+                                  isOffline
+                                      ? 'You\'re offline.\nShowing cached library.'
+                                      : 'Something went wrong.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      color: Colors.grey[600], fontSize: 14),
+                                ),
+                              ],
+                            ),
+                          );
+                        }
+
+                        if (!snapshot.hasData) {
+                          return const Center(
+                              child: CircularProgressIndicator());
+                        }
+
+                        final docs = snapshot.data!.docs.where((doc) {
+                          final data =
+                              doc.data() as Map<String, dynamic>? ?? {};
+                          final name = (data['fileName'] as String? ?? '')
+                              .toLowerCase();
+                          return name.contains(_searchQuery);
+                        }).toList();
+
+                        if (docs.isEmpty) {
+                          return Center(
+                            child: Text(lang.t('no_files'),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Colors.grey[600], fontSize: 14)),
+                          );
+                        }
+
+                        return GridView.builder(
+                          gridDelegate:
+                              const SliverGridDelegateWithFixedCrossAxisCount(
+                            crossAxisCount: 3,
+                            crossAxisSpacing: 10,
+                            mainAxisSpacing: 10,
+                            childAspectRatio: 1.1,
+                          ),
+                          itemCount: docs.length,
+                          itemBuilder: (context, index) {
+                            final data =
+                                docs[index].data() as Map<String, dynamic>? ??
+                                    {};
+                            final String name =
+                                data['fileName'] as String? ?? 'File';
+                            final String type =
+                                data['fileType'] as String? ?? 'pdf';
+                            final String content =
+                                data['content'] as String? ?? '';
+                            final String docId = docs[index].id;
+                            return GestureDetector(
+                              onTap: () => _openReader(name, content),
+                              onLongPress: () =>
+                                  _confirmDelete(context, docId, name),
+                              child: _buildFileCard(name, type),
+                            );
+                          },
                         );
                       },
                     );
@@ -353,6 +513,7 @@ if (snapshot.hasError) {
           ),
         ),
       ),
+
       bottomNavigationBar: BottomAppBar(
         color: Colors.grey[850],
         shape: const CircularNotchedRectangle(),
@@ -367,10 +528,8 @@ if (snapshot.hasError) {
                   Colors.grey[400]!,
                   onTap: () => Navigator.pushNamed(context, '/notes')),
               const SizedBox(width: 48),
-              _navItem(Icons.book, lang.t('nav_dictionary'),
-                  Colors.grey[400]!,
-                  onTap: () =>
-                      Navigator.pushNamed(context, '/dictionary')),
+              _navItem(Icons.book, lang.t('nav_dictionary'), Colors.grey[400]!,
+                  onTap: () => Navigator.pushNamed(context, '/dictionary')),
               _navItem(Icons.menu, lang.t('nav_menu'), Colors.grey[400]!,
                   onTap: () => Navigator.pushNamed(context, '/menu')),
             ],
@@ -455,9 +614,7 @@ if (snapshot.hasError) {
           Icon(icon, color: color, size: 24),
           Text(label,
               style: TextStyle(
-                  color: color,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold)),
+                  color: color, fontSize: 9, fontWeight: FontWeight.bold)),
         ],
       ),
     );
