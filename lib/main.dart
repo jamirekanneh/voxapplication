@@ -14,6 +14,7 @@ import 'notes_page.dart';
 import 'language_provider.dart';
 import 'reader_provider.dart';
 import 'temp_library_provider.dart';
+import 'temp_notes_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,6 +27,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
         ChangeNotifierProvider(create: (_) => ReaderProvider()),
         ChangeNotifierProvider(create: (_) => TempLibraryProvider()),
+        ChangeNotifierProvider(create: (_) => TempNotesProvider()),
       ],
       child: const TheVoxApp(),
     ),

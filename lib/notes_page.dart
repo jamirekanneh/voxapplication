@@ -4,8 +4,8 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'language_provider.dart';
+import 'temp_notes_provider.dart';
 
-// Input limits
 const int _kMaxTitleLength = 100;
 const int _kMaxContentLength = 5000;
 
@@ -26,8 +26,11 @@ class _NotesPageState extends State<NotesPage> {
   final TextEditingController _contentController = TextEditingController();
 
   String? get _userId => FirebaseAuth.instance.currentUser?.uid;
-  bool get _isAnonymous =>
-      FirebaseAuth.instance.currentUser?.isAnonymous ?? true;
+  bool get _isAnonymous {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return true;
+    return user.isAnonymous;
+  }
 
   @override
   void dispose() {
@@ -37,6 +40,7 @@ class _NotesPageState extends State<NotesPage> {
     super.dispose();
   }
 
+  // ── Speech for title ──────────────────────────────────
   Future<void> _listenForTitle() async {
     final langProvider = context.read<LanguageProvider>();
     if (_isListeningTitle) {
@@ -62,7 +66,6 @@ class _NotesPageState extends State<NotesPage> {
         localeId: langProvider.sttLocale,
         onResult: (val) {
           final text = val.recognizedWords.trim();
-          // Enforce title length limit even from speech
           _titleController.text = text.length > _kMaxTitleLength
               ? text.substring(0, _kMaxTitleLength)
               : text;
@@ -76,6 +79,7 @@ class _NotesPageState extends State<NotesPage> {
     }
   }
 
+  // ── Speech for content ────────────────────────────────
   Future<void> _listenForContent() async {
     final langProvider = context.read<LanguageProvider>();
     if (_isListeningContent) {
@@ -103,7 +107,6 @@ class _NotesPageState extends State<NotesPage> {
         localeId: langProvider.sttLocale,
         onResult: (val) {
           final combined = '$prefix${val.recognizedWords}';
-          // Enforce content length limit even from speech
           _contentController.text = combined.length > _kMaxContentLength
               ? combined.substring(0, _kMaxContentLength)
               : combined;
@@ -118,19 +121,8 @@ class _NotesPageState extends State<NotesPage> {
     }
   }
 
+  // ── Save note ─────────────────────────────────────────
   Future<void> _saveNote(LanguageProvider lang) async {
-    // Block anonymous users
-    if (_isAnonymous || _userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Create an account to save notes.'),
-        backgroundColor: Colors.orange,
-        behavior: SnackBarBehavior.floating,
-        margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
-      ));
-      return;
-    }
-
-    // Sanitize inputs
     final content = _contentController.text.trim();
     final rawTitle = _titleController.text.trim();
     final title = rawTitle.isNotEmpty ? rawTitle : 'Note';
@@ -138,19 +130,18 @@ class _NotesPageState extends State<NotesPage> {
     if (content.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         content: Text(lang.t('add_content')),
-        backgroundColor: Colors.red,
+        backgroundColor: const Color(0xFF333333),
         behavior: SnackBarBehavior.floating,
         margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
       ));
       return;
     }
 
-    // Hard length guards (defense in depth — UI already limits these)
     if (title.length > _kMaxTitleLength ||
         content.length > _kMaxContentLength) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         content: Text('Note is too long. Please shorten it.'),
-        backgroundColor: Colors.red,
+        backgroundColor: Color(0xFF333333),
         behavior: SnackBarBehavior.floating,
         margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
       ));
@@ -158,24 +149,46 @@ class _NotesPageState extends State<NotesPage> {
     }
 
     setState(() => _isSaving = true);
+
     try {
-      await FirebaseFirestore.instance.collection('notes').add({
-        'userId': _userId,
-        'title': title,
-        'content': content,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
-      if (mounted) {
-        setState(() {
-          _contentController.clear();
-          _titleController.clear();
+      if (_isAnonymous) {
+        // ── Anonymous: store in memory ──────────────────
+        final tempNotes = context.read<TempNotesProvider>();
+        tempNotes.add(title, content);
+        if (mounted) {
+          setState(() {
+            _contentController.clear();
+            _titleController.clear();
+          });
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+            content: Text(
+                'Note saved temporarily. Create an account to keep it.'),
+            backgroundColor: Color(0xFF333333),
+            behavior: SnackBarBehavior.floating,
+            margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          ));
+        }
+      } else {
+        // ── Logged in: save to Firestore ────────────────
+        await FirebaseFirestore.instance.collection('notes').add({
+          'userId': _userId,
+          'title': title,
+          'content': content,
+          'timestamp': FieldValue.serverTimestamp(),
         });
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(lang.t('note_saved')),
-          behavior: SnackBarBehavior.floating,
-          backgroundColor: const Color(0xFF333333),
-          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
-        ));
+        if (mounted) {
+          setState(() {
+            _contentController.clear();
+            _titleController.clear();
+          });
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+            content: Text(lang.t('note_saved')),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: const Color(0xFF333333),
+            margin:
+                const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          ));
+        }
       }
     } on FirebaseException catch (e) {
       if (mounted) {
@@ -183,8 +196,7 @@ class _NotesPageState extends State<NotesPage> {
           content: Text(e.code == 'unavailable'
               ? 'No internet. Note will sync when back online.'
               : '${lang.t('error_saving')} ${e.message}'),
-          backgroundColor:
-              e.code == 'unavailable' ? Colors.orange : Colors.red,
+          backgroundColor: const Color(0xFF333333),
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
         ));
@@ -193,7 +205,7 @@ class _NotesPageState extends State<NotesPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text('${lang.t('error_saving')} $e'),
-          backgroundColor: Colors.red,
+          backgroundColor: const Color(0xFF333333),
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
         ));
@@ -203,20 +215,35 @@ class _NotesPageState extends State<NotesPage> {
     }
   }
 
+  // ── Delete Firestore note ─────────────────────────────
   Future<void> _deleteNote(String docId) async {
     try {
-      await FirebaseFirestore.instance.collection('notes').doc(docId).delete();
+      await FirebaseFirestore.instance
+          .collection('notes')
+          .doc(docId)
+          .delete();
     } on FirebaseException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
           content: Text(e.code == 'unavailable'
               ? 'Cannot delete while offline.'
               : 'Delete failed: ${e.message}'),
-          backgroundColor: Colors.red,
+          backgroundColor: const Color(0xFF333333),
           behavior: SnackBarBehavior.floating,
         ));
       }
     }
+  }
+
+  // ── Delete temp note ──────────────────────────────────
+  void _deleteTempNote(String id, TempNotesProvider tempNotes) {
+    tempNotes.remove(id);
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Note deleted.'),
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: Color(0xFF333333),
+      margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+    ));
   }
 
   @override
@@ -260,7 +287,38 @@ class _NotesPageState extends State<NotesPage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Title field
+                // ── Guest banner ──────────────────────────
+                if (_isAnonymous) ...[
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 12),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(
+                          color: Colors.black.withOpacity(0.1)),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.info_outline,
+                            color: Colors.black54, size: 15),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Guest mode — notes are temporary. Create an account to keep them.',
+                            style: TextStyle(
+                                color: Colors.black54,
+                                fontSize: 11,
+                                height: 1.4),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                // ── Title field ───────────────────────────
                 Row(
                   children: [
                     Expanded(
@@ -308,7 +366,7 @@ class _NotesPageState extends State<NotesPage> {
                 ),
                 const SizedBox(height: 10),
 
-                // Content field
+                // ── Content field ─────────────────────────
                 Stack(
                   children: [
                     TextField(
@@ -371,7 +429,7 @@ class _NotesPageState extends State<NotesPage> {
                 ),
                 const SizedBox(height: 12),
 
-                // Save & Clear
+                // ── Save & Clear buttons ──────────────────
                 Row(
                   children: [
                     if (_contentController.text.isNotEmpty) ...[
@@ -404,7 +462,8 @@ class _NotesPageState extends State<NotesPage> {
                             ? const SizedBox(
                                 width: 16, height: 16,
                                 child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white))
+                                    strokeWidth: 2,
+                                    color: Colors.white))
                             : const Icon(Icons.save_alt),
                         label: Text(lang.t('save_note')),
                         style: ElevatedButton.styleFrom(
@@ -424,7 +483,7 @@ class _NotesPageState extends State<NotesPage> {
             ),
           ),
 
-          // Divider
+          // ── Divider ───────────────────────────────────
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
             child: Row(
@@ -443,106 +502,199 @@ class _NotesPageState extends State<NotesPage> {
             ),
           ),
 
-          // Notes list
+          // ── Notes list ────────────────────────────────
           Expanded(
-            child: _userId == null
-                ? Center(
-                    child: Text('Sign in to see your notes.',
-                        style: TextStyle(color: Colors.grey[500])))
-                : StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('notes')
-                        .where('userId', isEqualTo: _userId)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.hasError) {
-                        final isOffline = snapshot.error
-                            .toString()
-                            .contains('unavailable');
-                        return Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
+            child: Consumer<TempNotesProvider>(
+              builder: (context, tempNotes, _) {
+
+                // Anonymous: show in-memory notes
+                if (_isAnonymous) {
+                  if (tempNotes.notes.isEmpty) {
+                    return Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.note_outlined,
+                              color: Colors.grey[400], size: 44),
+                          const SizedBox(height: 12),
+                          Text(lang.t('no_notes'),
+                              style:
+                                  TextStyle(color: Colors.grey[500])),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Notes are temporary in guest mode.',
+                            style: TextStyle(
+                                color: Colors.grey[400], fontSize: 12),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 20, vertical: 8),
+                    itemCount: tempNotes.notes.length,
+                    itemBuilder: (ctx, i) {
+                      final note = tempNotes.notes[i];
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 8),
+                          title: Row(
                             children: [
-                              Icon(
-                                isOffline
-                                    ? Icons.wifi_off
-                                    : Icons.error_outline,
-                                color: Colors.grey[500], size: 36),
-                              const SizedBox(height: 10),
-                              Text(
-                                isOffline
-                                    ? 'You\'re offline.\nShowing cached notes.'
-                                    : 'Could not load notes.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.grey[500]),
+                              Expanded(
+                                child: Text(note.title,
+                                    style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 14)),
+                              ),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.black.withOpacity(0.07),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text('temp',
+                                    style: TextStyle(
+                                        fontSize: 9,
+                                        color: Colors.black45,
+                                        fontWeight: FontWeight.w700)),
                               ),
                             ],
                           ),
-                        );
-                      }
-                      if (!snapshot.hasData) {
-                        return const Center(
-                            child: CircularProgressIndicator());
-                      }
-
-                      final docs = snapshot.data!.docs.toList()
-                        ..sort((a, b) {
-                          final aT =
-                              (a.data() as Map)['timestamp'] as Timestamp?;
-                          final bT =
-                              (b.data() as Map)['timestamp'] as Timestamp?;
-                          if (aT == null || bT == null) return 0;
-                          return bT.compareTo(aT);
-                        });
-
-                      if (docs.isEmpty) {
-                        return Center(
-                          child: Text(lang.t('no_notes'),
-                              style: TextStyle(color: Colors.grey[500])),
-                        );
-                      }
-
-                      return ListView.builder(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 20, vertical: 8),
-                        itemCount: docs.length,
-                        itemBuilder: (ctx, i) {
-                          final data = docs[i].data()
-                              as Map<String, dynamic>? ?? {};
-                          final title =
-                              (data['title'] as String? ?? 'Note').trim();
-                          final content =
-                              (data['content'] as String? ?? '').trim();
-                          final docId = docs[i].id;
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: ListTile(
-                              contentPadding:
-                                  const EdgeInsets.symmetric(
-                                      horizontal: 16, vertical: 8),
-                              title: Text(title,
-                                  style: const TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 14)),
-                              subtitle: Text(content,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: const TextStyle(fontSize: 12)),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete_outline,
-                                    color: Colors.grey),
-                                onPressed: () => _deleteNote(docId),
-                              ),
-                            ),
-                          );
-                        },
+                          subtitle: Text(note.content,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12)),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete_outline,
+                                color: Colors.grey),
+                            onPressed: () =>
+                                _deleteTempNote(note.id, tempNotes),
+                          ),
+                        ),
                       );
                     },
-                  ),
+                  );
+                }
+
+                // Logged in: Firestore stream
+                if (_userId == null) {
+                  return Center(
+                    child: Text('Sign in to see your notes.',
+                        style: TextStyle(color: Colors.grey[500])),
+                  );
+                }
+
+                return StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('notes')
+                      .where('userId', isEqualTo: _userId)
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      final isOffline = snapshot.error
+                          .toString()
+                          .contains('unavailable');
+                      return Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                                isOffline
+                                    ? Icons.wifi_off
+                                    : Icons.error_outline,
+                                color: Colors.grey[500],
+                                size: 36),
+                            const SizedBox(height: 10),
+                            Text(
+                              isOffline
+                                  ? 'You\'re offline.\nShowing cached notes.'
+                                  : 'Could not load notes.',
+                              textAlign: TextAlign.center,
+                              style:
+                                  TextStyle(color: Colors.grey[500]),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    if (!snapshot.hasData) {
+                      return const Center(
+                          child: CircularProgressIndicator());
+                    }
+
+                    final docs = snapshot.data!.docs.toList()
+                      ..sort((a, b) {
+                        final aT = (a.data() as Map)['timestamp']
+                            as Timestamp?;
+                        final bT = (b.data() as Map)['timestamp']
+                            as Timestamp?;
+                        if (aT == null || bT == null) return 0;
+                        return bT.compareTo(aT);
+                      });
+
+                    if (docs.isEmpty) {
+                      return Center(
+                        child: Text(lang.t('no_notes'),
+                            style:
+                                TextStyle(color: Colors.grey[500])),
+                      );
+                    }
+
+                    return ListView.builder(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 20, vertical: 8),
+                      itemCount: docs.length,
+                      itemBuilder: (ctx, i) {
+                        final data = docs[i].data()
+                            as Map<String, dynamic>? ?? {};
+                        final title =
+                            (data['title'] as String? ?? 'Note')
+                                .trim();
+                        final content =
+                            (data['content'] as String? ?? '')
+                                .trim();
+                        final docId = docs[i].id;
+                        return Container(
+                          margin: const EdgeInsets.only(bottom: 10),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16, vertical: 8),
+                            title: Text(title,
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14)),
+                            subtitle: Text(content,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style:
+                                    const TextStyle(fontSize: 12)),
+                            trailing: IconButton(
+                              icon: const Icon(Icons.delete_outline,
+                                  color: Colors.grey),
+                              onPressed: () => _deleteNote(docId),
+                            ),
+                          ),
+                        );
+                      },
+                    );
+                  },
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -567,8 +719,8 @@ class _NotesPageState extends State<NotesPage> {
                   onTap: () => Navigator.pushReplacementNamed(
                       context, '/dictionary')),
               _navItem(Icons.menu, lang.t('nav_menu'), Colors.grey[400]!,
-                  onTap: () =>
-                      Navigator.pushReplacementNamed(context, '/menu')),
+                  onTap: () => Navigator.pushReplacementNamed(
+                      context, '/menu')),
             ],
           ),
         ),

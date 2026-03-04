@@ -7,6 +7,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'language_provider.dart';
 
+// ── API language codes for dictionaryapi.dev ──────────
 const Map<String, String?> _apiLangCode = {
   'English': 'en',
   'Spanish': 'es',
@@ -15,6 +16,46 @@ const Map<String, String?> _apiLangCode = {
   'Turkish': 'tr',
   'Chinese': null,
 };
+
+// ── Dictionary modes ──────────────────────────────────
+enum DictMode { general, medical, cs, law, math }
+
+extension DictModeInfo on DictMode {
+  String get label {
+    switch (this) {
+      case DictMode.general: return 'General';
+      case DictMode.medical: return 'Medical';
+      case DictMode.cs:      return 'Computer Science';
+      case DictMode.law:     return 'Law';
+      case DictMode.math:    return 'Mathematics';
+    }
+  }
+
+  String get emoji {
+    switch (this) {
+      case DictMode.general: return '🌐';
+      case DictMode.medical: return '🏥';
+      case DictMode.cs:      return '💻';
+      case DictMode.law:     return '⚖️';
+      case DictMode.math:    return '📐';
+    }
+  }
+
+  String get hint {
+    switch (this) {
+      case DictMode.general: return 'Search any word';
+      case DictMode.medical: return 'e.g. tachycardia, hypertension';
+      case DictMode.cs:      return 'e.g. algorithm, recursion';
+      case DictMode.law:     return 'e.g. tort, habeas corpus';
+      case DictMode.math:    return 'e.g. derivative, eigenvalue';
+    }
+  }
+
+  // Merriam-Webster Medical API key — replace with yours from dictionaryapi.com
+  static const String _mwMedicalKey = 'YOUR_MW_MEDICAL_API_KEY';
+
+  bool get usesMerriamWebster => this == DictMode.medical;
+}
 
 class DictionaryPage extends StatefulWidget {
   const DictionaryPage({super.key});
@@ -29,6 +70,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
   final FocusNode _focusNode = FocusNode();
   final stt.SpeechToText _speech = stt.SpeechToText();
 
+  DictMode _selectedMode = DictMode.general;
   Map<String, dynamic>? _result;
   String? _error;
   bool _loading = false;
@@ -50,7 +92,6 @@ class _DictionaryPageState extends State<DictionaryPage> {
     if (_isListening) {
       await _speech.stop();
       if (mounted) setState(() => _isListening = false);
-      // Search with whatever was captured
       final word = _searchController.text.trim();
       if (word.isNotEmpty) _search(langCode);
       return;
@@ -61,7 +102,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Microphone permission denied'),
-          backgroundColor: Colors.red,
+          backgroundColor: Color(0xFF333333),
           behavior: SnackBarBehavior.floating,
         ));
       }
@@ -69,14 +110,11 @@ class _DictionaryPageState extends State<DictionaryPage> {
     }
 
     final available = await _speech.initialize(
-      onError: (e) {
-        if (mounted) setState(() => _isListening = false);
-      },
+      onError: (e) { if (mounted) setState(() => _isListening = false); },
       onStatus: (s) {
         if (s == 'done' || s == 'notListening') {
           if (mounted) {
             setState(() => _isListening = false);
-            // Auto-search when speech ends
             final word = _searchController.text.trim();
             if (word.isNotEmpty) _search(langCode);
           }
@@ -88,7 +126,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text('Speech recognition not available on this device'),
-          backgroundColor: Colors.orange,
+          backgroundColor: Color(0xFF333333),
           behavior: SnackBarBehavior.floating,
         ));
       }
@@ -96,18 +134,12 @@ class _DictionaryPageState extends State<DictionaryPage> {
     }
 
     setState(() { _isListening = true; _searchController.clear(); });
-
     final langProvider = context.read<LanguageProvider>();
     _speech.listen(
       localeId: langProvider.sttLocale,
       onResult: (val) {
-        // Show word live as user speaks
-        final words = val.recognizedWords.trim();
-        // Only take the first word — dictionary searches are single words
-        final firstWord = words.split(' ').first;
-        if (mounted) {
-          setState(() => _searchController.text = firstWord);
-        }
+        final firstWord = val.recognizedWords.trim().split(' ').first;
+        if (mounted) setState(() => _searchController.text = firstWord);
       },
       listenFor: const Duration(seconds: 8),
       pauseFor: const Duration(seconds: 2),
@@ -116,7 +148,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
     );
   }
 
-  // ── Dictionary search ─────────────────────────────────
+  // ── Search — routes to correct API ───────────────────
   Future<void> _search(String langCode) async {
     final word = _searchController.text.trim().toLowerCase();
     if (word.isEmpty) return;
@@ -135,6 +167,19 @@ class _DictionaryPageState extends State<DictionaryPage> {
     });
     _focusNode.unfocus();
 
+    try {
+      if (_selectedMode == DictMode.medical) {
+        await _searchMerriamWebsterMedical(word);
+      } else {
+        await _searchFreeDictionary(word, langCode);
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // ── Free Dictionary API (general, CS, law, math) ──────
+  Future<void> _searchFreeDictionary(String word, String langCode) async {
     try {
       final uri = Uri.parse(
         'https://api.dictionaryapi.dev/api/v2/entries/$langCode/${Uri.encodeComponent(word)}',
@@ -165,9 +210,135 @@ class _DictionaryPageState extends State<DictionaryPage> {
           msg.contains('SocketException') || msg.contains('TimeoutException')
               ? 'No internet connection.'
               : 'Something went wrong. Please try again.');
-    } finally {
-      if (mounted) setState(() => _loading = false);
     }
+  }
+
+  // ── Merriam-Webster Medical API ───────────────────────
+  Future<void> _searchMerriamWebsterMedical(String word) async {
+    const apiKey = DictModeInfo._mwMedicalKey;
+    if (apiKey == 'YOUR_MW_MEDICAL_API_KEY') {
+      setState(() => _error =
+          'Medical dictionary API key not configured.\nAdd your key from dictionaryapi.com.');
+      return;
+    }
+
+    try {
+      final uri = Uri.parse(
+        'https://www.dictionaryapi.com/api/v3/references/medical/json/${Uri.encodeComponent(word)}?key=$apiKey',
+      );
+      final response =
+          await http.get(uri).timeout(const Duration(seconds: 10));
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+
+        // MW returns a list of strings when word not found
+        if (data is List && data.isNotEmpty && data[0] is String) {
+          setState(() => _error =
+              'Word not found. Did you mean: ${(data as List<dynamic>).take(5).join(', ')}?');
+          return;
+        }
+
+        if (data is List && data.isNotEmpty && data[0] is Map) {
+          setState(() => _result = _parseMerriamWebster(
+              data[0] as Map<String, dynamic>, word));
+          _extractAudio(_result!);
+        } else {
+          setState(() => _error = 'No results found.');
+        }
+      } else if (response.statusCode == 403) {
+        setState(() =>
+            _error = 'Invalid API key. Check your Merriam-Webster key.');
+      } else if (response.statusCode == 429) {
+        setState(() => _error =
+            'Daily limit reached (1,000 queries/day). Try again tomorrow.');
+      } else {
+        setState(() => _error = 'Something went wrong. Please try again.');
+      }
+    } on Exception catch (e) {
+      final msg = e.toString();
+      setState(() => _error =
+          msg.contains('SocketException') || msg.contains('TimeoutException')
+              ? 'No internet connection.'
+              : 'Something went wrong. Please try again.');
+    }
+  }
+
+  // ── Parse MW response into shared result format ───────
+  Map<String, dynamic> _parseMerriamWebster(
+      Map<String, dynamic> entry, String word) {
+    final hwi = entry['hwi'] as Map<String, dynamic>? ?? {};
+    final prs = hwi['prs'] as List<dynamic>? ?? [];
+    final phonetic = prs.isNotEmpty
+        ? (prs[0] as Map<String, dynamic>)['mw'] as String? ?? ''
+        : '';
+
+    // Extract audio from MW format
+    String audioUrl = '';
+    if (prs.isNotEmpty) {
+      final sound = (prs[0] as Map<String, dynamic>)['sound']
+          as Map<String, dynamic>?;
+      if (sound != null) {
+        final audio = sound['audio'] as String? ?? '';
+        if (audio.isNotEmpty) {
+          final subdir = audio.startsWith('bix')
+              ? 'bix'
+              : audio.startsWith('gg')
+                  ? 'gg'
+                  : audio[0];
+          audioUrl =
+              'https://media.merriam-webster.com/audio/prons/en/us/mp3/$subdir/$audio.mp3';
+        }
+      }
+    }
+
+    // Build meanings from MW 'def' structure
+    final List<Map<String, dynamic>> meanings = [];
+    final defs = entry['def'] as List<dynamic>? ?? [];
+    for (final def in defs) {
+      final sseq = (def as Map<String, dynamic>)['sseq'] as List<dynamic>? ?? [];
+      final List<Map<String, dynamic>> definitions = [];
+      for (final senseGroup in sseq) {
+        for (final sense in (senseGroup as List<dynamic>)) {
+          if (sense is List && sense.length >= 2 && sense[0] == 'sense') {
+            final senseData = sense[1] as Map<String, dynamic>;
+            final dt = senseData['dt'] as List<dynamic>? ?? [];
+            for (final part in dt) {
+              if (part is List && part[0] == 'text') {
+                final raw = part[1] as String;
+                // Strip MW markup tags like {bc}, {it}, {/it}, {sx|...||}
+                final clean = raw
+                    .replaceAll(RegExp(r'\{[^}]*\}'), '')
+                    .replaceAll(RegExp(r'\s+'), ' ')
+                    .trim();
+                if (clean.isNotEmpty) {
+                  definitions.add({'definition': clean});
+                }
+              }
+            }
+          }
+        }
+      }
+      if (definitions.isNotEmpty) {
+        meanings.add({
+          'partOfSpeech': entry['fl'] as String? ?? '',
+          'definitions': definitions,
+          'synonyms': [],
+          'antonyms': [],
+        });
+        break; // one meaning block per entry is enough
+      }
+    }
+
+    return {
+      'word': word,
+      'phonetic': phonetic,
+      'phonetics': audioUrl.isNotEmpty
+          ? [{'text': phonetic, 'audio': audioUrl}]
+          : [],
+      'origin': '',
+      'meanings': meanings,
+    };
   }
 
   void _extractAudio(Map<String, dynamic> data) {
@@ -175,8 +346,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
     for (final p in phonetics) {
       final audio = (p as Map<String, dynamic>)['audio'] as String?;
       if (audio != null && audio.isNotEmpty) {
-        setState(() => _audioUrl =
-            audio.startsWith('//') ? 'https:$audio' : audio);
+        setState(() =>
+            _audioUrl = audio.startsWith('//') ? 'https:$audio' : audio);
         return;
       }
     }
@@ -263,9 +434,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(6),
-              ),
+                  color: Colors.black,
+                  borderRadius: BorderRadius.circular(6)),
               child: Text(
                 lang.t('nav_dictionary').toUpperCase(),
                 style: const TextStyle(
@@ -280,16 +450,19 @@ class _DictionaryPageState extends State<DictionaryPage> {
         actions: [
           Padding(
             padding: const EdgeInsets.only(right: 16),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(20)),
-              child: Text(lang.selectedLanguage,
-                  style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.black87)),
+            child: Center(
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(20)),
+                child: Text(lang.selectedLanguage,
+                    style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.black87)),
+              ),
             ),
           ),
         ],
@@ -297,9 +470,107 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
       body: Column(
         children: [
+          // ── Mode dropdown ───────────────────────────────
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 0),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: DropdownButtonHideUnderline(
+                child: DropdownButton<DictMode>(
+                  value: _selectedMode,
+                  isExpanded: true,
+                  dropdownColor: const Color(0xFF1A1A1A),
+                  iconEnabledColor: const Color(0xFFF3E5AB),
+                  style: const TextStyle(
+                      color: Color(0xFFF3E5AB),
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600),
+                  onChanged: (mode) {
+                    if (mode != null) {
+                      setState(() {
+                        _selectedMode = mode;
+                        _result = null;
+                        _error = null;
+                        _audioUrl = null;
+                        _searchController.clear();
+                      });
+                    }
+                  },
+                  items: DictMode.values.map((mode) {
+                    return DropdownMenuItem(
+                      value: mode,
+                      child: Row(
+                        children: [
+                          Text(mode.emoji,
+                              style: const TextStyle(fontSize: 16)),
+                          const SizedBox(width: 10),
+                          Text(mode.label),
+                          if (mode == DictMode.medical) ...[
+                            const Spacer(),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFD4B96A)
+                                    .withOpacity(0.2),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: const Text('MW',
+                                  style: TextStyle(
+                                      fontSize: 9,
+                                      color: Color(0xFFD4B96A),
+                                      fontWeight: FontWeight.w800)),
+                            ),
+                          ],
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
+          ),
+
+          // ── Medical API key notice ──────────────────────
+          if (_selectedMode == DictMode.medical) ...[
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.06),
+                  borderRadius: BorderRadius.circular(10),
+                  border:
+                      Border.all(color: Colors.black.withOpacity(0.1)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.info_outline,
+                        color: Colors.black54, size: 14),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Powered by Merriam-Webster Medical. Free API key needed from dictionaryapi.com.',
+                        style: TextStyle(
+                            color: Colors.black54,
+                            fontSize: 10,
+                            height: 1.4),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+
           // ── Search bar ──────────────────────────────────
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
             child: Row(
               children: [
                 Expanded(
@@ -308,13 +579,15 @@ class _DictionaryPageState extends State<DictionaryPage> {
                     focusNode: _focusNode,
                     maxLength: 60,
                     textInputAction: TextInputAction.search,
-                    onSubmitted: unsupported ? null : (_) => _search(langCode!),
+                    onSubmitted: unsupported
+                        ? null
+                        : (_) => _search(langCode!),
                     decoration: InputDecoration(
                       hintText: _isListening
                           ? 'Listening...'
                           : unsupported
-                              ? 'Dictionary not available in Chinese'
-                              : 'Search a word in ${lang.selectedLanguage}...',
+                              ? 'Not available in Chinese'
+                              : _selectedMode.hint,
                       counterText: '',
                       prefixIcon: const Icon(Icons.search, size: 20),
                       filled: true,
@@ -324,12 +597,6 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       contentPadding: const EdgeInsets.symmetric(
                           horizontal: 16, vertical: 14),
                       border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(18),
-                        borderSide: _isListening
-                            ? BorderSide(color: Colors.grey[400]!, width: 1.5)
-                            : BorderSide.none,
-                      ),
-                      enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(18),
                         borderSide: BorderSide.none,
                       ),
@@ -353,7 +620,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Icon(
-                        _isListening ? Icons.stop_rounded : Icons.mic_none_rounded,
+                        _isListening
+                            ? Icons.stop_rounded
+                            : Icons.mic_none_rounded,
                         color: _isListening ? Colors.white : Colors.black87,
                         size: 22,
                       ),
@@ -388,15 +657,14 @@ class _DictionaryPageState extends State<DictionaryPage> {
           // ── Listening indicator ─────────────────────────
           if (_isListening)
             Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.only(top: 8),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
                   Container(
-                    width: 8, height: 8,
-                    decoration: const BoxDecoration(
-                        color: Colors.red, shape: BoxShape.circle),
-                  ),
+                      width: 8, height: 8,
+                      decoration: const BoxDecoration(
+                          color: Colors.red, shape: BoxShape.circle)),
                   const SizedBox(width: 8),
                   Text(
                     'Listening in ${lang.selectedLanguage} — say a word',
@@ -409,7 +677,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
               ),
             ),
 
-          // ── Unsupported ─────────────────────────────────
+          const SizedBox(height: 10),
+
+          // ── Body ────────────────────────────────────────
           if (unsupported)
             Expanded(
               child: Center(
@@ -418,7 +688,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('🈚', style: TextStyle(fontSize: 48)),
+                      const Text('🈚',
+                          style: TextStyle(fontSize: 48)),
                       const SizedBox(height: 16),
                       const Text('Chinese dictionary\nnot available yet',
                           textAlign: TextAlign.center,
@@ -439,8 +710,6 @@ class _DictionaryPageState extends State<DictionaryPage> {
                 ),
               ),
             )
-
-          // ── Error ───────────────────────────────────────
           else if (_error != null)
             Expanded(
               child: Center(
@@ -456,33 +725,36 @@ class _DictionaryPageState extends State<DictionaryPage> {
                           textAlign: TextAlign.center,
                           style: TextStyle(
                               color: Colors.grey[600],
-                              fontSize: 15,
+                              fontSize: 14,
                               height: 1.5)),
                     ],
                   ),
                 ),
               ),
             )
-
-          // ── Empty state ─────────────────────────────────
           else if (_result == null && !_loading)
             Expanded(
               child: Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.menu_book_rounded,
-                        size: 56,
-                        color: Colors.black.withOpacity(0.12)),
-                    const SizedBox(height: 14),
+                    Text(_selectedMode.emoji,
+                        style: const TextStyle(fontSize: 44)),
+                    const SizedBox(height: 12),
                     Text(
-                      'Search or say a word\nin ${lang.selectedLanguage}',
-                      textAlign: TextAlign.center,
+                      '${_selectedMode.label} Dictionary',
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.black87),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _selectedMode.hint,
                       style: TextStyle(
-                          color: Colors.grey[600], fontSize: 14),
+                          color: Colors.grey[600], fontSize: 13),
                     ),
                     const SizedBox(height: 20),
-                    // Mic hint button
                     if (!unsupported)
                       GestureDetector(
                         onTap: () => _startVoiceSearch(langCode!),
@@ -490,9 +762,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
                           padding: const EdgeInsets.symmetric(
                               horizontal: 20, vertical: 12),
                           decoration: BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.circular(30),
-                          ),
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(30)),
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
@@ -512,8 +783,6 @@ class _DictionaryPageState extends State<DictionaryPage> {
                 ),
               ),
             )
-
-          // ── Results ─────────────────────────────────────
           else if (_result != null)
             Expanded(
               child: SingleChildScrollView(
@@ -526,9 +795,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.black,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
+                          color: Colors.black,
+                          borderRadius: BorderRadius.circular(20)),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -536,13 +804,38 @@ class _DictionaryPageState extends State<DictionaryPage> {
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Expanded(
-                                child: Text(
-                                  _result!['word'] as String? ?? '',
-                                  style: const TextStyle(
-                                      color: Color(0xFFF3E5AB),
-                                      fontSize: 30,
-                                      fontWeight: FontWeight.w900,
-                                      letterSpacing: -0.5),
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      _result!['word'] as String? ?? '',
+                                      style: const TextStyle(
+                                          color: Color(0xFFF3E5AB),
+                                          fontSize: 28,
+                                          fontWeight: FontWeight.w900,
+                                          letterSpacing: -0.5),
+                                    ),
+                                    // Mode badge
+                                    const SizedBox(height: 4),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 8, vertical: 3),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFD4B96A)
+                                            .withOpacity(0.2),
+                                        borderRadius:
+                                            BorderRadius.circular(6),
+                                      ),
+                                      child: Text(
+                                        '${_selectedMode.emoji} ${_selectedMode.label}',
+                                        style: const TextStyle(
+                                            color: Color(0xFFD4B96A),
+                                            fontSize: 10,
+                                            fontWeight: FontWeight.w700),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                               if (_audioUrl != null)
@@ -551,9 +844,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                   child: Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFD4B96A),
-                                      borderRadius: BorderRadius.circular(12),
-                                    ),
+                                        color: const Color(0xFFD4B96A),
+                                        borderRadius:
+                                            BorderRadius.circular(12)),
                                     child: Icon(
                                       _isPlaying
                                           ? Icons.volume_up_rounded
@@ -570,7 +863,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                             Text(_phonetic,
                                 style: const TextStyle(
                                     color: Color(0xFFD4B96A),
-                                    fontSize: 16,
+                                    fontSize: 15,
                                     fontWeight: FontWeight.w400)),
                           ],
                         ],
@@ -604,7 +897,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _sectionCard(
                           icon: _posIcon(pos),
-                          label: pos.toUpperCase(),
+                          label: pos.isNotEmpty
+                              ? pos.toUpperCase()
+                              : 'DEFINITION',
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: defs.asMap().entries.map((entry) {
@@ -625,9 +920,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                           top: 2, right: 10),
                                       width: 20, height: 20,
                                       decoration: const BoxDecoration(
-                                        color: Color(0xFFD4B96A),
-                                        shape: BoxShape.circle,
-                                      ),
+                                          color: Color(0xFFD4B96A),
+                                          shape: BoxShape.circle),
                                       child: Center(
                                         child: Text('$i',
                                             style: const TextStyle(
@@ -674,7 +968,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                         borderRadius:
                                             BorderRadius.circular(20),
                                         border: Border.all(
-                                            color: const Color(0xFFD4B96A),
+                                            color:
+                                                const Color(0xFFD4B96A),
                                             width: 1),
                                       ),
                                       child: Text(s,
@@ -707,18 +1002,18 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                       padding: const EdgeInsets.symmetric(
                                           horizontal: 12, vertical: 6),
                                       decoration: BoxDecoration(
-                                        color: Colors.red.shade50,
+                                        color: Colors.grey.shade100,
                                         borderRadius:
                                             BorderRadius.circular(20),
                                         border: Border.all(
-                                            color: Colors.red.shade200,
+                                            color: Colors.grey.shade400,
                                             width: 1),
                                       ),
                                       child: Text(a,
                                           style: TextStyle(
                                               fontSize: 12,
                                               fontWeight: FontWeight.w600,
-                                              color: Colors.red.shade700)),
+                                              color: Colors.grey[700])),
                                     ),
                                   ))
                               .toList(),
@@ -796,11 +1091,11 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
   IconData _posIcon(String pos) {
     switch (pos.toLowerCase()) {
-      case 'noun':      return Icons.label_outline_rounded;
-      case 'verb':      return Icons.play_circle_outline_rounded;
-      case 'adjective': return Icons.auto_awesome_outlined;
-      case 'adverb':    return Icons.speed_rounded;
-      default:          return Icons.notes_rounded;
+      case 'noun':       return Icons.label_outline_rounded;
+      case 'verb':       return Icons.play_circle_outline_rounded;
+      case 'adjective':  return Icons.auto_awesome_outlined;
+      case 'adverb':     return Icons.speed_rounded;
+      default:           return Icons.notes_rounded;
     }
   }
 

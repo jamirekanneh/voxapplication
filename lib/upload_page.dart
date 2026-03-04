@@ -3,7 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
-import 'package:syncfusion_flutter_pdf/syncfusion_flutter_pdf.dart';
+import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'temp_library_provider.dart';
 
 class UploadPage extends StatefulWidget {
@@ -40,12 +40,12 @@ class _UploadPageState extends State<UploadPage> {
     final String extension = (file.extension ?? 'file').toLowerCase();
 
     // Validate file size — max 20MB
-    if ((file.size) > 20 * 1024 * 1024) {
+    if (file.size > 20 * 1024 * 1024) {
       setState(() => _isUploading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text("File is too large. Maximum size is 20MB."),
-          backgroundColor: Colors.red,
+          backgroundColor: Color(0xFF333333),
           behavior: SnackBarBehavior.floating,
         ));
       }
@@ -103,8 +103,7 @@ class _UploadPageState extends State<UploadPage> {
                       ? '"$fileName" uploaded & ready to read!'
                       : '"$fileName" uploaded (text extraction not available for this format)',
             ),
-            backgroundColor:
-                _isAnonymous ? Colors.orange[800] : Colors.grey[850],
+            backgroundColor: const Color(0xFF333333),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -116,7 +115,7 @@ class _UploadPageState extends State<UploadPage> {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text("Upload failed. Please try again."),
-          backgroundColor: Colors.red,
+          backgroundColor: Color(0xFF333333),
           behavior: SnackBarBehavior.floating,
         ));
       }
@@ -189,31 +188,31 @@ class _UploadPageState extends State<UploadPage> {
                     const SizedBox(height: 8),
                     Text(
                       "Text will be extracted and saved for reading",
-                      style:
-                          TextStyle(color: Colors.grey[600], fontSize: 12),
+                      style: TextStyle(
+                          color: Colors.grey[600], fontSize: 12),
                     ),
 
-                    // Anonymous notice banner
+                    // ── Anonymous notice banner ─────────────
                     if (_isAnonymous) ...[
                       const SizedBox(height: 20),
                       Container(
                         padding: const EdgeInsets.all(14),
                         decoration: BoxDecoration(
-                          color: Colors.orange[800]!.withOpacity(0.12),
+                          color: Colors.black.withOpacity(0.06),
                           borderRadius: BorderRadius.circular(14),
                           border: Border.all(
-                              color: Colors.orange[800]!.withOpacity(0.3)),
+                              color: Colors.black.withOpacity(0.1)),
                         ),
                         child: Row(
                           children: [
-                            Icon(Icons.info_outline,
-                                color: Colors.orange[800], size: 18),
+                            const Icon(Icons.info_outline,
+                                color: Colors.black54, size: 18),
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
                                 "You're browsing as a guest. Files will only be available until you close the app.",
                                 style: TextStyle(
-                                    color: Colors.orange[900],
+                                    color: Colors.black54,
                                     fontSize: 12,
                                     height: 1.5),
                               ),

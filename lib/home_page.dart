@@ -64,7 +64,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
           content: Text("Microphone permission denied"),
-          backgroundColor: Colors.red,
+          backgroundColor: Color(0xFF333333),
           behavior: SnackBarBehavior.floating,
         ));
       }
@@ -148,10 +148,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             .delete();
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                            content:
-                                Text('"$displayName" ${lang.t('deleted')}'),
+                            content: Text(
+                                '"$displayName" ${lang.t('deleted')}'),
                             behavior: SnackBarBehavior.floating,
-                            backgroundColor: Colors.grey[850],
+                            backgroundColor: const Color(0xFF333333),
                             margin: const EdgeInsets.only(
                                 bottom: 90, left: 20, right: 20),
                           ));
@@ -162,7 +162,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             content: Text(e.code == 'unavailable'
                                 ? 'Cannot delete while offline'
                                 : 'Delete failed: ${e.message}'),
-                            backgroundColor: Colors.red,
+                            backgroundColor: const Color(0xFF333333),
                             behavior: SnackBarBehavior.floating,
                           ));
                         }
@@ -188,7 +188,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
   // ── Delete for temp/anonymous users ──────────────────
   void _confirmDeleteTemp(
-      BuildContext context, String id, String fileName,
+      BuildContext context,
+      String id,
+      String fileName,
       TempLibraryProvider tempLibrary) {
     final lang = context.read<LanguageProvider>();
     final displayName = fileName.length > 40
@@ -246,9 +248,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       Navigator.pop(sheetCtx);
                       tempLibrary.remove(id);
                       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-                        content: Text('"$displayName" ${lang.t('deleted')}'),
+                        content:
+                            Text('"$displayName" ${lang.t('deleted')}'),
                         behavior: SnackBarBehavior.floating,
-                        backgroundColor: Colors.grey[850],
+                        backgroundColor: const Color(0xFF333333),
                         margin: const EdgeInsets.only(
                             bottom: 90, left: 20, right: 20),
                       ));
@@ -296,8 +299,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
                     child: TextField(
                       controller: _searchController,
                       maxLength: 100,
-                      onChanged: (v) =>
-                          setState(() => _searchQuery = v.trim().toLowerCase()),
+                      onChanged: (v) => setState(
+                          () => _searchQuery = v.trim().toLowerCase()),
                       decoration: InputDecoration(
                         hintText: lang.t('search_hint'),
                         counterText: '',
@@ -330,21 +333,21 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   padding: const EdgeInsets.symmetric(
                       horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.orange[800]!.withOpacity(0.12),
+                    color: Colors.black.withOpacity(0.06),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                        color: Colors.orange[800]!.withOpacity(0.3)),
+                        color: Colors.black.withOpacity(0.1)),
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline,
-                          color: Colors.orange[800], size: 15),
+                      const Icon(Icons.info_outline,
+                          color: Colors.black54, size: 15),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Guest mode — files are temporary. Create an account to save them.',
                           style: TextStyle(
-                              color: Colors.orange[900],
+                              color: Colors.black54,
                               fontSize: 11,
                               height: 1.4),
                         ),
@@ -408,9 +411,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             onTap: () =>
                                 _openReader(item.fileName, item.content),
                             onLongPress: () => _confirmDeleteTemp(
-                                context, item.id, item.fileName, tempLibrary),
-                            child:
-                                _buildFileCard(item.fileName, item.fileType),
+                                context, item.id, item.fileName,
+                                tempLibrary),
+                            child: _buildFileCard(
+                                item.fileName, item.fileType),
                           );
                         },
                       );
@@ -446,7 +450,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                       : 'Something went wrong.',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
-                                      color: Colors.grey[600], fontSize: 14),
+                                      color: Colors.grey[600],
+                                      fontSize: 14),
                                 ),
                               ],
                             ),
@@ -461,8 +466,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         final docs = snapshot.data!.docs.where((doc) {
                           final data =
                               doc.data() as Map<String, dynamic>? ?? {};
-                          final name = (data['fileName'] as String? ?? '')
-                              .toLowerCase();
+                          final name =
+                              (data['fileName'] as String? ?? '')
+                                  .toLowerCase();
                           return name.contains(_searchQuery);
                         }).toList();
 
@@ -471,7 +477,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             child: Text(lang.t('no_files'),
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                    color: Colors.grey[600], fontSize: 14)),
+                                    color: Colors.grey[600],
+                                    fontSize: 14)),
                           );
                         }
 
@@ -485,9 +492,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
                           ),
                           itemCount: docs.length,
                           itemBuilder: (context, index) {
-                            final data =
-                                docs[index].data() as Map<String, dynamic>? ??
-                                    {};
+                            final data = docs[index].data()
+                                    as Map<String, dynamic>? ??
+                                {};
                             final String name =
                                 data['fileName'] as String? ?? 'File';
                             final String type =
@@ -528,8 +535,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   Colors.grey[400]!,
                   onTap: () => Navigator.pushNamed(context, '/notes')),
               const SizedBox(width: 48),
-              _navItem(Icons.book, lang.t('nav_dictionary'), Colors.grey[400]!,
-                  onTap: () => Navigator.pushNamed(context, '/dictionary')),
+              _navItem(Icons.book, lang.t('nav_dictionary'),
+                  Colors.grey[400]!,
+                  onTap: () =>
+                      Navigator.pushNamed(context, '/dictionary')),
               _navItem(Icons.menu, lang.t('nav_menu'), Colors.grey[400]!,
                   onTap: () => Navigator.pushNamed(context, '/menu')),
             ],
