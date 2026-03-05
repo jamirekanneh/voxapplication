@@ -569,10 +569,33 @@ class _MenuPageState extends State<MenuPage> {
                     icon: Icons.mail_outline_rounded,
                     title: lang.t('menu_contact'),
                     onTap: () => Navigator.push(
-                      // ← UPDATED
                       context,
                       MaterialPageRoute(builder: (_) => const ContactUsPage()),
                     ),
+                  ),
+
+                  // ── Deleted Files (Recycle Bin) ──────────────────────────
+                  _buildMenuItem(
+                    icon: Icons.restore_from_trash_rounded,
+                    title: 'Deleted Files',
+                    onTap: () {
+                      if (_isAnonymous) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(
+                            content: Text('Sign in to access deleted files.'),
+                            backgroundColor: Color(0xFF333333),
+                            behavior: SnackBarBehavior.floating,
+                          ),
+                        );
+                        return;
+                      }
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const DeletedFilesPage(),
+                        ),
+                      );
+                    },
                   ),
 
                   if (!_isAnonymous) ...[
@@ -655,6 +678,360 @@ class _MenuPageState extends State<MenuPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// ════════════════════════════════════════════════════════════
+//  DELETED FILES PAGE  (Recycle Bin)
+// ════════════════════════════════════════════════════════════
+
+class DeletedFilesPage extends StatelessWidget {
+  const DeletedFilesPage({super.key});
+
+  CollectionReference get _bin {
+    final uid = FirebaseAuth.instance.currentUser!.uid;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('deleted_library');
+  }
+
+  Future<void> _restore(BuildContext context, DocumentSnapshot doc) async {
+    try {
+      final data = Map<String, dynamic>.from(
+        doc.data() as Map<String, dynamic>,
+      );
+      data.remove('deletedAt');
+      await FirebaseFirestore.instance.collection('library').add({
+        ...data,
+        'timestamp': FieldValue.serverTimestamp(),
+      });
+      await _bin.doc(doc.id).delete();
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('"${data['fileName']}" restored to library.'),
+            backgroundColor: const Color(0xFF333333),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Restore failed. Please try again.'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _permanentDelete(
+    BuildContext context,
+    DocumentSnapshot doc,
+  ) async {
+    final data = doc.data() as Map<String, dynamic>;
+    final name = data['fileName'] as String? ?? 'File';
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text(
+          'Delete permanently?',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        ),
+        content: Text(
+          '"$name" will be gone forever.',
+          style: TextStyle(color: Colors.grey[600], fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.black54),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      await _bin.doc(doc.id).delete();
+    }
+  }
+
+  IconData _iconForType(String type) {
+    switch (type.toLowerCase()) {
+      case 'pdf':
+        return Icons.picture_as_pdf;
+      case 'doc':
+      case 'docx':
+        return Icons.description;
+      case 'ppt':
+      case 'pptx':
+        return Icons.slideshow;
+      case 'xls':
+      case 'xlsx':
+        return Icons.table_chart;
+      case 'epub':
+        return Icons.menu_book;
+      default:
+        return Icons.insert_drive_file;
+    }
+  }
+
+  Color _colorForType(String type) {
+    switch (type.toLowerCase()) {
+      case 'pdf':
+        return Colors.red.shade400;
+      case 'doc':
+      case 'docx':
+        return Colors.blue.shade400;
+      case 'ppt':
+      case 'pptx':
+        return Colors.orange.shade400;
+      case 'xls':
+      case 'xlsx':
+        return Colors.green.shade400;
+      case 'epub':
+        return Colors.purple.shade400;
+      default:
+        return Colors.grey.shade500;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: const Color(0xFFF3E5AB),
+      appBar: AppBar(
+        title: const Text(
+          'Deleted Files',
+          style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        iconTheme: const IconThemeData(color: Colors.black),
+        actions: [
+          StreamBuilder<QuerySnapshot>(
+            stream: _bin.snapshots(),
+            builder: (_, snap) {
+              if (!snap.hasData || snap.data!.docs.isEmpty) {
+                return const SizedBox.shrink();
+              }
+              return TextButton.icon(
+                onPressed: () async {
+                  final confirmed = await showDialog<bool>(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      title: const Text(
+                        'Empty bin?',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      content: const Text(
+                        'All deleted files will be permanently removed.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx, false),
+                          child: const Text('Cancel'),
+                        ),
+                        ElevatedButton(
+                          onPressed: () => Navigator.pop(ctx, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.redAccent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                          ),
+                          child: const Text(
+                            'Empty',
+                            style: TextStyle(color: Colors.white),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                  if (confirmed == true) {
+                    for (final d in snap.data!.docs) {
+                      await _bin.doc(d.id).delete();
+                    }
+                  }
+                },
+                icon: const Icon(
+                  Icons.delete_sweep,
+                  color: Colors.redAccent,
+                  size: 18,
+                ),
+                label: const Text(
+                  'Empty',
+                  style: TextStyle(
+                    color: Colors.redAccent,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: _bin.snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.black),
+            );
+          }
+
+          final docs = snapshot.data!.docs;
+
+          if (docs.isEmpty) {
+            return Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.delete_outline, size: 64, color: Colors.grey[400]),
+                  const SizedBox(height: 14),
+                  Text(
+                    'No deleted files',
+                    style: TextStyle(
+                      color: Colors.grey[600],
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Files you delete will appear here',
+                    style: TextStyle(color: Colors.grey[400], fontSize: 13),
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return ListView.builder(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              final doc = docs[index];
+              final data = doc.data() as Map<String, dynamic>;
+              final name = data['fileName'] as String? ?? 'Unknown';
+              final type = data['fileType'] as String? ?? 'file';
+              final deletedAt = data['deletedAt'];
+              String dateStr = '';
+              if (deletedAt is Timestamp) {
+                final dt = deletedAt.toDate();
+                dateStr = '${dt.day}/${dt.month}/${dt.year}';
+              }
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 10),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 6,
+                      offset: const Offset(0, 2),
+                    ),
+                  ],
+                ),
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  leading: Container(
+                    width: 44,
+                    height: 44,
+                    decoration: BoxDecoration(
+                      color: _colorForType(type).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(
+                      _iconForType(type),
+                      color: _colorForType(type),
+                      size: 24,
+                    ),
+                  ),
+                  title: Text(
+                    name,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                      color: Colors.black87,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: dateStr.isNotEmpty
+                      ? Text(
+                          'Deleted $dateStr',
+                          style: TextStyle(
+                            color: Colors.grey[400],
+                            fontSize: 11,
+                          ),
+                        )
+                      : null,
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Restore
+                      Tooltip(
+                        message: 'Restore to library',
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.restore,
+                            color: Color(0xFFD4B96A),
+                            size: 24,
+                          ),
+                          onPressed: () => _restore(context, doc),
+                        ),
+                      ),
+                      // Permanent delete
+                      Tooltip(
+                        message: 'Delete permanently',
+                        child: IconButton(
+                          icon: const Icon(
+                            Icons.delete_forever,
+                            color: Colors.redAccent,
+                            size: 24,
+                          ),
+                          onPressed: () => _permanentDelete(context, doc),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
       ),
     );
   }

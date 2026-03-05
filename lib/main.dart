@@ -12,7 +12,7 @@ import 'menu_page.dart';
 import 'dictionary_page.dart';
 import 'notes_page.dart';
 import 'language_provider.dart';
-import 'reader_provider.dart';
+import 'tts_service.dart';
 import 'temp_library_provider.dart';
 import 'temp_notes_provider.dart';
 
@@ -24,7 +24,7 @@ void main() async {
     MultiProvider(
       providers: [
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
-        ChangeNotifierProvider(create: (_) => ReaderProvider()),
+        ChangeNotifierProvider(create: (_) => TtsService()),
         ChangeNotifierProvider(create: (_) => TempLibraryProvider()),
         ChangeNotifierProvider(create: (_) => TempNotesProvider()),
       ],
@@ -34,7 +34,6 @@ void main() async {
 }
 
 class TheVoxApp extends StatefulWidget {
-  // ← changed to StatefulWidget
   const TheVoxApp({super.key});
 
   @override
@@ -45,19 +44,17 @@ class _TheVoxAppState extends State<TheVoxApp> {
   @override
   void initState() {
     super.initState();
-    _handleIncomingLinks(); // ← starts listening for magic links
+    _handleIncomingLinks();
   }
 
   Future<void> _handleIncomingLinks() async {
     final appLinks = AppLinks();
 
-    // Cold start — app was closed when user tapped the link
     final Uri? initialLink = await appLinks.getInitialLink();
     if (initialLink != null) {
       await _completeMagicLinkSignIn(initialLink.toString());
     }
 
-    // Warm start — app was in background when user tapped the link
     appLinks.uriLinkStream.listen((Uri link) async {
       await _completeMagicLinkSignIn(link.toString());
     });
@@ -69,7 +66,6 @@ class _TheVoxAppState extends State<TheVoxApp> {
     final prefs = await SharedPreferences.getInstance();
     final email = prefs.getString('pendingEmailLink');
 
-    // No email stored means link arrived on a different device — ignore
     if (email == null) return;
 
     try {
@@ -78,8 +74,6 @@ class _TheVoxAppState extends State<TheVoxApp> {
         emailLink: link,
       );
       await prefs.remove('pendingEmailLink');
-      // authStateChanges() in _AwaitingLinkView picks this up automatically
-      // and navigates to /home — no extra code needed here
     } catch (e) {
       debugPrint("Magic link sign-in error: $e");
     }

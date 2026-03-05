@@ -9,23 +9,39 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+
+  # ── Firebase ─────────────────────────────────────────
   firebase_core: ^4.4.0
   firebase_auth: ^6.1.4
   cloud_firestore: ^6.1.2
-
-  image_picker: ^1.0.7
   firebase_storage: ^13.0.6
-  file_picker: ^10.3.10
-  flutter_tts: ^4.2.2
-  read_pdf_text: ^0.3.1
-  speech_to_text: ^7.3.0
-  permission_handler: ^12.0.1
-  syncfusion_flutter_pdf: ^32.2.7
+
+  # ── State Management ─────────────────────────────────
   provider: ^6.1.2
-  google_sign_in: ^6.2.1
-  app_links: ^6.3.2  
-  shared_preferences: ^2.3.2 
+
+  # ── Storage & Preferences ────────────────────────────
+  shared_preferences: ^2.3.2
+
+  # ── File Handling ─────────────────────────────────────
+  file_picker: ^10.3.10
+  image_picker: ^1.0.7
+  syncfusion_flutter_pdf: ^32.2.7
+
+  # ── Audio & Speech ───────────────────────────────────
+  flutter_tts: ^4.2.2
+  speech_to_text: ^7.3.0
   just_audio: ^0.9.36
+
+  # ── Permissions ──────────────────────────────────────
+  permission_handler: ^12.0.1
+
+  # ── Authentication ───────────────────────────────────
+  google_sign_in: ^6.2.1
+
+  # ── Navigation & Deep Links ──────────────────────────
+  app_links: ^6.3.2
+
+  # ── Networking ───────────────────────────────────────
   http: ^1.2.0
   url_launcher: ^6.2.5
 
