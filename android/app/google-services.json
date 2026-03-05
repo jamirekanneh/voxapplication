@@ -7,6 +7,42 @@
   "client": [
     {
       "client_info": {
+        "mobilesdk_app_id": "1:265615744997:android:a816a5a7ad60ca9de8990c",
+        "android_client_info": {
+          "package_name": "com.android.application"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "265615744997-5o40r2a1fotqmhqn1m0rn5glr38kq849.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBlV7kVOayanaeyoWFnm7GkFxAoDp8GnvQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "265615744997-5o40r2a1fotqmhqn1m0rn5glr38kq849.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "265615744997-mi8o6ori57179s0s5cv0efp1pnri6t9b.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.voiceCommandApplicationVox"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
         "mobilesdk_app_id": "1:265615744997:android:5d386a6307133f8de8990c",
         "android_client_info": {
           "package_name": "com.example.voice_command_application_vox"
