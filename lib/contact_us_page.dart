@@ -1,25 +1,38 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// EmailJS credentials — replace these 3 values with your real ones from EmailJS
-// Service ID  → emailjs.com → Email Services → your Gmail service
-// Template ID → emailjs.com → Email Templates → Contact Us
-// Public Key  → emailjs.com → Account (top right) → API Keys
+// ★  Developer WhatsApp number — digits only, no + or spaces
+// ─────────────────────────────────────────────────────────────────────────────
+const _kDevWhatsApp = '905488265289';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// EmailJS credentials
 // ─────────────────────────────────────────────────────────────────────────────
 const _kEmailJSServiceId = 'service_sj1zwun';
 const _kEmailJSTemplateId = 'template_kg6ezs8';
 const _kEmailJSPublicKey = '8tlgc7LHJtmuCRZmj';
-// ─────────────────────────────────────────────────────────────────────────────
-// App-wide color palette — matches the VOX MenuPage theme exactly
-// ─────────────────────────────────────────────────────────────────────────────
-const _kBgColor = Color(0xFFF3E5AB); // warm parchment — main background
-const _kHeaderColor = Color(0xFFD4B96A); // golden amber   — header/accents
-const _kTextLight = Color(0xFFF3E5AB); // same as bg     — text on dark surfaces
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Country list — each entry has a name, international dial code, and flag emoji
+// App-wide color palette
+// ─────────────────────────────────────────────────────────────────────────────
+const _kBgColor = Color(0xFFF3E5AB);
+const _kHeaderColor = Color(0xFFD4B96A);
+const _kTextLight = Color(0xFFF3E5AB);
+const _kWaGreen = Color(0xFF25D366);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Contact preference
+// ─────────────────────────────────────────────────────────────────────────────
+enum ContactPreference { email, whatsapp }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Country list
 // ─────────────────────────────────────────────────────────────────────────────
 const List<Map<String, String>> _kCountries = [
   {'name': 'Afghanistan', 'dial': '+93', 'flag': '🇦🇫'},
@@ -104,13 +117,11 @@ const List<Map<String, String>> _kCountries = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// _BlinkingHint — animated fading placeholder shown inside empty fields
-// Fades in and out repeatedly until the user starts typing
+// _BlinkingHint
 // ─────────────────────────────────────────────────────────────────────────────
 class _BlinkingHint extends StatefulWidget {
   final String text;
   const _BlinkingHint(this.text);
-
   @override
   State<_BlinkingHint> createState() => _BlinkingHintState();
 }
@@ -119,11 +130,9 @@ class _BlinkingHintState extends State<_BlinkingHint>
     with SingleTickerProviderStateMixin {
   late final AnimationController _ctrl;
   late final Animation<double> _anim;
-
   @override
   void initState() {
     super.initState();
-    // Repeats forever: fades from fully visible down to nearly invisible
     _ctrl = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 800),
@@ -138,128 +147,268 @@ class _BlinkingHintState extends State<_BlinkingHint>
   }
 
   @override
-  Widget build(BuildContext context) {
-    return FadeTransition(
-      opacity: _anim,
-      child: Text(
-        widget.text,
-        style: const TextStyle(color: Colors.black38, fontSize: 13),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => FadeTransition(
+    opacity: _anim,
+    child: Text(
+      widget.text,
+      style: const TextStyle(color: Colors.black38, fontSize: 13),
+    ),
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// ContactUsPage — main widget
+// _MicButton
+// ─────────────────────────────────────────────────────────────────────────────
+class _MicButton extends StatefulWidget {
+  final bool isListening;
+  final VoidCallback onTap;
+  const _MicButton({required this.isListening, required this.onTap});
+  @override
+  State<_MicButton> createState() => _MicButtonState();
+}
+
+class _MicButtonState extends State<_MicButton>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl;
+  late final Animation<double> _anim;
+  @override
+  void initState() {
+    super.initState();
+    _ctrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 700),
+    );
+    _anim = Tween<double>(
+      begin: 1.0,
+      end: 1.35,
+    ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeInOut));
+  }
+
+  @override
+  void didUpdateWidget(_MicButton old) {
+    super.didUpdateWidget(old);
+    widget.isListening
+        ? _ctrl.repeat(reverse: true)
+        : (_ctrl
+            ..stop()
+            ..reset());
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: widget.onTap,
+    child: ScaleTransition(
+      scale: _anim,
+      child: Container(
+        width: 36,
+        height: 36,
+        decoration: BoxDecoration(
+          color: widget.isListening
+              ? Colors.red.shade400
+              : _kHeaderColor.withOpacity(0.85),
+          shape: BoxShape.circle,
+          boxShadow: widget.isListening
+              ? [
+                  BoxShadow(
+                    color: Colors.red.withOpacity(0.4),
+                    blurRadius: 8,
+                    spreadRadius: 2,
+                  ),
+                ]
+              : [],
+        ),
+        child: Icon(
+          widget.isListening ? Icons.stop_rounded : Icons.mic_none_rounded,
+          color: Colors.white,
+          size: 18,
+        ),
+      ),
+    ),
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ContactUsPage
 // ─────────────────────────────────────────────────────────────────────────────
 class ContactUsPage extends StatefulWidget {
   const ContactUsPage({super.key});
-
   @override
   State<ContactUsPage> createState() => _ContactUsPageState();
 }
 
 class _ContactUsPageState extends State<ContactUsPage> {
-  // ── Form key — triggers validation on all fields at once ───────────────────
   final _formKey = GlobalKey<FormState>();
-
-  // ── Text controllers — one per input field ─────────────────────────────────
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _messageCtrl = TextEditingController();
 
-  // ── Selected country — defaults to United States ───────────────────────────
   Map<String, String> _selectedCountry = _kCountries.firstWhere(
-    (c) => c['name'] == 'United States',
+    (c) => c['name'] == 'Turkey',
     orElse: () => _kCountries.first,
   );
 
-  // ── UI state flags ─────────────────────────────────────────────────────────
-  bool _isSending = false; // true while HTTP request is in flight
-  bool _sent = false; // true after success → shows thank-you screen
+  ContactPreference _contactPref = ContactPreference.email;
+  bool _isSending = false;
+  bool _sent = false;
 
-  // ── dispose — free all controllers when widget leaves the tree ─────────────
+  // Speech
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _speechAvailable = false;
+  String? _listeningField;
+
+  @override
+  void initState() {
+    super.initState();
+    _initSpeech();
+  }
+
+  Future<void> _initSpeech() async {
+    final status = await Permission.microphone.request();
+    if (!status.isGranted) return;
+    final ok = await _speech.initialize(onError: (e) => debugPrint('STT: $e'));
+    if (mounted) setState(() => _speechAvailable = ok);
+  }
+
+  Future<void> _toggleVoice(String key, TextEditingController ctrl) async {
+    if (!_speechAvailable) {
+      _showError('Microphone not available.');
+      return;
+    }
+    if (_listeningField == key) {
+      await _speech.stop();
+      setState(() => _listeningField = null);
+      return;
+    }
+    if (_listeningField != null) await _speech.stop();
+    setState(() => _listeningField = key);
+    await _speech.listen(
+      onResult: (r) {
+        ctrl.text = r.recognizedWords;
+        ctrl.selection = TextSelection.fromPosition(
+          TextPosition(offset: ctrl.text.length),
+        );
+        if (r.finalResult) setState(() => _listeningField = null);
+      },
+      listenFor: const Duration(seconds: 30),
+      pauseFor: const Duration(seconds: 4),
+      cancelOnError: true,
+      listenMode: stt.ListenMode.dictation,
+    );
+  }
+
   @override
   void dispose() {
-    _firstNameCtrl.dispose();
-    _lastNameCtrl.dispose();
-    _emailCtrl.dispose();
-    _phoneCtrl.dispose();
-    _messageCtrl.dispose();
+    for (final c in [
+      _firstNameCtrl,
+      _lastNameCtrl,
+      _emailCtrl,
+      _phoneCtrl,
+      _messageCtrl,
+    ])
+      c.dispose();
+    _speech.stop();
     super.dispose();
   }
 
-  // ── _send ──────────────────────────────────────────────────────────────────
-  // Validates the form then POSTs to EmailJS API.
-  // EmailJS sends the email to gr.1graduationproject@gmail.com directly.
-  // No email app needed on the device.
-  // ──────────────────────────────────────────────────────────────────────────
+  // ── Send logic ─────────────────────────────────────────────────────────────
   Future<void> _send() async {
-    // Stop if any field fails its validator
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSending = true);
 
-    try {
-      final response = await http.post(
-        Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'service_id': _kEmailJSServiceId,
-          'template_id': _kEmailJSTemplateId,
-          'user_id': _kEmailJSPublicKey,
-          'template_params': {
-            // These keys must match exactly what you have in your EmailJS template
-            'name':
-                '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}',
-            'email': _emailCtrl.text.trim(),
-            'title': 'New message from VOX App',
-            'message_phone':
-                '${_selectedCountry['flag']} ${_selectedCountry['name']} ${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}',
-            'message': _messageCtrl.text.trim(),
-          },
-        }),
+    if (_contactPref == ContactPreference.whatsapp) {
+      // ── Build a nicely formatted WhatsApp message to the developer ──────────
+      final name = '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}';
+      final phone =
+          '${_selectedCountry['flag']} ${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}';
+      final email = _emailCtrl.text.trim();
+      final message = _messageCtrl.text.trim();
+
+      final text = Uri.encodeComponent(
+        '📩 *New VOX App Message*\n\n'
+        '👤 *Name:* $name\n'
+        '📧 *Email:* $email\n'
+        '📞 *Phone:* $phone\n\n'
+        '💬 *Message:*\n$message\n\n'
+        '↩️ _Reply to this user via WhatsApp_',
       );
 
-      if (!mounted) return;
+      // Opens WhatsApp pre-filled to the developer's number
+      final waUrl = Uri.parse('https://wa.me/$_kDevWhatsApp?text=$text');
 
-      if (response.statusCode == 200) {
-        // Success — show the thank-you screen
+      if (await canLaunchUrl(waUrl)) {
+        await launchUrl(waUrl, mode: LaunchMode.externalApplication);
+        if (!mounted) return;
         setState(() {
           _isSending = false;
           _sent = true;
         });
       } else {
+        if (!mounted) return;
         setState(() => _isSending = false);
-        _showError('Failed to send (${response.statusCode}). Try again.');
+        _showError('WhatsApp is not installed on this device.');
       }
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _isSending = false);
-      _showError('Network error. Check your connection.');
+    } else {
+      // ── Email via EmailJS ────────────────────────────────────────────────────
+      try {
+        final res = await http.post(
+          Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode({
+            'service_id': _kEmailJSServiceId,
+            'template_id': _kEmailJSTemplateId,
+            'user_id': _kEmailJSPublicKey,
+            'template_params': {
+              'name':
+                  '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}',
+              'email': _emailCtrl.text.trim(),
+              'title': 'New message from VOX App',
+              'message_phone':
+                  '${_selectedCountry['flag']} ${_selectedCountry['name']} ${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}',
+              'message': _messageCtrl.text.trim(),
+              'reply_preference':
+                  '📧 User prefers Email reply\n'
+                  '📬 Reply to: ${_emailCtrl.text.trim()}',
+            },
+          }),
+        );
+        if (!mounted) return;
+        if (res.statusCode == 200) {
+          setState(() {
+            _isSending = false;
+            _sent = true;
+          });
+        } else {
+          setState(() => _isSending = false);
+          _showError('Failed to send (${res.statusCode}). Try again.');
+        }
+      } catch (_) {
+        if (!mounted) return;
+        setState(() => _isSending = false);
+        _showError('Network error. Check your connection.');
+      }
     }
   }
 
-  // ── _showError — red floating snack-bar for any error message ──────────────
-  void _showError(String msg) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(msg),
-        backgroundColor: Colors.red.shade700,
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      ),
-    );
-  }
+  void _showError(String msg) => ScaffoldMessenger.of(context).showSnackBar(
+    SnackBar(
+      content: Text(msg),
+      backgroundColor: Colors.red.shade700,
+      behavior: SnackBarBehavior.floating,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    ),
+  );
 
-  // ── _showCountryPicker ─────────────────────────────────────────────────────
-  // Bottom-sheet with a live-search list of all countries.
-  // Tapping a row updates _selectedCountry and closes the sheet.
-  // ──────────────────────────────────────────────────────────────────────────
+  // ── Country picker ─────────────────────────────────────────────────────────
   void _showCountryPicker() {
     final search = ValueNotifier<String>('');
-
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -271,9 +420,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
         initialChildSize: 0.75,
         maxChildSize: 0.92,
         expand: false,
-        builder: (_, scrollCtrl) => Column(
+        builder: (_, sc) => Column(
           children: [
-            // Drag handle bar
             Container(
               margin: const EdgeInsets.symmetric(vertical: 12),
               width: 40,
@@ -283,8 +431,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-
-            // Search text field
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
@@ -307,8 +453,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
               ),
             ),
             const SizedBox(height: 8),
-
-            // Filtered country list
             Expanded(
               child: ValueListenableBuilder<String>(
                 valueListenable: search,
@@ -320,19 +464,16 @@ class _ContactUsPageState extends State<ContactUsPage> {
                             c['dial']!.contains(query),
                       )
                       .toList();
-
                   return ListView.builder(
-                    controller: scrollCtrl,
+                    controller: sc,
                     padding: const EdgeInsets.fromLTRB(16, 0, 16, 24),
                     itemCount: filtered.length,
                     itemBuilder: (_, i) {
-                      final country = filtered[i];
-                      final isActive =
-                          country['name'] == _selectedCountry['name'];
-
+                      final c = filtered[i];
+                      final active = c['name'] == _selectedCountry['name'];
                       return GestureDetector(
                         onTap: () {
-                          setState(() => _selectedCountry = country);
+                          setState(() => _selectedCountry = c);
                           Navigator.pop(ctx);
                         },
                         child: Container(
@@ -342,37 +483,37 @@ class _ContactUsPageState extends State<ContactUsPage> {
                             vertical: 12,
                           ),
                           decoration: BoxDecoration(
-                            color: isActive ? Colors.black : Colors.white,
+                            color: active ? Colors.black : Colors.white,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
                             children: [
                               Text(
-                                country['flag']!,
+                                c['flag']!,
                                 style: const TextStyle(fontSize: 20),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  country['name']!,
+                                  c['name']!,
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
-                                    color: isActive
+                                    color: active
                                         ? Colors.white
                                         : Colors.black87,
                                   ),
                                 ),
                               ),
                               Text(
-                                country['dial']!,
+                                c['dial']!,
                                 style: TextStyle(
-                                  color: isActive
+                                  color: active
                                       ? Colors.white70
                                       : Colors.black45,
                                   fontSize: 13,
                                 ),
                               ),
-                              if (isActive) ...[
+                              if (active) ...[
                                 const SizedBox(width: 8),
                                 const Icon(
                                   Icons.check,
@@ -395,135 +536,372 @@ class _ContactUsPageState extends State<ContactUsPage> {
     );
   }
 
-  // ── _inputDeco — shared decoration so every field looks the same ───────────
-  InputDecoration _inputDeco({Widget? prefix}) {
-    return InputDecoration(
-      prefixIcon: prefix,
-      filled: true,
-      fillColor: Colors.white,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      border: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide.none,
-      ),
-      focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: const BorderSide(color: _kHeaderColor, width: 2),
-      ),
-      errorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.red.shade400, width: 1.5),
-      ),
-      focusedErrorBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(14),
-        borderSide: BorderSide(color: Colors.red.shade400, width: 2),
-      ),
-    );
-  }
-
-  // ── _sectionLabel — small all-caps grey label above each field ─────────────
-  Widget _sectionLabel(String text) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Text(
-        text,
-        style: const TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w800,
-          color: Colors.black38,
-          letterSpacing: 2,
+  // ── Helpers ────────────────────────────────────────────────────────────────
+  InputDecoration _inputDeco({Widget? prefix, Widget? suffix}) =>
+      InputDecoration(
+        prefixIcon: prefix,
+        suffixIcon: suffix,
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 14,
         ),
-      ),
-    );
-  }
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: const BorderSide(color: _kHeaderColor, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.red.shade400, width: 1.5),
+        ),
+        focusedErrorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.red.shade400, width: 2),
+        ),
+      );
 
-  // ── _buildSuccessView — shown after message is sent successfully ────────────
-  Widget _buildSuccessView() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(40),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
+  Widget _label(String t) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Text(
+      t,
+      style: const TextStyle(
+        fontSize: 11,
+        fontWeight: FontWeight.w800,
+        color: Colors.black38,
+        letterSpacing: 2,
+      ),
+    ),
+  );
+
+  Widget _mic(String key, TextEditingController ctrl) => _speechAvailable
+      ? Padding(
+          padding: const EdgeInsets.only(right: 8),
+          child: _MicButton(
+            isListening: _listeningField == key,
+            onTap: () => _toggleVoice(key, ctrl),
+          ),
+        )
+      : const SizedBox.shrink();
+
+  // ── Contact-preference toggle ──────────────────────────────────────────────
+  Widget _buildPreference() {
+    final isEmail = _contactPref == ContactPreference.email;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        _label('HOW SHOULD WE REPLY TO YOU?'),
+        Row(
           children: [
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: const BoxDecoration(
-                color: _kHeaderColor,
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.check_rounded,
-                color: _kTextLight,
-                size: 48,
-              ),
-            ),
-            const SizedBox(height: 24),
-            const Text(
-              'Message Sent!',
-              style: TextStyle(
-                fontSize: 26,
-                fontWeight: FontWeight.w900,
-                letterSpacing: -0.5,
-              ),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Thank you for reaching out.\nWe\'ll get back to you as soon as possible.',
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                color: Colors.black54,
-                fontSize: 14,
-                height: 1.5,
-              ),
-            ),
-            const SizedBox(height: 32),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  setState(() {
-                    _sent = false;
-                    for (final ctrl in [
-                      _firstNameCtrl,
-                      _lastNameCtrl,
-                      _emailCtrl,
-                      _phoneCtrl,
-                      _messageCtrl,
-                    ])
-                      ctrl.clear();
-                  });
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: _kTextLight,
-                  padding: const EdgeInsets.symmetric(vertical: 16),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+            // Email tile
+            Expanded(
+              child: GestureDetector(
+                onTap: () =>
+                    setState(() => _contactPref = ContactPreference.email),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                    horizontal: 12,
                   ),
-                  elevation: 0,
+                  decoration: BoxDecoration(
+                    color: isEmail ? Colors.black : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: isEmail ? Colors.black : Colors.black12,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.mail_outline_rounded,
+                        size: 18,
+                        color: isEmail ? Colors.white : Colors.black54,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Email',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: isEmail ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      if (isEmail) ...[
+                        const SizedBox(width: 6),
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          size: 14,
+                          color: _kHeaderColor,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
-                child: const Text(
-                  'Send Another Message',
-                  style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            const SizedBox(width: 12),
+            // WhatsApp tile
+            Expanded(
+              child: GestureDetector(
+                onTap: () =>
+                    setState(() => _contactPref = ContactPreference.whatsapp),
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 14,
+                    horizontal: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: !isEmail ? _kWaGreen : Colors.white,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(
+                      color: !isEmail ? _kWaGreen : Colors.black12,
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.chat_rounded,
+                        size: 18,
+                        color: !isEmail ? Colors.white : Colors.black54,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'WhatsApp',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                          color: !isEmail ? Colors.white : Colors.black87,
+                        ),
+                      ),
+                      if (!isEmail) ...[
+                        const SizedBox(width: 6),
+                        const Icon(
+                          Icons.check_circle_rounded,
+                          size: 14,
+                          color: Colors.white,
+                        ),
+                      ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ],
         ),
+        const SizedBox(height: 6),
+        Row(
+          children: [
+            Icon(
+              isEmail ? Icons.mail_rounded : Icons.chat_rounded,
+              size: 12,
+              color: isEmail ? Colors.black38 : _kWaGreen,
+            ),
+            const SizedBox(width: 6),
+            Text(
+              isEmail
+                  ? 'We\'ll reply to your email address'
+                  : 'WhatsApp will open — just tap Send to reach us',
+              style: TextStyle(
+                fontSize: 11,
+                color: isEmail ? Colors.black45 : _kWaGreen,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  // ── Success screen ─────────────────────────────────────────────────────────
+  Widget _buildSuccess() {
+    final isEmail = _contactPref == ContactPreference.email;
+    final prefLabel = isEmail ? '📧 Email' : '💬 WhatsApp';
+    final contact = isEmail
+        ? _emailCtrl.text.trim()
+        : '${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}';
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(32),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: const BoxDecoration(
+              color: _kHeaderColor,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.check_rounded,
+              color: _kTextLight,
+              size: 48,
+            ),
+          ),
+          const SizedBox(height: 24),
+          const Text(
+            'Message Sent! 🎉',
+            style: TextStyle(
+              fontSize: 26,
+              fontWeight: FontWeight.w900,
+              letterSpacing: -0.5,
+            ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Thank you, ${_firstNameCtrl.text.trim()}!\nWe\'ll get back to you via $prefLabel at:\n$contact',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              color: Colors.black54,
+              fontSize: 14,
+              height: 1.6,
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Summary card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'YOUR SUBMISSION',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.black38,
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                _sRow(
+                  Icons.person_outline_rounded,
+                  '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}',
+                ),
+                _sRow(Icons.mail_outline_rounded, _emailCtrl.text.trim()),
+                _sRow(
+                  Icons.phone_outlined,
+                  '${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}',
+                ),
+                _sRow(Icons.reply_rounded, prefLabel, highlight: true),
+                const Divider(height: 16, color: Colors.black12),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(
+                      Icons.message_outlined,
+                      size: 14,
+                      color: Colors.black38,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _messageCtrl.text.trim(),
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Colors.black54,
+                          height: 1.5,
+                        ),
+                        maxLines: 3,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+          // Send Another — keeps personal details, clears only message
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton(
+              onPressed: () => setState(() {
+                _messageCtrl.clear();
+                _sent = false;
+              }),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                foregroundColor: _kTextLight,
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                elevation: 0,
+              ),
+              child: const Text(
+                'Send Another Message',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          // Clear all
+          TextButton(
+            onPressed: () => setState(() {
+              for (final c in [
+                _firstNameCtrl,
+                _lastNameCtrl,
+                _emailCtrl,
+                _phoneCtrl,
+                _messageCtrl,
+              ])
+                c.clear();
+              _sent = false;
+            }),
+            child: const Text(
+              'Start Fresh (clear all fields)',
+              style: TextStyle(color: Colors.black38, fontSize: 12),
+            ),
+          ),
+        ],
       ),
     );
   }
 
+  Widget _sRow(IconData icon, String val, {bool highlight = false}) => Padding(
+    padding: const EdgeInsets.only(bottom: 6),
+    child: Row(
+      children: [
+        Icon(icon, size: 14, color: Colors.black38),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            val,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: highlight ? FontWeight.w700 : FontWeight.normal,
+              color: highlight ? Colors.black87 : Colors.black54,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
   // ── build ──────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
+    final isWa = _contactPref == ContactPreference.whatsapp;
     return Scaffold(
       backgroundColor: _kBgColor,
       body: Column(
         children: [
-          // ══════════════════════════════════════════════════════════════════
           // HEADER
-          // ══════════════════════════════════════════════════════════════════
           Container(
             width: double.infinity,
             padding: EdgeInsets.only(
@@ -585,8 +963,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
                     color: Colors.white.withOpacity(0.25),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.mail_outline_rounded,
+                  child: Icon(
+                    _speechAvailable
+                        ? Icons.mic_rounded
+                        : Icons.mail_outline_rounded,
                     color: _kTextLight,
                     size: 20,
                   ),
@@ -595,12 +975,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
             ),
           ),
 
-          // ══════════════════════════════════════════════════════════════════
           // BODY
-          // ══════════════════════════════════════════════════════════════════
           Expanded(
             child: _sent
-                ? _buildSuccessView()
+                ? _buildSuccess()
                 : SingleChildScrollView(
                     padding: const EdgeInsets.all(20),
                     child: Form(
@@ -608,16 +986,56 @@ class _ContactUsPageState extends State<ContactUsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // ── NAME ROW ──────────────────────────────────────
+                          // Voice banner
+                          if (_speechAvailable)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 16),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 14,
+                                vertical: 10,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _kHeaderColor.withOpacity(0.25),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: _kHeaderColor.withOpacity(0.5),
+                                ),
+                              ),
+                              child: const Row(
+                                children: [
+                                  Icon(
+                                    Icons.mic_rounded,
+                                    size: 16,
+                                    color: Colors.black54,
+                                  ),
+                                  SizedBox(width: 8),
+                                  Expanded(
+                                    child: Text(
+                                      'Tap the mic icon next to any field to fill it with your voice',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: Colors.black54,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                          // Preference
+                          _buildPreference(),
+                          const SizedBox(height: 18),
+
+                          // NAME
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // First Name with blinking hint
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    _sectionLabel('FIRST NAME'),
+                                    _label('FIRST NAME'),
                                     Stack(
                                       alignment: Alignment.centerLeft,
                                       children: [
@@ -625,8 +1043,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                           TextEditingValue
                                         >(
                                           valueListenable: _firstNameCtrl,
-                                          builder: (_, val, __) =>
-                                              val.text.isEmpty
+                                          builder: (_, v, __) => v.text.isEmpty
                                               ? const Padding(
                                                   padding: EdgeInsets.only(
                                                     left: 48,
@@ -641,11 +1058,17 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                           controller: _firstNameCtrl,
                                           textCapitalization:
                                               TextCapitalization.words,
+                                          textInputAction: TextInputAction.next,
+                                          keyboardType: TextInputType.name,
                                           decoration: _inputDeco(
                                             prefix: const Icon(
                                               Icons.person_outline_rounded,
                                               size: 18,
                                               color: Colors.black38,
+                                            ),
+                                            suffix: _mic(
+                                              'firstName',
+                                              _firstNameCtrl,
                                             ),
                                           ),
                                           validator: (v) =>
@@ -659,13 +1082,11 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 ),
                               ),
                               const SizedBox(width: 12),
-
-                              // Last Name with blinking hint
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                    _sectionLabel('LAST NAME'),
+                                    _label('LAST NAME'),
                                     Stack(
                                       alignment: Alignment.centerLeft,
                                       children: [
@@ -673,8 +1094,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                           TextEditingValue
                                         >(
                                           valueListenable: _lastNameCtrl,
-                                          builder: (_, val, __) =>
-                                              val.text.isEmpty
+                                          builder: (_, v, __) => v.text.isEmpty
                                               ? const Padding(
                                                   padding: EdgeInsets.only(
                                                     left: 48,
@@ -689,11 +1109,17 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                           controller: _lastNameCtrl,
                                           textCapitalization:
                                               TextCapitalization.words,
+                                          textInputAction: TextInputAction.next,
+                                          keyboardType: TextInputType.name,
                                           decoration: _inputDeco(
                                             prefix: const Icon(
                                               Icons.person_outline_rounded,
                                               size: 18,
                                               color: Colors.black38,
+                                            ),
+                                            suffix: _mic(
+                                              'lastName',
+                                              _lastNameCtrl,
                                             ),
                                           ),
                                           validator: (v) =>
@@ -710,11 +1136,12 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 14),
 
-                          // ── EMAIL ─────────────────────────────────────────
-                          _sectionLabel('EMAIL ADDRESS'),
+                          // EMAIL
+                          _label('EMAIL ADDRESS'),
                           TextFormField(
                             controller: _emailCtrl,
                             keyboardType: TextInputType.emailAddress,
+                            textInputAction: TextInputAction.next,
                             decoration:
                                 _inputDeco(
                                   prefix: const Icon(
@@ -722,6 +1149,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                     size: 18,
                                     color: Colors.black38,
                                   ),
+                                  suffix: _mic('email', _emailCtrl),
                                 ).copyWith(
                                   hintText: 'john@example.com',
                                   hintStyle: const TextStyle(
@@ -741,12 +1169,11 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 14),
 
-                          // ── PHONE ─────────────────────────────────────────
-                          _sectionLabel('PHONE NUMBER'),
+                          // PHONE
+                          _label('PHONE NUMBER'),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              // Country selector
                               GestureDetector(
                                 onTap: _showCountryPicker,
                                 child: Container(
@@ -783,18 +1210,21 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 ),
                               ),
                               const SizedBox(width: 10),
-                              // Phone number input
                               Expanded(
                                 child: TextFormField(
                                   controller: _phoneCtrl,
                                   keyboardType: TextInputType.phone,
-                                  decoration: _inputDeco().copyWith(
-                                    hintText: '5XX XXX XXXX',
-                                    hintStyle: const TextStyle(
-                                      color: Colors.black26,
-                                      fontSize: 13,
-                                    ),
-                                  ),
+                                  textInputAction: TextInputAction.next,
+                                  decoration:
+                                      _inputDeco(
+                                        suffix: _mic('phone', _phoneCtrl),
+                                      ).copyWith(
+                                        hintText: '5XX XXX XXXX',
+                                        hintStyle: const TextStyle(
+                                          color: Colors.black26,
+                                          fontSize: 13,
+                                        ),
+                                      ),
                                   validator: (v) {
                                     if (v == null || v.trim().isEmpty)
                                       return 'Required';
@@ -807,11 +1237,40 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 14),
 
-                          // ── MESSAGE ───────────────────────────────────────
-                          _sectionLabel('MESSAGE'),
+                          // MESSAGE
+                          Row(
+                            children: [
+                              Expanded(child: _label('MESSAGE')),
+                              if (_speechAvailable) ...[
+                                if (_listeningField == 'message')
+                                  const Text(
+                                    'Listening…',
+                                    style: TextStyle(
+                                      fontSize: 11,
+                                      color: Colors.red,
+                                      fontStyle: FontStyle.italic,
+                                    ),
+                                  ),
+                                const SizedBox(width: 6),
+                                _MicButton(
+                                  isListening: _listeningField == 'message',
+                                  onTap: () =>
+                                      _toggleVoice('message', _messageCtrl),
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                            ],
+                          ),
                           TextFormField(
                             controller: _messageCtrl,
-                            maxLines: 6,
+                            maxLines: null,
+                            minLines: 6,
+                            keyboardType: TextInputType.multiline,
+                            textInputAction: TextInputAction.newline,
+                            textCapitalization: TextCapitalization.sentences,
+                            strutStyle: const StrutStyle(
+                              forceStrutHeight: false,
+                            ),
                             decoration: _inputDeco().copyWith(
                               hintText: 'Write your message here…',
                               hintStyle: const TextStyle(
@@ -830,14 +1289,16 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 24),
 
-                          // ── SEND BUTTON ───────────────────────────────────
+                          // SEND BUTTON — green for WhatsApp, black for email
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
                               onPressed: _isSending ? null : _send,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.black,
-                                foregroundColor: _kTextLight,
+                                backgroundColor: isWa
+                                    ? _kWaGreen
+                                    : Colors.black,
+                                foregroundColor: Colors.white,
                                 disabledBackgroundColor: Colors.black
                                     .withOpacity(0.35),
                                 padding: const EdgeInsets.symmetric(
@@ -857,19 +1318,34 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                         strokeWidth: 2,
                                       ),
                                     )
-                                  : const Text(
-                                      'Send Message',
-                                      style: TextStyle(
-                                        fontWeight: FontWeight.w800,
-                                        fontSize: 15,
-                                        letterSpacing: 0.3,
-                                      ),
+                                  : Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(
+                                          isWa
+                                              ? Icons.chat_rounded
+                                              : Icons.send_rounded,
+                                          size: 18,
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          isWa
+                                              ? 'Open WhatsApp & Send'
+                                              : 'Send via Email',
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            fontSize: 15,
+                                            letterSpacing: 0.3,
+                                          ),
+                                        ),
+                                      ],
                                     ),
                             ),
                           ),
                           const SizedBox(height: 16),
 
-                          // ── PRIVACY NOTE ──────────────────────────────────
+                          // Privacy note
                           Center(
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
