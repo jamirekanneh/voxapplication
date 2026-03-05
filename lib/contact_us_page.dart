@@ -963,10 +963,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
                     color: Colors.white.withOpacity(0.25),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(
-                    _speechAvailable
-                        ? Icons.mic_rounded
-                        : Icons.mail_outline_rounded,
+                  child: const Icon(
+                    Icons.mail_outline_rounded,
                     color: _kTextLight,
                     size: 20,
                   ),
@@ -1238,54 +1236,71 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           const SizedBox(height: 14),
 
                           // MESSAGE
-                          Row(
+                          _label('MESSAGE'),
+                          Stack(
                             children: [
-                              Expanded(child: _label('MESSAGE')),
-                              if (_speechAvailable) ...[
-                                if (_listeningField == 'message')
-                                  const Text(
-                                    'Listening…',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: Colors.red,
-                                      fontStyle: FontStyle.italic,
-                                    ),
-                                  ),
-                                const SizedBox(width: 6),
-                                _MicButton(
-                                  isListening: _listeningField == 'message',
-                                  onTap: () =>
-                                      _toggleVoice('message', _messageCtrl),
+                              TextFormField(
+                                controller: _messageCtrl,
+                                maxLines: null,
+                                minLines: 6,
+                                keyboardType: TextInputType.multiline,
+                                textInputAction: TextInputAction.newline,
+                                textCapitalization:
+                                    TextCapitalization.sentences,
+                                strutStyle: const StrutStyle(
+                                  forceStrutHeight: false,
                                 ),
-                                const SizedBox(width: 4),
-                              ],
-                            ],
-                          ),
-                          TextFormField(
-                            controller: _messageCtrl,
-                            maxLines: null,
-                            minLines: 6,
-                            keyboardType: TextInputType.multiline,
-                            textInputAction: TextInputAction.newline,
-                            textCapitalization: TextCapitalization.sentences,
-                            strutStyle: const StrutStyle(
-                              forceStrutHeight: false,
-                            ),
-                            decoration: _inputDeco().copyWith(
-                              hintText: 'Write your message here…',
-                              hintStyle: const TextStyle(
-                                color: Colors.black26,
-                                fontSize: 13,
+                                decoration: _inputDeco().copyWith(
+                                  hintText: 'Write your message here…',
+                                  hintStyle: const TextStyle(
+                                    color: Colors.black26,
+                                    fontSize: 13,
+                                  ),
+                                  contentPadding: const EdgeInsets.fromLTRB(
+                                    16,
+                                    16,
+                                    56,
+                                    16,
+                                  ),
+                                ),
+                                validator: (v) {
+                                  if (v == null || v.trim().isEmpty)
+                                    return 'Please write your message';
+                                  if (v.trim().length < 10)
+                                    return 'Message is too short';
+                                  return null;
+                                },
                               ),
-                              contentPadding: const EdgeInsets.all(16),
-                            ),
-                            validator: (v) {
-                              if (v == null || v.trim().isEmpty)
-                                return 'Please write your message';
-                              if (v.trim().length < 10)
-                                return 'Message is too short';
-                              return null;
-                            },
+                              // Mic button pinned to top-right inside the white box
+                              if (_speechAvailable)
+                                Positioned(
+                                  top: 8,
+                                  right: 8,
+                                  child: Column(
+                                    children: [
+                                      _MicButton(
+                                        isListening:
+                                            _listeningField == 'message',
+                                        onTap: () => _toggleVoice(
+                                          'message',
+                                          _messageCtrl,
+                                        ),
+                                      ),
+                                      if (_listeningField == 'message')
+                                        const Padding(
+                                          padding: EdgeInsets.only(top: 4),
+                                          child: Text(
+                                            '...',
+                                            style: TextStyle(
+                                              fontSize: 10,
+                                              color: Colors.red,
+                                            ),
+                                          ),
+                                        ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
                           const SizedBox(height: 24),
 
