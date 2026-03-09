@@ -205,6 +205,12 @@ class _ContactUsPageState extends State<ContactUsPage> {
   void initState() {
     super.initState();
     _initSpeech();
+    // Auto-read the full form guide when the page opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) _speakGuide();
+      });
+    });
   }
 
   Future<void> _initSpeech() async {
@@ -216,20 +222,40 @@ class _ContactUsPageState extends State<ContactUsPage> {
 
   // Speak banner text using Android TTS via a simple platform channel.
   // If the channel isn't set up, falls back to showing a SnackBar.
-  Future<void> _speakBanner() async {
-    if (_bannerSpeaking) return;
+  static const _kGuideText =
+      'Contact Us form. '
+      'At the top, choose how you want us to reply to you. '
+      'Tap the left button to choose Email — we will reply to your email address. '
+      'Tap the right button to choose WhatsApp — we will send you a WhatsApp message on your phone number. '
+      'Field 1: First Name. Tap the microphone button on the right side of the first name box to record. '
+      'Field 2: Last Name. Tap the microphone button on the right side of the last name box to record. '
+      'Field 3: Email Address. Tap the microphone button on the right to record your email. '
+      'Field 4: Phone Number. First tap the country flag to choose your country, then tap the microphone button on the right to record your number. '
+      'Field 5: Message. Tap the microphone button inside the top right corner of the message box to record your message. '
+      'When you are done, scroll down and tap the Send button at the bottom.';
+
+  Future<void> _speakGuide() async {
+    // If already speaking — stop it
+    if (_bannerSpeaking) {
+      await _flutterTts.stop();
+      if (mounted) setState(() => _bannerSpeaking = false);
+      return;
+    }
     setState(() => _bannerSpeaking = true);
     await _flutterTts.setLanguage('en-US');
-    await _flutterTts.setSpeechRate(0.65);
+    await _flutterTts.setSpeechRate(0.85);
     await _flutterTts.setPitch(1.0);
     await _flutterTts.setVolume(1.0);
     _flutterTts.setCompletionHandler(() {
       if (mounted) setState(() => _bannerSpeaking = false);
     });
-    await _flutterTts.speak(
-      'Tap the mic icon next to any field to fill it with your voice',
-    );
+    _flutterTts.setCancelHandler(() {
+      if (mounted) setState(() => _bannerSpeaking = false);
+    });
+    await _flutterTts.speak(_kGuideText);
   }
+
+  Future<void> _speakBanner() => _speakGuide();
 
   Future<void> _toggleVoice(String key, TextEditingController ctrl) async {
     if (!_speechAvailable) {
@@ -951,35 +977,27 @@ class _ContactUsPageState extends State<ContactUsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // ── Voice hint banner ────────────────────────────────────
+                          // ── Voice hint banner — tap anywhere or tap speaker to replay guide ──
                           if (_speechAvailable)
-                            Container(
-                              margin: const EdgeInsets.only(bottom: 16),
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 14,
-                                vertical: 11,
-                              ),
-                              decoration: BoxDecoration(
-                                color: _kDarkBtn,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Expanded(
-                                    child: Text(
-                                      'Tap the mic icon next to any field to fill it with your voice',
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: Colors.white,
-                                        height: 1.4,
-                                        fontWeight: FontWeight.w500,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  GestureDetector(
-                                    onTap: _speakBanner,
-                                    child: AnimatedContainer(
+                            GestureDetector(
+                              onTap: _speakGuide,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                margin: const EdgeInsets.only(bottom: 16),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _bannerSpeaking
+                                      ? const Color(0xFF555555)
+                                      : _kDarkBtn,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    // Animated speaker icon on the left
+                                    AnimatedContainer(
                                       duration: const Duration(
                                         milliseconds: 180,
                                       ),
@@ -988,7 +1006,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                       decoration: BoxDecoration(
                                         color: _bannerSpeaking
                                             ? const Color(0xFF25D366)
-                                            : Colors.white.withOpacity(0.18),
+                                            : Colors.white.withOpacity(0.15),
                                         borderRadius: BorderRadius.circular(9),
                                       ),
                                       child: Icon(
@@ -999,8 +1017,49 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                         color: Colors.white,
                                       ),
                                     ),
-                                  ),
-                                ],
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _bannerSpeaking
+                                                ? 'Reading form guide…'
+                                                : 'Tap to hear the form guide',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w700,
+                                              height: 1.3,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            _bannerSpeaking
+                                                ? 'Explains each field and mic button location'
+                                                : 'Reads out all fields & where to tap to record',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.white.withOpacity(
+                                                0.65,
+                                              ),
+                                              height: 1.3,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      _bannerSpeaking
+                                          ? Icons.stop_rounded
+                                          : Icons.play_arrow_rounded,
+                                      color: Colors.white.withOpacity(0.8),
+                                      size: 20,
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
 
