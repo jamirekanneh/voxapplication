@@ -155,30 +155,25 @@ class _UploadPageState extends State<UploadPage> {
         if (fileContent.isNotEmpty) {
           final locale = context.read<LanguageProvider>().ttsLocale;
           final ttsService = context.read<TtsService>();
+          final langProvider = context.read<LanguageProvider>();
+          final nav = Navigator.of(context);
 
-          // Navigate back first, then push reader
-          Navigator.pop(context);
-
-          if (context.mounted) {
-            await Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (_) => MultiProvider(
-                  providers: [
-                    ChangeNotifierProvider.value(value: ttsService),
-                    ChangeNotifierProvider.value(
-                      value: context.read<LanguageProvider>(),
-                    ),
-                  ],
-                  child: ReaderPage(
-                    title: fileName,
-                    content: fileContent,
-                    locale: locale,
-                  ),
+          // Replace upload page with reader directly — avoids context.mounted issues
+          nav.pushReplacement(
+            MaterialPageRoute(
+              builder: (_) => MultiProvider(
+                providers: [
+                  ChangeNotifierProvider.value(value: ttsService),
+                  ChangeNotifierProvider.value(value: langProvider),
+                ],
+                child: ReaderPage(
+                  title: fileName,
+                  content: fileContent,
+                  locale: locale,
                 ),
               ),
-            );
-          }
+            ),
+          );
         } else {
           Navigator.pop(context);
         }

@@ -37,13 +37,12 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
   Future<void> _openReader(String fileName, String content) async {
     final locale = context.read<LanguageProvider>().ttsLocale;
-    final tts = context.read<TtsService>();
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => MultiProvider(
           providers: [
-            ChangeNotifierProvider.value(value: tts),
+            ChangeNotifierProvider.value(value: context.read<TtsService>()),
             ChangeNotifierProvider.value(
               value: context.read<LanguageProvider>(),
             ),
@@ -54,7 +53,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
-  Future<void> _listen() async {
+  void _listen() async {
     if (_isListening) {
       await _speech.stop();
       if (mounted) setState(() => _isListening = false);
@@ -84,21 +83,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
     if (available) {
       final langProvider = context.read<LanguageProvider>();
       setState(() => _isListening = true);
-      _speech.listen(
-        localeId: langProvider.sttLocale,
-        onResult: (val) {
-          if (val.finalResult) {
-            setState(() {
-              _searchQuery = val.recognizedWords.toLowerCase();
-              _searchController.text = val.recognizedWords;
-              _isListening = false;
-            });
-          }
-        },
-      );
+      _speech.listen(localeId: langProvider.sttLocale, onResult: (val) {});
     }
   }
 
+  // ── Delete for Firestore (logged-in users) ────────────
   void _confirmDelete(BuildContext context, String docId, String fileName) {
     final lang = context.read<LanguageProvider>();
     final displayName = fileName.length > 40
@@ -164,31 +153,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
                     onPressed: () async {
                       Navigator.pop(sheetCtx);
                       try {
-                        // Soft-delete: copy to deleted_library then remove
-                        final docSnap = await FirebaseFirestore.instance
+                        await FirebaseFirestore.instance
                             .collection('library')
                             .doc(docId)
-                            .get();
-                        if (docSnap.exists) {
-                          final uid = FirebaseAuth.instance.currentUser?.uid;
-                          if (uid != null) {
-                            final data = Map<String, dynamic>.from(
-                              docSnap.data() as Map<String, dynamic>,
-                            );
-                            await FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(uid)
-                                .collection('deleted_library')
-                                .add({
-                                  ...data,
-                                  'deletedAt': FieldValue.serverTimestamp(),
-                                });
-                          }
-                          await FirebaseFirestore.instance
-                              .collection('library')
-                              .doc(docId)
-                              .delete();
-                        }
+                            .delete();
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
@@ -240,6 +208,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
+  // ── Delete for temp/anonymous users ──────────────────
   void _confirmDeleteTemp(
     BuildContext context,
     String id,
@@ -355,6 +324,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ── Header row ──────────────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -374,19 +344,6 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         hintText: lang.t('search_hint'),
                         counterText: '',
                         prefixIcon: const Icon(Icons.search, size: 18),
-                        suffixIcon: Semantics(
-                          label: _isListening
-                              ? 'Stop listening'
-                              : 'Search by voice',
-                          child: IconButton(
-                            icon: Icon(
-                              _isListening ? Icons.mic : Icons.mic_none,
-                              size: 18,
-                              color: _isListening ? Colors.red : Colors.grey,
-                            ),
-                            onPressed: _listen,
-                          ),
-                        ),
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.8),
                         contentPadding: EdgeInsets.zero,
@@ -413,6 +370,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 style: TextStyle(color: Colors.grey[600], fontSize: 11),
               ),
 
+              // ── Guest temp warning banner ────────────────
               if (_isAnonymous) ...[
                 const SizedBox(height: 8),
                 Container(
@@ -450,9 +408,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
               const SizedBox(height: 8),
 
+              // ── Library content ──────────────────────────
               Expanded(
                 child: Consumer<TempLibraryProvider>(
                   builder: (context, tempLibrary, _) {
+                    // Anonymous: show in-memory items
                     if (_isAnonymous) {
                       final items = tempLibrary.items.where((item) {
                         return item.fileName.toLowerCase().contains(
@@ -504,35 +464,25 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         itemCount: items.length,
                         itemBuilder: (context, index) {
                           final item = items[index];
-                          return Semantics(
-                            label:
-                                'File: ${item.fileName}. Tap to read, long press to delete.',
-                            child: GestureDetector(
-                              onTap: () =>
-                                  _openReader(item.fileName, item.content),
-                              onLongPress: () => _confirmDeleteTemp(
-                                context,
-                                item.id,
-                                item.fileName,
-                                tempLibrary,
-                              ),
-                              child: _buildFileCard(
-                                item.fileName,
-                                item.fileType,
-                              ),
+                          return GestureDetector(
+                            onTap: () =>
+                                _openReader(item.fileName, item.content),
+                            onLongPress: () => _confirmDeleteTemp(
+                              context,
+                              item.id,
+                              item.fileName,
+                              tempLibrary,
                             ),
+                            child: _buildFileCard(item.fileName, item.fileType),
                           );
                         },
                       );
                     }
 
+                    // Logged in: Firestore stream
                     return StreamBuilder<QuerySnapshot>(
                       stream: FirebaseFirestore.instance
                           .collection('library')
-                          .where(
-                            'userId',
-                            isEqualTo: FirebaseAuth.instance.currentUser?.email,
-                          )
                           .snapshots(),
                       builder: (context, snapshot) {
                         if (snapshot.hasError) {
@@ -617,15 +567,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             final String content =
                                 data['content'] as String? ?? '';
                             final String docId = docs[index].id;
-                            return Semantics(
-                              label:
-                                  'File: $name. Tap to read, long press to delete.',
-                              child: GestureDetector(
-                                onTap: () => _openReader(name, content),
-                                onLongPress: () =>
-                                    _confirmDelete(context, docId, name),
-                                child: _buildFileCard(name, type),
-                              ),
+                            return GestureDetector(
+                              onTap: () => _openReader(name, content),
+                              onLongPress: () =>
+                                  _confirmDelete(context, docId, name),
+                              child: _buildFileCard(name, type),
                             );
                           },
                         );
@@ -674,13 +620,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
-      floatingActionButton: Semantics(
-        label: 'Upload a file',
-        child: FloatingActionButton(
-          backgroundColor: Colors.black,
-          onPressed: () => Navigator.pushNamed(context, '/upload'),
-          child: const Icon(Icons.file_upload_outlined, color: Colors.white),
-        ),
+      floatingActionButton: FloatingActionButton(
+        backgroundColor: Colors.black,
+        onPressed: () => Navigator.pushNamed(context, '/upload'),
+        child: const Icon(Icons.file_upload_outlined, color: Colors.white),
       ),
     );
   }
@@ -703,21 +646,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
         iconData = Icons.slideshow;
         iconColor = Colors.orange.shade400;
         break;
-      case 'xls':
-      case 'xlsx':
-        iconData = Icons.table_chart;
-        iconColor = Colors.green.shade400;
-        break;
       case 'txt':
-      case 'md':
-      case 'rtf':
-      case 'csv':
         iconData = Icons.text_snippet;
         iconColor = Colors.grey.shade600;
-        break;
-      case 'epub':
-        iconData = Icons.menu_book;
-        iconColor = Colors.purple.shade400;
         break;
       default:
         iconData = Icons.insert_drive_file;
@@ -766,27 +697,21 @@ class _VoxHomePageState extends State<VoxHomePage> {
     Color color, {
     VoidCallback? onTap,
   }) {
-    return Semantics(
-      label: label,
-      child: GestureDetector(
-        onTap: onTap,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(icon, color: color, size: 24),
-              Text(
-                label,
-                style: TextStyle(
-                  color: color,
-                  fontSize: 9,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 24),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+            ),
           ),
-        ),
+        ],
       ),
     );
   }
