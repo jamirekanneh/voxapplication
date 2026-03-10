@@ -4,6 +4,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'language_provider.dart';
 import 'tts_service.dart';
 import 'reader_page.dart';
@@ -20,8 +21,17 @@ class VoxHomePage extends StatefulWidget {
 class _VoxHomePageState extends State<VoxHomePage> {
   final TextEditingController _searchController = TextEditingController();
   final stt.SpeechToText _speech = stt.SpeechToText();
-  String _searchQuery = "";
+  String _searchQuery = '';
   bool _isListening = false;
+
+  String? _resolvedUid;
+  bool _isAnonymousUser = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveUser();
+  }
 
   @override
   void dispose() {
@@ -30,11 +40,61 @@ class _VoxHomePageState extends State<VoxHomePage> {
     super.dispose();
   }
 
-  bool get _isAnonymous {
+  // ─────────────────────────────────────────────
+  //  RESOLVE USER
+  // ─────────────────────────────────────────────
+  Future<void> _resolveUser() async {
     final user = FirebaseAuth.instance.currentUser;
-    return user == null || user.isAnonymous;
+
+    if (user == null) {
+      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+      return;
+    }
+
+    if (!user.isAnonymous) {
+      if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final hasProfile = prefs.getBool('hasProfile') ?? false;
+
+    if (!hasProfile) {
+      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+      return;
+    }
+
+    final uidDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (uidDoc.exists) {
+      if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
+      return;
+    }
+
+    final savedEmail = prefs.getString('userEmail') ?? '';
+    if (savedEmail.isNotEmpty) {
+      final query = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: savedEmail)
+          .limit(1)
+          .get();
+
+      if (query.docs.isNotEmpty) {
+        final docUid = query.docs.first.id;
+        if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = docUid; });
+        return;
+      }
+    }
+
+    if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
   }
 
+  // ─────────────────────────────────────────────
+  //  OPEN READER
+  // ─────────────────────────────────────────────
   Future<void> _openReader(String fileName, String content) async {
     final locale = context.read<LanguageProvider>().ttsLocale;
     await Navigator.push(
@@ -43,9 +103,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
         builder: (_) => MultiProvider(
           providers: [
             ChangeNotifierProvider.value(value: context.read<TtsService>()),
-            ChangeNotifierProvider.value(
-              value: context.read<LanguageProvider>(),
-            ),
+            ChangeNotifierProvider.value(value: context.read<LanguageProvider>()),
           ],
           child: ReaderPage(title: fileName, content: content, locale: locale),
         ),
@@ -53,6 +111,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
+  // ─────────────────────────────────────────────
+  //  VOICE SEARCH
+  // ─────────────────────────────────────────────
   void _listen() async {
     if (_isListening) {
       await _speech.stop();
@@ -62,13 +123,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
     final status = await Permission.microphone.request();
     if (status != PermissionStatus.granted) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Microphone permission denied"),
-            backgroundColor: Color(0xFF333333),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Microphone permission denied'),
+          backgroundColor: Color(0xFF333333),
+          behavior: SnackBarBehavior.floating,
+        ));
       }
       return;
     }
@@ -83,11 +142,18 @@ class _VoxHomePageState extends State<VoxHomePage> {
     if (available) {
       final langProvider = context.read<LanguageProvider>();
       setState(() => _isListening = true);
-      _speech.listen(localeId: langProvider.sttLocale, onResult: (val) {});
+      _speech.listen(localeId: langProvider.sttLocale, onResult: (val) {
+        setState(() {
+          _searchQuery = val.recognizedWords.toLowerCase();
+          _searchController.text = val.recognizedWords;
+        });
+      });
     }
   }
 
-  // ── Delete for Firestore (logged-in users) ────────────
+  // ─────────────────────────────────────────────
+  //  DELETE — Firestore (logged-in users)
+  // ─────────────────────────────────────────────
   void _confirmDelete(BuildContext context, String docId, String fileName) {
     final lang = context.read<LanguageProvider>();
     final displayName = fileName.length > 40
@@ -98,38 +164,30 @@ class _VoxHomePageState extends State<VoxHomePage> {
       context: context,
       backgroundColor: Colors.grey[900],
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetCtx) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 40,
-              height: 4,
+              width: 40, height: 4,
               margin: const EdgeInsets.only(bottom: 20),
               decoration: BoxDecoration(
-                color: Colors.grey[600],
-                borderRadius: BorderRadius.circular(10),
-              ),
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(10)),
             ),
             const Icon(Icons.delete_outline, color: Colors.redAccent, size: 40),
             const SizedBox(height: 12),
-            Text(
-              'Delete "$displayName"?',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            Text('Delete "$displayName"?',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
+                textAlign: TextAlign.center),
             const SizedBox(height: 6),
-            Text(
-              lang.t('remove_library'),
-              style: TextStyle(color: Colors.grey[400], fontSize: 13),
-            ),
+            Text(lang.t('remove_library'),
+                style: TextStyle(color: Colors.grey[400], fontSize: 13)),
             const SizedBox(height: 24),
             Row(
               children: [
@@ -140,8 +198,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       foregroundColor: Colors.white,
                       side: BorderSide(color: Colors.grey[600]!),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
+                          borderRadius: BorderRadius.circular(30)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: Text(lang.t('cancel')),
@@ -158,34 +215,23 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             .doc(docId)
                             .delete();
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                '"$displayName" ${lang.t('deleted')}',
-                              ),
-                              behavior: SnackBarBehavior.floating,
-                              backgroundColor: const Color(0xFF333333),
-                              margin: const EdgeInsets.only(
-                                bottom: 90,
-                                left: 20,
-                                right: 20,
-                              ),
-                            ),
-                          );
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text('"$displayName" ${lang.t('deleted')}'),
+                            behavior: SnackBarBehavior.floating,
+                            backgroundColor: const Color(0xFF333333),
+                            margin: const EdgeInsets.only(
+                                bottom: 90, left: 20, right: 20),
+                          ));
                         }
                       } on FirebaseException catch (e) {
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                e.code == 'unavailable'
-                                    ? 'Cannot delete while offline'
-                                    : 'Delete failed: ${e.message}',
-                              ),
-                              backgroundColor: const Color(0xFF333333),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
+                          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                            content: Text(e.code == 'unavailable'
+                                ? 'Cannot delete while offline'
+                                : 'Delete failed: ${e.message}'),
+                            backgroundColor: const Color(0xFF333333),
+                            behavior: SnackBarBehavior.floating,
+                          ));
                         }
                       }
                     },
@@ -193,8 +239,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       backgroundColor: Colors.redAccent,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
+                          borderRadius: BorderRadius.circular(30)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: Text(lang.t('delete_confirm')),
@@ -208,13 +253,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
-  // ── Delete for temp/anonymous users ──────────────────
-  void _confirmDeleteTemp(
-    BuildContext context,
-    String id,
-    String fileName,
-    TempLibraryProvider tempLibrary,
-  ) {
+  // ─────────────────────────────────────────────
+  //  DELETE — temp/anonymous users
+  // ─────────────────────────────────────────────
+  void _confirmDeleteTemp(BuildContext context, String id, String fileName,
+      TempLibraryProvider tempLibrary) {
     final lang = context.read<LanguageProvider>();
     final displayName = fileName.length > 40
         ? '${fileName.substring(0, 40)}...'
@@ -224,38 +267,30 @@ class _VoxHomePageState extends State<VoxHomePage> {
       context: context,
       backgroundColor: Colors.grey[900],
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
       builder: (sheetCtx) => Padding(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 40,
-              height: 4,
+              width: 40, height: 4,
               margin: const EdgeInsets.only(bottom: 20),
               decoration: BoxDecoration(
-                color: Colors.grey[600],
-                borderRadius: BorderRadius.circular(10),
-              ),
+                  color: Colors.grey[600],
+                  borderRadius: BorderRadius.circular(10)),
             ),
             const Icon(Icons.delete_outline, color: Colors.redAccent, size: 40),
             const SizedBox(height: 12),
-            Text(
-              'Delete "$displayName"?',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-              textAlign: TextAlign.center,
-            ),
+            Text('Delete "$displayName"?',
+                style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16),
+                textAlign: TextAlign.center),
             const SizedBox(height: 6),
-            Text(
-              lang.t('remove_library'),
-              style: TextStyle(color: Colors.grey[400], fontSize: 13),
-            ),
+            Text(lang.t('remove_library'),
+                style: TextStyle(color: Colors.grey[400], fontSize: 13)),
             const SizedBox(height: 24),
             Row(
               children: [
@@ -266,8 +301,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       foregroundColor: Colors.white,
                       side: BorderSide(color: Colors.grey[600]!),
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
+                          borderRadius: BorderRadius.circular(30)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: Text(lang.t('cancel')),
@@ -279,25 +313,19 @@ class _VoxHomePageState extends State<VoxHomePage> {
                     onPressed: () {
                       Navigator.pop(sheetCtx);
                       tempLibrary.remove(id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('"$displayName" ${lang.t('deleted')}'),
-                          behavior: SnackBarBehavior.floating,
-                          backgroundColor: const Color(0xFF333333),
-                          margin: const EdgeInsets.only(
-                            bottom: 90,
-                            left: 20,
-                            right: 20,
-                          ),
-                        ),
-                      );
+                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                        content: Text('"$displayName" ${lang.t('deleted')}'),
+                        behavior: SnackBarBehavior.floating,
+                        backgroundColor: const Color(0xFF333333),
+                        margin: const EdgeInsets.only(
+                            bottom: 90, left: 20, right: 20),
+                      ));
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.redAccent,
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
+                          borderRadius: BorderRadius.circular(30)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
                     child: Text(lang.t('delete_confirm')),
@@ -311,6 +339,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
+  // ─────────────────────────────────────────────
+  //  BUILD
+  // ─────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
@@ -324,14 +355,13 @@ class _VoxHomePageState extends State<VoxHomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header row ──────────────────────────────
+              // ── Header ──────────────────────────────────
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    "Vox",
-                    style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
-                  ),
+                  const Text("Vox",
+                      style: TextStyle(
+                          fontSize: 36, fontWeight: FontWeight.bold)),
                   SizedBox(
                     width: 180,
                     height: 38,
@@ -344,6 +374,16 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         hintText: lang.t('search_hint'),
                         counterText: '',
                         prefixIcon: const Icon(Icons.search, size: 18),
+                        suffixIcon: GestureDetector(
+                          onTap: _listen,
+                          child: Icon(
+                            _isListening ? Icons.mic : Icons.mic_none,
+                            size: 18,
+                            color: _isListening
+                                ? Colors.redAccent
+                                : Colors.black54,
+                          ),
+                        ),
                         filled: true,
                         fillColor: Colors.white.withOpacity(0.8),
                         contentPadding: EdgeInsets.zero,
@@ -356,49 +396,39 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   ),
                 ],
               ),
-              Text(
-                lang.t('library'),
-                style: const TextStyle(
-                  fontSize: 18,
-                  color: Color(0xFF9A9A3E),
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
+              Text(lang.t('library'),
+                  style: const TextStyle(
+                      fontSize: 18,
+                      color: Color(0xFF9A9A3E),
+                      fontWeight: FontWeight.bold)),
               const SizedBox(height: 10),
-              Text(
-                lang.t('tap_hint'),
-                style: TextStyle(color: Colors.grey[600], fontSize: 11),
-              ),
+              Text(lang.t('tap_hint'),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 11)),
 
-              // ── Guest temp warning banner ────────────────
-              if (_isAnonymous) ...[
+              // ── Guest banner ─────────────────────────────
+              if (_isAnonymousUser) ...[
                 const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
+                      horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: Colors.black.withOpacity(0.06),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.black.withOpacity(0.1)),
+                    border:
+                        Border.all(color: Colors.black.withOpacity(0.1)),
                   ),
-                  child: Row(
+                  child: const Row(
                     children: [
-                      const Icon(
-                        Icons.info_outline,
-                        color: Colors.black54,
-                        size: 15,
-                      ),
-                      const SizedBox(width: 8),
+                      Icon(Icons.info_outline,
+                          color: Colors.black54, size: 15),
+                      SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Guest mode — files are temporary. Create an account to save them.',
                           style: TextStyle(
-                            color: Colors.black54,
-                            fontSize: 11,
-                            height: 1.4,
-                          ),
+                              color: Colors.black54,
+                              fontSize: 11,
+                              height: 1.4),
                         ),
                       ),
                     ],
@@ -412,41 +442,33 @@ class _VoxHomePageState extends State<VoxHomePage> {
               Expanded(
                 child: Consumer<TempLibraryProvider>(
                   builder: (context, tempLibrary, _) {
-                    // Anonymous: show in-memory items
-                    if (_isAnonymous) {
-                      final items = tempLibrary.items.where((item) {
-                        return item.fileName.toLowerCase().contains(
-                          _searchQuery,
-                        );
-                      }).toList();
+
+                    // ── Guest: in-memory items ───────────────
+                    if (_isAnonymousUser) {
+                      final items = tempLibrary.items.where((item) =>
+                          item.fileName
+                              .toLowerCase()
+                              .contains(_searchQuery)).toList();
 
                       if (items.isEmpty) {
                         return Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(
-                                Icons.folder_off_outlined,
-                                color: Colors.grey[400],
-                                size: 48,
-                              ),
+                              Icon(Icons.folder_off_outlined,
+                                  color: Colors.grey[400], size: 48),
                               const SizedBox(height: 14),
-                              Text(
-                                'No files yet.',
-                                style: TextStyle(
-                                  color: Colors.grey[700],
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
+                              Text('No files yet.',
+                                  style: TextStyle(
+                                      color: Colors.grey[700],
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.w700)),
                               const SizedBox(height: 6),
                               Text(
                                 'Tap + to upload.\nFiles are temporary until you create an account.',
                                 textAlign: TextAlign.center,
                                 style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 13,
-                                ),
+                                    color: Colors.grey[500], fontSize: 13),
                               ),
                             ],
                           ),
@@ -456,11 +478,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       return GridView.builder(
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
-                              crossAxisCount: 3,
-                              crossAxisSpacing: 10,
-                              mainAxisSpacing: 10,
-                              childAspectRatio: 1.1,
-                            ),
+                                crossAxisCount: 3,
+                                crossAxisSpacing: 10,
+                                mainAxisSpacing: 10,
+                                childAspectRatio: 1.1),
                         itemCount: items.length,
                         itemBuilder: (context, index) {
                           final item = items[index];
@@ -468,42 +489,42 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             onTap: () =>
                                 _openReader(item.fileName, item.content),
                             onLongPress: () => _confirmDeleteTemp(
-                              context,
-                              item.id,
-                              item.fileName,
-                              tempLibrary,
-                            ),
+                                context, item.id, item.fileName, tempLibrary),
                             child: _buildFileCard(item.fileName, item.fileType),
                           );
                         },
                       );
                     }
 
-                    // Logged in: Firestore stream
+                    // ── Logged in: Firestore filtered by userId ──
+                    if (_resolvedUid == null) {
+                      return const Center(
+                          child: CircularProgressIndicator());
+                    }
+
                     return StreamBuilder<QuerySnapshot>(
+                      // FIX: removed .orderBy() to avoid requiring a composite
+                      // Firestore index. Docs are sorted client-side below.
                       stream: FirebaseFirestore.instance
                           .collection('library')
+                          .where('userId', isEqualTo: _resolvedUid)
                           .snapshots(),
                       builder: (context, snapshot) {
                         if (snapshot.hasError) {
-                          final isOffline =
-                              snapshot.error.toString().contains(
-                                'unavailable',
-                              ) ||
-                              snapshot.error.toString().contains(
-                                'Failed to get document',
-                              );
+                          debugPrint('🔴 Firestore error: ${snapshot.error}');
+                          final isOffline = snapshot.error
+                              .toString()
+                              .contains('unavailable');
                           return Center(
                             child: Column(
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  isOffline
-                                      ? Icons.wifi_off
-                                      : Icons.error_outline,
-                                  color: Colors.grey[500],
-                                  size: 40,
-                                ),
+                                    isOffline
+                                        ? Icons.wifi_off
+                                        : Icons.error_outline,
+                                    color: Colors.grey[500],
+                                    size: 40),
                                 const SizedBox(height: 12),
                                 Text(
                                   isOffline
@@ -511,9 +532,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                       : 'Something went wrong.',
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    color: Colors.grey[600],
-                                    fontSize: 14,
-                                  ),
+                                      color: Colors.grey[600],
+                                      fontSize: 14),
                                 ),
                               ],
                             ),
@@ -522,44 +542,51 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
                         if (!snapshot.hasData) {
                           return const Center(
-                            child: CircularProgressIndicator(),
-                          );
+                              child: CircularProgressIndicator());
                         }
 
+                        // Filter by search query
                         final docs = snapshot.data!.docs.where((doc) {
                           final data =
                               doc.data() as Map<String, dynamic>? ?? {};
-                          final name = (data['fileName'] as String? ?? '')
-                              .toLowerCase();
+                          final name =
+                              (data['fileName'] as String? ?? '')
+                                  .toLowerCase();
                           return name.contains(_searchQuery);
                         }).toList();
 
+                        // FIX: sort client-side by timestamp descending
+                        // (replaces the removed .orderBy() on the query)
+                        docs.sort((a, b) {
+                          final aTs = (a.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                          final bTs = (b.data() as Map<String, dynamic>)['timestamp'] as Timestamp?;
+                          if (aTs == null && bTs == null) return 0;
+                          if (aTs == null) return 1;
+                          if (bTs == null) return -1;
+                          return bTs.compareTo(aTs);
+                        });
+
                         if (docs.isEmpty) {
                           return Center(
-                            child: Text(
-                              lang.t('no_files'),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 14,
-                              ),
-                            ),
+                            child: Text(lang.t('no_files'),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 14)),
                           );
                         }
 
                         return GridView.builder(
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
-                                crossAxisCount: 3,
-                                crossAxisSpacing: 10,
-                                mainAxisSpacing: 10,
-                                childAspectRatio: 1.1,
-                              ),
+                                  crossAxisCount: 3,
+                                  crossAxisSpacing: 10,
+                                  mainAxisSpacing: 10,
+                                  childAspectRatio: 1.1),
                           itemCount: docs.length,
                           itemBuilder: (context, index) {
-                            final data =
-                                docs[index].data() as Map<String, dynamic>? ??
-                                {};
+                            final data = docs[index].data()
+                                as Map<String, dynamic>? ?? {};
                             final String name =
                                 data['fileName'] as String? ?? 'File';
                             final String type =
@@ -596,30 +623,23 @@ class _VoxHomePageState extends State<VoxHomePage> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _navItem(Icons.home, lang.t('nav_home'), Colors.white),
-              _navItem(
-                Icons.note_alt_outlined,
-                lang.t('nav_notes'),
-                Colors.grey[400]!,
-                onTap: () => Navigator.pushNamed(context, '/notes'),
-              ),
+              _navItem(Icons.note_alt_outlined, lang.t('nav_notes'),
+                  Colors.grey[400]!,
+                  onTap: () => Navigator.pushNamed(context, '/notes')),
               const SizedBox(width: 48),
-              _navItem(
-                Icons.book,
-                lang.t('nav_dictionary'),
-                Colors.grey[400]!,
-                onTap: () => Navigator.pushNamed(context, '/dictionary'),
-              ),
-              _navItem(
-                Icons.menu,
-                lang.t('nav_menu'),
-                Colors.grey[400]!,
-                onTap: () => Navigator.pushNamed(context, '/menu'),
-              ),
+              _navItem(Icons.book, lang.t('nav_dictionary'),
+                  Colors.grey[400]!,
+                  onTap: () =>
+                      Navigator.pushNamed(context, '/dictionary')),
+              _navItem(Icons.menu, lang.t('nav_menu'),
+                  Colors.grey[400]!,
+                  onTap: () => Navigator.pushNamed(context, '/menu')),
             ],
           ),
         ),
       ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+      floatingActionButtonLocation:
+          FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black,
         onPressed: () => Navigator.pushNamed(context, '/upload'),
@@ -660,10 +680,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.07),
-            blurRadius: 5,
-            offset: const Offset(0, 3),
-          ),
+              color: Colors.black.withOpacity(0.07),
+              blurRadius: 5,
+              offset: const Offset(0, 3))
         ],
       ),
       padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
@@ -671,17 +690,14 @@ class _VoxHomePageState extends State<VoxHomePage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Colors.black87,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              height: 1.2,
-            ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
+          Text(title,
+              style: const TextStyle(
+                  color: Colors.black87,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  height: 1.2),
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis),
           Align(
             alignment: Alignment.bottomRight,
             child: Icon(iconData, size: 28, color: iconColor),
@@ -691,26 +707,19 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
-  Widget _navItem(
-    IconData icon,
-    String label,
-    Color color, {
-    VoidCallback? onTap,
-  }) {
+  Widget _navItem(IconData icon, String label, Color color,
+      {VoidCallback? onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, color: color, size: 24),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          Text(label,
+              style: TextStyle(
+                  color: color,
+                  fontSize: 9,
+                  fontWeight: FontWeight.bold)),
         ],
       ),
     );
