@@ -7,6 +7,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'language_provider.dart';
 import 'profile_page.dart';
 import 'contact_us_page.dart';
+import 'About_Us_Page.dart';
 
 class MenuPage extends StatefulWidget {
   const MenuPage({super.key});
@@ -561,7 +562,10 @@ class _MenuPageState extends State<MenuPage> {
                   _buildMenuItem(
                     icon: Icons.info_outline_rounded,
                     title: lang.t('menu_about'),
-                    onTap: () {},
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const AboutUsPage()),
+                    ),
                   ),
 
                   // ── Contact Us ── navigates to ContactUsPage ─────────────
