@@ -7,6 +7,9 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants — EmailJS credentials and app colors
+// ─────────────────────────────────────────────────────────────────────────────
 const _kDevWhatsApp = '905488265289';
 const _kEmailJSServiceId = 'service_sj1zwun';
 const _kEmailJSTemplateId = 'template_kg6ezs8';
@@ -17,8 +20,14 @@ const _kTextLight = Color(0xFFF3E5AB);
 const _kWaGreen = Color(0xFF25D366);
 const _kDarkBtn = Color(0xFF3A3A3A);
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Enum — whether the user wants a reply via Email or WhatsApp
+// ─────────────────────────────────────────────────────────────────────────────
 enum ContactPreference { email, whatsapp }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// Country list — flag emoji, country name, and international dial code
+// ─────────────────────────────────────────────────────────────────────────────
 const List<Map<String, String>> _kCountries = [
   {'name': 'Afghanistan', 'dial': '+93', 'flag': '🇦🇫'},
   {'name': 'Albania', 'dial': '+355', 'flag': '🇦🇱'},
@@ -101,7 +110,9 @@ const List<Map<String, String>> _kCountries = [
   {'name': 'Yemen', 'dial': '+967', 'flag': '🇾🇪'},
 ];
 
-// ── Blinking hint ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// _BlinkingHint — fades in/out repeatedly until the user types something
+// ─────────────────────────────────────────────────────────────────────────────
 class _BlinkingHint extends StatefulWidget {
   final String text;
   const _BlinkingHint(this.text);
@@ -113,6 +124,7 @@ class _BlinkingHintState extends State<_BlinkingHint>
     with SingleTickerProviderStateMixin {
   late final AnimationController _c;
   late final Animation<double> _a;
+
   @override
   void initState() {
     super.initState();
@@ -139,7 +151,9 @@ class _BlinkingHintState extends State<_BlinkingHint>
   );
 }
 
-// ── Mic button — dark rounded square, no animation/movement ──────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// _MicButton — dark rounded square button, turns red while recording
+// ─────────────────────────────────────────────────────────────────────────────
 class _MicButton extends StatelessWidget {
   final bool isListening;
   final VoidCallback onTap;
@@ -167,7 +181,9 @@ class _MicButton extends StatelessWidget {
   }
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ContactUsPage — main widget
+// ─────────────────────────────────────────────────────────────────────────────
 class ContactUsPage extends StatefulWidget {
   const ContactUsPage({super.key});
   @override
@@ -175,6 +191,7 @@ class ContactUsPage extends StatefulWidget {
 }
 
 class _ContactUsPageState extends State<ContactUsPage> {
+  // ── Form key and text controllers ─────────────────────────────────────────
   final _formKey = GlobalKey<FormState>();
   final _firstNameCtrl = TextEditingController();
   final _lastNameCtrl = TextEditingController();
@@ -182,11 +199,13 @@ class _ContactUsPageState extends State<ContactUsPage> {
   final _phoneCtrl = TextEditingController();
   final _messageCtrl = TextEditingController();
 
+  // ── Selected country — defaults to Turkey ────────────────────────────────
   Map<String, String> _selectedCountry = _kCountries.firstWhere(
     (c) => c['name'] == 'Turkey',
     orElse: () => _kCountries.first,
   );
 
+  // ── UI state ──────────────────────────────────────────────────────────────
   ContactPreference _contactPref = ContactPreference.email;
   bool _isSending = false;
   bool _sent = false;
@@ -197,22 +216,16 @@ class _ContactUsPageState extends State<ContactUsPage> {
   String? _listeningField;
   bool _voiceBusy = false;
 
-  // ── Text-to-speech via platform channel (no extra package needed) ─────────
+  // ── Text-to-speech (kept for future use but banner removed) ───────────────
   final FlutterTts _flutterTts = FlutterTts();
-  bool _bannerSpeaking = false;
 
   @override
   void initState() {
     super.initState();
     _initSpeech();
-    // Auto-read the full form guide when the page opens
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (mounted) _speakGuide();
-      });
-    });
   }
 
+  // ── Initialise microphone permission and speech engine ────────────────────
   Future<void> _initSpeech() async {
     final status = await Permission.microphone.request();
     if (!status.isGranted) return;
@@ -220,43 +233,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
     if (mounted) setState(() => _speechAvailable = ok);
   }
 
-  // Speak banner text using Android TTS via a simple platform channel.
-  // If the channel isn't set up, falls back to showing a SnackBar.
-  static const _kGuideText =
-      'Contact Us form. '
-      'At the top, choose how you want us to reply to you. '
-      'Tap the left button to choose Email — we will reply to your email address. '
-      'Tap the right button to choose WhatsApp — we will send you a WhatsApp message on your phone number. '
-      'Field 1: First Name. Tap the microphone button on the right side of the first name box to record. '
-      'Field 2: Last Name. Tap the microphone button on the right side of the last name box to record. '
-      'Field 3: Email Address. Tap the microphone button on the right to record your email. '
-      'Field 4: Phone Number. First tap the country flag to choose your country, then tap the microphone button on the right to record your number. '
-      'Field 5: Message. Tap the microphone button inside the top right corner of the message box to record your message. '
-      'When you are done, scroll down and tap the Send button at the bottom.';
-
-  Future<void> _speakGuide() async {
-    // If already speaking — stop it
-    if (_bannerSpeaking) {
-      await _flutterTts.stop();
-      if (mounted) setState(() => _bannerSpeaking = false);
-      return;
-    }
-    setState(() => _bannerSpeaking = true);
-    await _flutterTts.setLanguage('en-US');
-    await _flutterTts.setSpeechRate(0.85);
-    await _flutterTts.setPitch(1.0);
-    await _flutterTts.setVolume(1.0);
-    _flutterTts.setCompletionHandler(() {
-      if (mounted) setState(() => _bannerSpeaking = false);
-    });
-    _flutterTts.setCancelHandler(() {
-      if (mounted) setState(() => _bannerSpeaking = false);
-    });
-    await _flutterTts.speak(_kGuideText);
-  }
-
-  Future<void> _speakBanner() => _speakGuide();
-
+  // ── Toggle voice input for a specific field ───────────────────────────────
   Future<void> _toggleVoice(String key, TextEditingController ctrl) async {
     if (!_speechAvailable) {
       _showError('Microphone not available.');
@@ -310,23 +287,24 @@ class _ContactUsPageState extends State<ContactUsPage> {
     super.dispose();
   }
 
-  // ── Send ──────────────────────────────────────────────────────────────────
+  // ── Send — either via EmailJS or WhatsApp depending on preference ─────────
   Future<void> _send() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSending = true);
 
     if (_contactPref == ContactPreference.whatsapp) {
+      // ── WhatsApp path ────────────────────────────────────────────────────
       final name = '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}';
       final phone =
           '${_selectedCountry['flag']} ${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}';
       final email = _emailCtrl.text.trim();
-      final message = _messageCtrl.text.trim();
+      final msg = _messageCtrl.text.trim();
       final text = Uri.encodeComponent(
         '📩 *New VOX App Message*\n\n'
         '👤 *Name:* $name\n'
         '📧 *Email:* $email\n'
         '📞 *Phone:* $phone\n\n'
-        '💬 *Message:*\n$message\n\n'
+        '💬 *Message:*\n$msg\n\n'
         '↩️ _Reply to this user via WhatsApp_',
       );
       final waUrl = Uri.parse('https://wa.me/$_kDevWhatsApp?text=$text');
@@ -343,6 +321,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
         _showError('WhatsApp is not installed on this device.');
       }
     } else {
+      // ── Email path via EmailJS ────────────────────────────────────────────
       try {
         final res = await http.post(
           Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
@@ -357,7 +336,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
               'email': _emailCtrl.text.trim(),
               'title': 'New message from VOX App',
               'message_phone':
-                  '${_selectedCountry['flag']} ${_selectedCountry['name']} ${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}',
+                  '${_selectedCountry['flag']} ${_selectedCountry['name']} '
+                  '${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}',
               'message': _messageCtrl.text.trim(),
               'reply_preference':
                   '📧 User prefers Email reply\n📬 Reply to: ${_emailCtrl.text.trim()}',
@@ -382,6 +362,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
     }
   }
 
+  // ── Error snack-bar ───────────────────────────────────────────────────────
   void _showError(String msg) => ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(msg),
@@ -391,7 +372,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
     ),
   );
 
-  // ── Country picker ────────────────────────────────────────────────────────
+  // ── Country picker bottom-sheet ───────────────────────────────────────────
   void _showCountryPicker() {
     final search = ValueNotifier<String>('');
     showModalBottomSheet(
@@ -521,7 +502,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
+  // ── Shared input decoration ───────────────────────────────────────────────
   InputDecoration _inputDeco({Widget? prefix, Widget? suffix}) =>
       InputDecoration(
         prefixIcon: prefix,
@@ -550,6 +531,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
         ),
       );
 
+  // ── Section label ─────────────────────────────────────────────────────────
   Widget _label(String t) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
     child: Text(
@@ -563,6 +545,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
     ),
   );
 
+  // ── Mic suffix widget ─────────────────────────────────────────────────────
   Widget _mic(String key, TextEditingController ctrl) => _speechAvailable
       ? Padding(
           padding: const EdgeInsets.only(right: 8),
@@ -573,7 +556,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
         )
       : const SizedBox.shrink();
 
-  // ── Segmented preference selector ─────────────────────────────────────────
+  // ── Segmented preference selector (Email / WhatsApp) ──────────────────────
   Widget _buildPreference() {
     final isEmail = _contactPref == ContactPreference.email;
     return Column(
@@ -595,6 +578,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
           ),
           child: Stack(
             children: [
+              // Sliding highlight pill
               AnimatedAlign(
                 duration: const Duration(milliseconds: 220),
                 curve: Curves.easeInOut,
@@ -620,6 +604,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                   ),
                 ),
               ),
+              // Email / WhatsApp tap targets
               Row(
                 children: [
                   Expanded(
@@ -688,6 +673,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
           ),
         ),
         const SizedBox(height: 8),
+        // Hint text below the selector
         AnimatedSwitcher(
           duration: const Duration(milliseconds: 200),
           child: Row(
@@ -726,6 +712,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
     final contact = isEmail
         ? _emailCtrl.text.trim()
         : '${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}';
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(32),
       child: Column(
@@ -754,7 +741,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Thank you, ${_firstNameCtrl.text.trim()}!\nWe\'ll get back to you via $prefLabel at:\n$contact',
+            'Thank you, ${_firstNameCtrl.text.trim()}!\n'
+            'We\'ll get back to you via $prefLabel at:\n$contact',
             textAlign: TextAlign.center,
             style: const TextStyle(
               color: Colors.black54,
@@ -763,6 +751,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
             ),
           ),
           const SizedBox(height: 24),
+          // Summary card
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(16),
@@ -866,6 +855,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
     );
   }
 
+  // ── Summary row helper ────────────────────────────────────────────────────
   Widget _sRow(IconData icon, String val, {bool highlight = false}) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
     child: Row(
@@ -894,7 +884,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
       backgroundColor: _kBgColor,
       body: Column(
         children: [
-          // HEADER
+          // ══ HEADER ══════════════════════════════════════════════════════════
           Container(
             width: double.infinity,
             padding: EdgeInsets.only(
@@ -965,8 +955,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
               ],
             ),
           ),
+          // ══ END HEADER ══════════════════════════════════════════════════════
 
-          // BODY
+          // ══ BODY ════════════════════════════════════════════════════════════
           Expanded(
             child: _sent
                 ? _buildSuccess()
@@ -977,100 +968,15 @@ class _ContactUsPageState extends State<ContactUsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // ── Voice hint banner — tap anywhere or tap speaker to replay guide ──
-                          if (_speechAvailable)
-                            GestureDetector(
-                              onTap: _speakGuide,
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                margin: const EdgeInsets.only(bottom: 16),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _bannerSpeaking
-                                      ? const Color(0xFF555555)
-                                      : _kDarkBtn,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  children: [
-                                    // Animated speaker icon on the left
-                                    AnimatedContainer(
-                                      duration: const Duration(
-                                        milliseconds: 180,
-                                      ),
-                                      width: 34,
-                                      height: 34,
-                                      decoration: BoxDecoration(
-                                        color: _bannerSpeaking
-                                            ? const Color(0xFF25D366)
-                                            : Colors.white.withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(9),
-                                      ),
-                                      child: Icon(
-                                        _bannerSpeaking
-                                            ? Icons.volume_up_rounded
-                                            : Icons.volume_up_outlined,
-                                        size: 17,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _bannerSpeaking
-                                                ? 'Reading form guide…'
-                                                : 'Tap to hear the form guide',
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w700,
-                                              height: 1.3,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            _bannerSpeaking
-                                                ? 'Explains each field and mic button location'
-                                                : 'Reads out all fields & where to tap to record',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.white.withOpacity(
-                                                0.65,
-                                              ),
-                                              height: 1.3,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      _bannerSpeaking
-                                          ? Icons.stop_rounded
-                                          : Icons.play_arrow_rounded,
-                                      color: Colors.white.withOpacity(0.8),
-                                      size: 20,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-
-                          // ── Preference ───────────────────────────────────────────────
+                          // ── Reply preference selector ──────────────────────
                           _buildPreference(),
                           const SizedBox(height: 18),
 
-                          // ── Name row ─────────────────────────────────────────────────
+                          // ── Name row ───────────────────────────────────────
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // First Name
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1099,7 +1005,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                           textCapitalization:
                                               TextCapitalization.words,
                                           textInputAction: TextInputAction.next,
-                                          keyboardType: TextInputType.name,
                                           decoration: _inputDeco(
                                             prefix: const Icon(
                                               Icons.person_outline_rounded,
@@ -1122,6 +1027,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 ),
                               ),
                               const SizedBox(width: 12),
+
+                              // Last Name
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1150,7 +1057,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                           textCapitalization:
                                               TextCapitalization.words,
                                           textInputAction: TextInputAction.next,
-                                          keyboardType: TextInputType.name,
                                           decoration: _inputDeco(
                                             prefix: const Icon(
                                               Icons.person_outline_rounded,
@@ -1176,7 +1082,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 14),
 
-                          // ── Email ────────────────────────────────────────────────────
+                          // ── Email ──────────────────────────────────────────
                           _label('EMAIL ADDRESS'),
                           TextFormField(
                             controller: _emailCtrl,
@@ -1209,11 +1115,12 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 14),
 
-                          // ── Phone ────────────────────────────────────────────────────
+                          // ── Phone ──────────────────────────────────────────
                           _label('PHONE NUMBER'),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
+                              // Country selector
                               GestureDetector(
                                 onTap: _showCountryPicker,
                                 child: Container(
@@ -1250,6 +1157,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 ),
                               ),
                               const SizedBox(width: 10),
+                              // Phone number input
                               Expanded(
                                 child: TextFormField(
                                   controller: _phoneCtrl,
@@ -1277,7 +1185,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 14),
 
-                          // ── Message ──────────────────────────────────────────────────
+                          // ── Message ────────────────────────────────────────
                           _label('MESSAGE'),
                           Stack(
                             children: [
@@ -1289,9 +1197,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 textInputAction: TextInputAction.newline,
                                 textCapitalization:
                                     TextCapitalization.sentences,
-                                strutStyle: const StrutStyle(
-                                  forceStrutHeight: false,
-                                ),
                                 decoration: _inputDeco().copyWith(
                                   hintText: 'Write your message here…',
                                   hintStyle: const TextStyle(
@@ -1327,7 +1232,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 24),
 
-                          // ── Send button ──────────────────────────────────────────────
+                          // ── Send button ────────────────────────────────────
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
@@ -1383,6 +1288,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 16),
 
+                          // ── Privacy note ───────────────────────────────────
                           Center(
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -1409,6 +1315,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                     ),
                   ),
           ),
+          // ══ END BODY ════════════════════════════════════════════════════════
         ],
       ),
     );
