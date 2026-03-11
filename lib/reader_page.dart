@@ -37,7 +37,19 @@ class _ReaderPageState extends State<ReaderPage> {
   int _pinnedStart = 0;
   int _pinnedEnd = 0;
 
-  static const List<double> _speedPresets = [0.4, 0.5, 0.6, 0.8, 1.0, 1.25, 1.5];
+  // Always-on listening state
+  bool _alwaysOnEnabled = true;
+  bool _commandProcessing = false;
+
+  static const List<double> _speedPresets = [
+    0.4,
+    0.5,
+    0.6,
+    0.8,
+    1.0,
+    1.25,
+    1.5,
+  ];
 
   // Commands shown in panel — one keyword each
   static const _commandList = [
@@ -74,84 +86,114 @@ class _ReaderPageState extends State<ReaderPage> {
     final status = await Permission.microphone.request();
     if (!status.isGranted) return;
     final ok = await _speech.initialize(
-      onError: (_) {
-        if (mounted) setState(() => _isListening = false);
+      onError: (e) {
+        if (mounted) {
+          setState(() => _isListening = false);
+          // Auto-restart on error if always-on is enabled
+          if (_alwaysOnEnabled && !_commandProcessing) {
+            Future.delayed(
+              const Duration(milliseconds: 500),
+              _startAlwaysOnListening,
+            );
+          }
+        }
       },
       onStatus: (s) {
-        if ((s == 'done' || s == 'notListening') && mounted) {
+        if (!mounted) return;
+        if (s == 'done' || s == 'notListening') {
           setState(() => _isListening = false);
+          // Auto-restart continuous listening
+          if (_alwaysOnEnabled && !_commandProcessing) {
+            Future.delayed(
+              const Duration(milliseconds: 300),
+              _startAlwaysOnListening,
+            );
+          }
         }
       },
     );
-    if (mounted) setState(() => _speechReady = ok);
+    if (mounted) {
+      setState(() => _speechReady = ok);
+      if (ok && _alwaysOnEnabled) {
+        _startAlwaysOnListening();
+      }
+    }
   }
 
-  // ── One-shot listen ────────────────────────────────────
-  // Pauses TTS, listens, executes command, then the command
-  // itself decides whether to resume or not.
-  Future<void> _listenOnce() async {
-    if (!_speechReady || _isListening) return;
+  // ── Always-on continuous listening (like Google Meet) ──
+  Future<void> _startAlwaysOnListening() async {
+    if (!mounted || !_speechReady || _isListening || _commandProcessing) return;
 
-    final tts = context.read<TtsService>();
-    final locale = context.read<LanguageProvider>().ttsLocale;
-
-    // Pause TTS so mic hears clearly
-    final wasPlaying = tts.isPlaying;
-    if (wasPlaying) {
-      await tts.togglePause(locale);
-    }
-
-    setState(() {
-      _isListening = true;
-      _commandFeedback = 'Listening...';
-    });
-
-    bool commandHandled = false;
-
-    await _speech.listen(
-      localeId: 'en_US',
-      listenFor: const Duration(seconds: 20),
-      pauseFor: const Duration(seconds: 10),
-      partialResults: true,
-      onResult: (result) {
-        if (commandHandled) return;
-        
-        final words = result.recognizedWords.toLowerCase().trim();
-        
-        // We evaluate _has inside onResult to check if we should trigger
-        // early partial matches. Only trigger if a keyword matches.
-        bool hasMatch = _commandList.any((c) => words.contains(c[1])) || 
-                        ['resume', 'continue', 'start', 'go', 'wait', 'hold', 'stop reading', 
-                         'skip', 'next', 'ahead', 'backward', 'rewind', 'previous', 'speed up', 
-                         'increase speed', 'slow down', 'decrease speed', 'start over', 'beginning', 
-                         'exit', 'quit', 'highlight text', 'mark'].any((k) => words.contains(k));
-
-        if (hasMatch) {
-          commandHandled = true;
-          _speech.stop(); // Stop listening as soon as we got a command
-          // Small delay to let hardware settle
-          Future.delayed(const Duration(milliseconds: 100), () {
-            _executeCommand(words, tts, locale, wasPlaying);
-          });
-        } else if (result.finalResult) {
-           // If we got a final result and no match was found, finalize it
-           commandHandled = true;
-           _executeCommand(words, tts, locale, wasPlaying);
-        }
-      },
-    );
-
-    // After listen window closes, restore if no command was heard
-    await Future.delayed(const Duration(milliseconds: 300));
-    if (!commandHandled && mounted) {
+    try {
       setState(() {
-        _isListening = false;
-        _commandFeedback = 'Nothing heard';
+        _isListening = true;
       });
-      // Restore playback if we paused it
-      if (wasPlaying && !tts.isPlaying) {
-        await tts.togglePause(locale);
-      }
+
+      await _speech.listen(
+        localeId: 'en_US',
+        listenFor: const Duration(seconds: 30),
+        pauseFor: const Duration(seconds: 3),
+        partialResults: true,
+        onResult: (result) {
+          if (!mounted || _commandProcessing) return;
+
+          final words = result.recognizedWords.toLowerCase().trim();
+          if (words.isEmpty) return;
+
+          final hasMatch =
+              _commandList.any((c) => words.contains(c[1])) ||
+              [
+                'resume',
+                'continue',
+                'start',
+                'go',
+                'wait',
+                'hold',
+                'stop reading',
+                'skip',
+                'next',
+                'ahead',
+                'backward',
+                'rewind',
+                'previous',
+                'speed up',
+                'increase speed',
+                'slow down',
+                'decrease speed',
+                'start over',
+                'beginning',
+                'exit',
+                'quit',
+                'highlight text',
+                'mark',
+              ].any((k) => words.contains(k));
+
+          if (hasMatch) {
+            _commandProcessing = true;
+            _speech.stop();
+            final tts = context.read<TtsService>();
+            final locale = context.read<LanguageProvider>().ttsLocale;
+            final wasPlaying = tts.isPlaying;
+            // Pause TTS briefly so mic hears clearly, then execute
+            Future.delayed(const Duration(milliseconds: 150), () {
+              _executeCommand(words, tts, locale, wasPlaying);
+            });
+          }
+        },
+      );
+    } catch (_) {
+      if (mounted) setState(() => _isListening = false);
+    }
+  }
+
+  // ── Toggle always-on listening ─────────────────────────
+  void _toggleAlwaysOn() {
+    setState(() => _alwaysOnEnabled = !_alwaysOnEnabled);
+    if (_alwaysOnEnabled) {
+      _startAlwaysOnListening();
+    } else {
+      _speech.stop();
+      setState(() => _isListening = false);
     }
   }
 
@@ -174,7 +216,7 @@ class _ReaderPageState extends State<ReaderPage> {
     } else if (_has(words, ['pause', 'stop reading', 'wait', 'hold'])) {
       feedback = '⏸ Paused';
       action = () {
-        /* stay paused, don't resume */
+        if (tts.isPlaying) tts.togglePause(locale);
       };
     } else if (_has(words, ['forward', 'skip', 'next', 'ahead'])) {
       feedback = '⏩ +10 seconds';
@@ -184,16 +226,12 @@ class _ReaderPageState extends State<ReaderPage> {
       action = () => tts.seekBackward(10, locale);
     } else if (_has(words, ['faster', 'speed up', 'increase speed'])) {
       feedback = '⚡ Speed up';
-      action = () {
-        tts.setRate((tts.speechRate + 0.25).clamp(0.5, 2.0), locale);
-        if (wasPlaying && !tts.isPlaying) tts.togglePause(locale);
-      };
+      action = () =>
+          tts.setRate((tts.speechRate + 0.25).clamp(0.5, 2.0), locale);
     } else if (_has(words, ['slower', 'slow down', 'decrease speed'])) {
       feedback = '🐢 Slower';
-      action = () {
-        tts.setRate((tts.speechRate - 0.25).clamp(0.5, 2.0), locale);
-        if (wasPlaying && !tts.isPlaying) tts.togglePause(locale);
-      };
+      action = () =>
+          tts.setRate((tts.speechRate - 0.25).clamp(0.5, 2.0), locale);
     } else if (_has(words, ['restart', 'start over', 'beginning'])) {
       feedback = '🔄 Restarted';
       action = () => tts.restart(locale);
@@ -211,18 +249,12 @@ class _ReaderPageState extends State<ReaderPage> {
     ])) {
       feedback = '🔆 Sentence highlighted';
       action = () {
-        // Pin the last known sentence boundaries
         setState(() {
           _hasPinnedHighlight = true;
           _pinnedStart = tts.sentenceStart;
           _pinnedEnd = tts.sentenceEnd;
         });
-        // Resume reading
-        if (wasPlaying && !tts.isPlaying) tts.togglePause(locale);
       };
-    } else {
-      // Unknown command — restore playback
-      if (wasPlaying && !tts.isPlaying) tts.togglePause(locale);
     }
 
     setState(() {
@@ -231,6 +263,15 @@ class _ReaderPageState extends State<ReaderPage> {
     });
 
     action?.call();
+
+    // Resume always-on listening after command
+    _commandProcessing = false;
+    if (_alwaysOnEnabled) {
+      Future.delayed(
+        const Duration(milliseconds: 600),
+        _startAlwaysOnListening,
+      );
+    }
   }
 
   bool _has(String words, List<String> keywords) =>
@@ -402,80 +443,114 @@ class _ReaderPageState extends State<ReaderPage> {
 
   // ── Mic bar ────────────────────────────────────────────
   Widget _buildMicBar() {
-    return GestureDetector(
-      onTap: _listenOnce,
-      child: Container(
-        margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: _isListening ? Colors.red.withOpacity(0.12) : Colors.grey[200],
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: _isListening ? Colors.red : Colors.transparent,
-            width: 1.5,
-          ),
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: _isListening ? Colors.green.withOpacity(0.12) : Colors.grey[200],
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: _isListening ? Colors.green : Colors.transparent,
+          width: 1.5,
         ),
-        child: Row(
-          children: [
-            AnimatedContainer(
-              duration: const Duration(milliseconds: 200),
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: _isListening ? Colors.red : Colors.grey[800],
-                shape: BoxShape.circle,
-              ),
-              child: Icon(
-                _isListening ? Icons.graphic_eq : Icons.mic,
-                color: Colors.white,
-                size: 20,
-              ),
+      ),
+      child: Row(
+        children: [
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 200),
+            width: 40,
+            height: 40,
+            decoration: BoxDecoration(
+              color: _isListening
+                  ? Colors.green
+                  : (_alwaysOnEnabled ? Colors.grey[700] : Colors.grey[400]),
+              shape: BoxShape.circle,
             ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+            child: Icon(
+              _isListening ? Icons.graphic_eq : Icons.mic,
+              color: Colors.white,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  _isListening
+                      ? 'Listening for commands...'
+                      : (_alwaysOnEnabled
+                            ? 'Voice commands active'
+                            : 'Voice commands off'),
+                  style: TextStyle(
+                    color: Colors.grey[800],
+                    fontWeight: FontWeight.w600,
+                    fontSize: 12,
+                  ),
+                ),
+                if (_commandFeedback.isNotEmpty) ...[
+                  const SizedBox(height: 2),
                   Text(
-                    _isListening ? 'Listening...' : 'Tap to speak a command',
-                    style: TextStyle(
-                      color: Colors.grey[800],
-                      fontWeight: FontWeight.w600,
-                      fontSize: 12,
+                    _commandFeedback,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          // Always-on toggle
+          GestureDetector(
+            onTap: _toggleAlwaysOn,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: _alwaysOnEnabled ? Colors.green : Colors.grey[300],
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    _alwaysOnEnabled ? Icons.mic : Icons.mic_off,
+                    color: Colors.white,
+                    size: 13,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _alwaysOnEnabled ? 'ON' : 'OFF',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
                     ),
                   ),
-                  if (_commandFeedback.isNotEmpty) ...[
-                    const SizedBox(height: 2),
-                    Text(
-                      _commandFeedback,
-                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
                 ],
               ),
             ),
-            // Toggle commands panel
-            GestureDetector(
-              onTap: () =>
-                  setState(() => _showCommandsPanel = !_showCommandsPanel),
-              child: Container(
-                padding: const EdgeInsets.all(6),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(
-                  _showCommandsPanel
-                      ? Icons.keyboard_arrow_down
-                      : Icons.help_outline,
-                  color: Colors.grey[700],
-                  size: 16,
-                ),
+          ),
+          const SizedBox(width: 8),
+          // Toggle commands panel
+          GestureDetector(
+            onTap: () =>
+                setState(() => _showCommandsPanel = !_showCommandsPanel),
+            child: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: Colors.grey[300],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(
+                _showCommandsPanel
+                    ? Icons.keyboard_arrow_down
+                    : Icons.help_outline,
+                color: Colors.grey[700],
+                size: 16,
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

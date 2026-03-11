@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
+import 'language_provider.dart';
 
 class HistoryScreen extends StatelessWidget {
   HistoryScreen({super.key});
@@ -18,10 +20,16 @@ class HistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>();
+    final t = lang.t;
+
     return Scaffold(
       backgroundColor: const Color(0xFFF3E5AB), // Same as homepage
       appBar: AppBar(
-        title: const Text("History", style: TextStyle(color: Colors.black)),
+        title: Text(
+          t('history_title'),
+          style: const TextStyle(color: Colors.black),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.black),
@@ -46,10 +54,10 @@ class HistoryScreen extends StatelessWidget {
           final docs = snapshot.data!.docs;
 
           if (docs.isEmpty) {
-            return const Center(
+            return Center(
               child: Text(
-                "No history yet",
-                style: TextStyle(color: Colors.black54),
+                t('history_empty'),
+                style: const TextStyle(color: Colors.black54),
               ),
             );
           }
@@ -87,9 +95,7 @@ class HistoryScreen extends StatelessWidget {
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   decoration: BoxDecoration(
-                    color: const Color(
-                      0xFFE0E0E0,
-                    ), // Same grey as library cards
+                    color: const Color(0xFFE0E0E0),
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(

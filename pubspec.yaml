@@ -27,6 +27,9 @@ dependencies:
   image_picker: ^1.0.7
   syncfusion_flutter_pdf: ^32.2.7
 
+  # ── Document Scanning / OCR ───────────────────────────
+  google_mlkit_text_recognition: ^0.13.0
+
   # ── Audio & Speech ───────────────────────────────────
   flutter_tts: ^4.2.2
   speech_to_text: ^7.3.0
@@ -44,7 +47,7 @@ dependencies:
   # ── Networking ───────────────────────────────────────
   http: ^1.2.0
   url_launcher: ^6.2.5
-  archive: ^3.4.9  
+  archive: ^3.4.9
 
 dev_dependencies:
   flutter_test:

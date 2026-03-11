@@ -233,7 +233,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
     if (mounted) setState(() => _speechAvailable = ok);
   }
 
+<<<<<<< Updated upstream
   // ── Toggle voice input for a specific field ───────────────────────────────
+=======
+>>>>>>> Stashed changes
   Future<void> _toggleVoice(String key, TextEditingController ctrl) async {
     if (!_speechAvailable) {
       _showError('Microphone not available.');
@@ -968,7 +971,11 @@ class _ContactUsPageState extends State<ContactUsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+<<<<<<< Updated upstream
                           // ── Reply preference selector ──────────────────────
+=======
+                          // ── Preference ───────────────────────────────────────────────
+>>>>>>> Stashed changes
                           _buildPreference(),
                           const SizedBox(height: 18),
 

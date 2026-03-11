@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'language_provider.dart';
 
 class AboutUsPage extends StatelessWidget {
   const AboutUsPage({super.key});
@@ -11,11 +13,12 @@ class AboutUsPage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final t = context.watch<LanguageProvider>().t;
     return Scaffold(
       backgroundColor: creamBg,
       body: Column(
         children: [
-          _buildHeader(context),
+          _buildHeader(context, t),
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
@@ -89,7 +92,7 @@ class AboutUsPage extends StatelessWidget {
   }
 
   // ── Header ─────────────────────────────────────────────
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader(BuildContext context, String Function(String) t) {
     return Container(
       width: double.infinity,
       padding: EdgeInsets.only(
@@ -121,13 +124,13 @@ class AboutUsPage extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 14),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'About Us',
-                  style: TextStyle(
+                  t('about_title'),
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
@@ -135,8 +138,8 @@ class AboutUsPage extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  'VOX — Voice Command Reader',
-                  style: TextStyle(
+                  t('about_subtitle'),
+                  style: const TextStyle(
                     fontSize: 12,
                     color: Colors.white70,
                     fontWeight: FontWeight.w500,
