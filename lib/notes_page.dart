@@ -52,55 +52,67 @@ class _NotesPageState extends State<NotesPage> {
   //  Pure guest              → temp notes only
   // ─────────────────────────────────────────────
   Future<void> _resolveUser() async {
-    final user = FirebaseAuth.instance.currentUser;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      debugPrint('NotesPage: Resolving user... Current Auth User: ${user?.uid}');
 
-    if (user == null) {
-      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
-      return;
-    }
-
-    if (!user.isAnonymous) {
-      if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
-      return;
-    }
-
-    // Anonymous Firebase user — check SharedPrefs for saved profile
-    final prefs = await SharedPreferences.getInstance();
-    final hasProfile = prefs.getBool('hasProfile') ?? false;
-
-    if (!hasProfile) {
-      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
-      return;
-    }
-
-    // Try by UID first (new user who just signed up)
-    final uidDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    if (uidDoc.exists) {
-      if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
-      return;
-    }
-
-    // Fallback: look up by saved email
-    final savedEmail = prefs.getString('userEmail') ?? '';
-    if (savedEmail.isNotEmpty) {
-      final query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: savedEmail)
-          .limit(1)
-          .get();
-
-      if (query.docs.isNotEmpty) {
-        if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = query.docs.first.id; });
+      if (user == null) {
+        if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
         return;
       }
-    }
 
-    // Profile pref set but no doc found — treat as guest
-    if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+      if (!user.isAnonymous) {
+        debugPrint('NotesPage: Authenticated user detected.');
+        if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
+        return;
+      }
+
+      // Anonymous Firebase user — check SharedPrefs for saved profile
+      final prefs = await SharedPreferences.getInstance();
+      final hasProfile = prefs.getBool('hasProfile') ?? false;
+
+      if (!hasProfile) {
+        debugPrint('NotesPage: Guest user (no profile).');
+        if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+        return;
+      }
+
+      // Try by UID first (new user who just signed up)
+      final uidDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+
+      if (uidDoc.exists) {
+        debugPrint('NotesPage: Found user doc by UID.');
+        if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
+        return;
+      }
+
+      // Fallback: look up by saved email
+      final savedEmail = prefs.getString('userEmail') ?? '';
+      debugPrint('NotesPage: Checking for user doc by email: $savedEmail');
+      if (savedEmail.isNotEmpty) {
+        final query = await FirebaseFirestore.instance
+            .collection('users')
+            .where('email', isEqualTo: savedEmail)
+            .limit(1)
+            .get();
+
+        if (query.docs.isNotEmpty) {
+          debugPrint('NotesPage: Found user doc by email. ID: ${query.docs.first.id}');
+          if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = query.docs.first.id; });
+          return;
+        }
+      }
+
+      debugPrint('NotesPage: No profile found, falling back to Guest.');
+      // Profile pref set but no doc found — treat as guest
+      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+    } catch (e) {
+      debugPrint('NotesPage: Error in _resolveUser: $e');
+      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -208,7 +220,16 @@ class _NotesPageState extends State<NotesPage> {
       _speech.listen(
         localeId: langProvider.sttLocale,
         onResult: (val) {
-          final combined = '$prefix${val.recognizedWords}';
+          String newText = val.recognizedWords;
+          
+          if (val.finalResult && newText.isNotEmpty) {
+            String lastChar = newText.substring(newText.length - 1);
+            if (lastChar != '.' && lastChar != '?' && lastChar != '!') {
+              newText += '.';
+            }
+          }
+
+          final combined = '$prefix$newText';
           _contentController.text = combined.length > _kMaxContentLength
               ? combined.substring(0, _kMaxContentLength)
               : combined;
@@ -276,9 +297,10 @@ class _NotesPageState extends State<NotesPage> {
           ));
         }
       } else {
-        // ── Logged in: save to Firestore under resolvedUid ──
+        // ── Logged in: save to Firestore under the Firebase auth UID ──
+        final authUid = FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid!;
         await FirebaseFirestore.instance.collection('notes').add({
-          'userId': _resolvedUid,
+          'userId': authUid,
           'title': title,
           'content': content,
           'timestamp': FieldValue.serverTimestamp(),
@@ -595,11 +617,33 @@ class _NotesPageState extends State<NotesPage> {
                 Expanded(child: Divider(color: Colors.grey[400])),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Text(lang.t('saved_notes'),
-                      style: TextStyle(
-                          color: Colors.grey[600],
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold)),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(lang.t('saved_notes'),
+                          style: TextStyle(
+                              color: Colors.grey[600],
+                              fontSize: 12,
+                              fontWeight: FontWeight.bold)),
+                      const SizedBox(width: 8),
+                      // DIAGNOSTIC TAG
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: _isAnonymousUser ? Colors.orange[100] : Colors.green[100],
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          _isAnonymousUser ? 'GUEST' : 'USER',
+                          style: TextStyle(
+                            color: _isAnonymousUser ? Colors.orange[800] : Colors.green[800],
+                            fontSize: 9,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 Expanded(child: Divider(color: Colors.grey[400])),
               ],
@@ -693,14 +737,12 @@ class _NotesPageState extends State<NotesPage> {
                 return StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('notes')
-                      .where('userId', isEqualTo: _resolvedUid)
-                      .orderBy('timestamp', descending: true)
+                      .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid)
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
-                      final isOffline = snapshot.error
-                          .toString()
-                          .contains('unavailable');
+                      final errStr = snapshot.error.toString();
+                      final isOffline = errStr.contains('unavailable');
                       return Center(
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -711,12 +753,15 @@ class _NotesPageState extends State<NotesPage> {
                                     : Icons.error_outline,
                                 color: Colors.grey[500], size: 36),
                             const SizedBox(height: 10),
-                            Text(
-                              isOffline
-                                  ? 'You\'re offline.\nShowing cached notes.'
-                                  : 'Could not load notes.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: Colors.grey[500]),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              child: Text(
+                                isOffline
+                                    ? 'You\'re offline.\nShowing cached notes.'
+                                    : 'Could not load notes:\n$errStr',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                              ),
                             ),
                           ],
                         ),
@@ -728,7 +773,16 @@ class _NotesPageState extends State<NotesPage> {
                           child: CircularProgressIndicator());
                     }
 
-                    final docs = snapshot.data!.docs;
+                    // Sort client-side by timestamp descending (avoids composite index requirement)
+                    final docs = List.of(snapshot.data!.docs)
+                      ..sort((a, b) {
+                        final aTs = (a.data() as Map<String, dynamic>?)?['timestamp'];
+                        final bTs = (b.data() as Map<String, dynamic>?)?['timestamp'];
+                        if (aTs == null && bTs == null) return 0;
+                        if (aTs == null) return 1;
+                        if (bTs == null) return -1;
+                        return (bTs as Timestamp).compareTo(aTs as Timestamp);
+                      });
 
                     if (docs.isEmpty) {
                       return Center(

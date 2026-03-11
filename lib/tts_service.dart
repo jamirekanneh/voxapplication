@@ -9,7 +9,7 @@ class TtsService extends ChangeNotifier {
 
   bool isPlaying = false;
   bool isVisible = false;
-  double speechRate = 1.0;
+  double speechRate = 0.5;
   double progress = 0.0;
 
   // Word-level highlight
@@ -168,6 +168,8 @@ class TtsService extends ChangeNotifier {
     sentenceEnd = 0;
     _currentCharOffset = 0;
 
+    _updateSentenceBounds(0);
+
     await _applyVoiceOrLocale(locale);
     await _tts.setSpeechRate(speechRate);
     await _tts.setPitch(1.0);
@@ -182,7 +184,10 @@ class TtsService extends ChangeNotifier {
     } else {
       if (content != null) {
         await _applyVoiceOrLocale(locale);
-        await _tts.speak(content!);
+        await _tts.setSpeechRate(speechRate);
+        // Resume from where we left off, not from the very beginning
+        final remaining = content!.substring(_currentCharOffset.clamp(0, content!.length));
+        await _tts.speak(remaining.isNotEmpty ? remaining : content!);
         isPlaying = true;
       }
     }

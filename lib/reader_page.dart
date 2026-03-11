@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/semantics.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
@@ -26,30 +25,32 @@ class _ReaderPageState extends State<ReaderPage> {
   final ScrollController _scrollController = ScrollController();
   final stt.SpeechToText _speech = stt.SpeechToText();
 
-  bool _autoSpeed = false;
   bool _showSpeedPanel = false;
-  bool _showCommandsPanel = true; // shown by default on entry
+  bool _showCommandsPanel = true;
+  bool _speechReady = false;
   bool _isListening = false;
-  bool _voiceCommandReady = false;
-  bool _voiceCommandEnabled = false; // user toggles this on/off
-  String _lastCommand = '';
+  bool _autoSpeed = false;
+  String _commandFeedback = '';
 
-  static const List<double> _speedPresets = [0.8, 1.0, 1.2, 1.5, 1.75, 2.0];
+  // Pinned highlight — set when user says "highlight text"
+  bool _hasPinnedHighlight = false;
+  int _pinnedStart = 0;
+  int _pinnedEnd = 0;
 
-  static const Map<String, List<String>> _commands = {
-    'pause': ['pause', 'stop reading', 'hold on', 'wait'],
-    'play': ['play', 'resume', 'continue', 'start', 'go'],
-    'faster': ['faster', 'speed up', 'increase speed', 'fast'],
-    'slower': ['slower', 'slow down', 'decrease speed', 'slow'],
-    'forward': ['forward', 'skip', 'next', 'ahead', 'skip forward'],
-    'backward': ['back', 'backward', 'rewind', 'go back', 'previous'],
-    'restart': ['restart', 'from the beginning', 'start over'],
-    'stop': ['stop', 'close', 'exit reader', 'quit'],
-  };
+  static const List<double> _speedPresets = [0.4, 0.5, 0.6, 0.8, 1.0, 1.25, 1.5];
 
-  // How long each continuous listen cycle runs
-  static const _listenDuration = Duration(seconds: 8);
-  static const _pauseDuration = Duration(seconds: 2);
+  // Commands shown in panel — one keyword each
+  static const _commandList = [
+    ['▶', 'play', 'Resume reading'],
+    ['⏸', 'pause', 'Pause reading'],
+    ['⏩', 'forward', 'Skip +10 seconds'],
+    ['⏪', 'back', 'Go back −10 seconds'],
+    ['⚡', 'faster', 'Increase speed'],
+    ['🐢', 'slower', 'Decrease speed'],
+    ['🔄', 'restart', 'Start from beginning'],
+    ['🛑', 'stop', 'Close reader'],
+    ['🔆', 'highlight', 'Highlight last sentence'],
+  ];
 
   @override
   void initState() {
@@ -61,151 +62,179 @@ class _ReaderPageState extends State<ReaderPage> {
     _initSpeech();
   }
 
-  // ── Init STT ─────────────────────────────────────────
+  @override
+  void dispose() {
+    _speech.stop();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  // ── Init STT ──────────────────────────────────────────
   Future<void> _initSpeech() async {
     final status = await Permission.microphone.request();
     if (!status.isGranted) return;
-
-    final available = await _speech.initialize(
-      onError: (e) {
+    final ok = await _speech.initialize(
+      onError: (_) {
         if (mounted) setState(() => _isListening = false);
-        // Restart loop if enabled and error wasn't fatal
-        if (_voiceCommandEnabled) _startListenLoop();
       },
       onStatus: (s) {
-        if (s == 'done' || s == 'notListening') {
-          if (mounted) setState(() => _isListening = false);
-          // Restart loop automatically when cycle ends
-          if (_voiceCommandEnabled && mounted) {
-            Future.delayed(const Duration(milliseconds: 300), _startListenLoop);
-          }
+        if ((s == 'done' || s == 'notListening') && mounted) {
+          setState(() => _isListening = false);
+        }
+      },
+    );
+    if (mounted) setState(() => _speechReady = ok);
+  }
+
+  // ── One-shot listen ────────────────────────────────────
+  // Pauses TTS, listens, executes command, then the command
+  // itself decides whether to resume or not.
+  Future<void> _listenOnce() async {
+    if (!_speechReady || _isListening) return;
+
+    final tts = context.read<TtsService>();
+    final locale = context.read<LanguageProvider>().ttsLocale;
+
+    // Pause TTS so mic hears clearly
+    final wasPlaying = tts.isPlaying;
+    if (wasPlaying) {
+      await tts.togglePause(locale);
+    }
+
+    setState(() {
+      _isListening = true;
+      _commandFeedback = 'Listening...';
+    });
+
+    bool commandHandled = false;
+
+    await _speech.listen(
+      localeId: 'en_US',
+      listenFor: const Duration(seconds: 20),
+      pauseFor: const Duration(seconds: 10),
+      partialResults: true,
+      onResult: (result) {
+        if (commandHandled) return;
+        
+        final words = result.recognizedWords.toLowerCase().trim();
+        
+        // We evaluate _has inside onResult to check if we should trigger
+        // early partial matches. Only trigger if a keyword matches.
+        bool hasMatch = _commandList.any((c) => words.contains(c[1])) || 
+                        ['resume', 'continue', 'start', 'go', 'wait', 'hold', 'stop reading', 
+                         'skip', 'next', 'ahead', 'backward', 'rewind', 'previous', 'speed up', 
+                         'increase speed', 'slow down', 'decrease speed', 'start over', 'beginning', 
+                         'exit', 'quit', 'highlight text', 'mark'].any((k) => words.contains(k));
+
+        if (hasMatch) {
+          commandHandled = true;
+          _speech.stop(); // Stop listening as soon as we got a command
+          // Small delay to let hardware settle
+          Future.delayed(const Duration(milliseconds: 100), () {
+            _executeCommand(words, tts, locale, wasPlaying);
+          });
+        } else if (result.finalResult) {
+           // If we got a final result and no match was found, finalize it
+           commandHandled = true;
+           _executeCommand(words, tts, locale, wasPlaying);
         }
       },
     );
 
-    if (mounted) {
-      setState(() => _voiceCommandReady = available);
-    }
-  }
-
-  // ── Continuous listen loop ─────────────────────────────
-  // This runs a new listen cycle every time the previous one ends.
-  // TTS keeps playing — we do NOT pause it for listening.
-  // The mic picks up speech even while TTS is playing on most devices.
-  Future<void> _startListenLoop() async {
-    if (!_voiceCommandEnabled || !_voiceCommandReady || !mounted) return;
-    if (_isListening) return; // already listening
-
-    setState(() => _isListening = true);
-
-    try {
-      await _speech.listen(
-        localeId: 'en_US',
-        onResult: (result) {
-          if (result.finalResult && result.recognizedWords.isNotEmpty) {
-            final words = result.recognizedWords.toLowerCase().trim();
-            if (mounted) setState(() => _lastCommand = '"$words"');
-            final tts = context.read<TtsService>();
-            final locale = context.read<LanguageProvider>().ttsLocale;
-            _handleCommand(words, tts, locale);
-          }
-        },
-        listenFor: _listenDuration,
-        pauseFor: _pauseDuration,
-        cancelOnError: false,
-        partialResults: false,
-      );
-    } catch (_) {
-      if (mounted) setState(() => _isListening = false);
-    }
-  }
-
-  // ── Toggle voice command mode on/off ──────────────────
-  Future<void> _toggleVoiceMode() async {
-    if (!_voiceCommandReady) {
-      await _initSpeech();
-      if (!_voiceCommandReady) return;
-    }
-
-    if (_voiceCommandEnabled) {
-      // Turn OFF
-      await _speech.stop();
+    // After listen window closes, restore if no command was heard
+    await Future.delayed(const Duration(milliseconds: 300));
+    if (!commandHandled && mounted) {
       setState(() {
-        _voiceCommandEnabled = false;
         _isListening = false;
-        _lastCommand = '';
+        _commandFeedback = 'Nothing heard';
       });
-    } else {
-      // Turn ON
-      setState(() {
-        _voiceCommandEnabled = true;
-        _lastCommand = 'Listening for commands...';
-      });
-      _startListenLoop();
-    }
-  }
-
-  // ── Handle recognised command ─────────────────────────
-  void _handleCommand(String words, TtsService tts, String locale) {
-    String? matched;
-    outer:
-    for (final entry in _commands.entries) {
-      for (final kw in entry.value) {
-        if (words.contains(kw)) {
-          matched = entry.key;
-          break outer;
-        }
+      // Restore playback if we paused it
+      if (wasPlaying && !tts.isPlaying) {
+        await tts.togglePause(locale);
       }
     }
+  }
 
-    if (matched == null) {
-      if (mounted) setState(() => _lastCommand = '❓ Not recognised');
-      return;
-    }
+  void _executeCommand(
+    String words,
+    TtsService tts,
+    String locale,
+    bool wasPlaying,
+  ) {
+    if (!mounted) return;
 
-    switch (matched) {
-      case 'pause':
-        if (tts.isPlaying) tts.togglePause(locale);
-        if (mounted) setState(() => _lastCommand = '⏸ Paused');
-        break;
-      case 'play':
+    String feedback = '❓ Not recognised';
+    VoidCallback? action;
+
+    if (_has(words, ['play', 'resume', 'continue', 'start', 'go'])) {
+      feedback = '▶ Playing';
+      action = () {
         if (!tts.isPlaying) tts.togglePause(locale);
-        if (mounted) setState(() => _lastCommand = '▶ Playing');
-        break;
-      case 'faster':
+      };
+    } else if (_has(words, ['pause', 'stop reading', 'wait', 'hold'])) {
+      feedback = '⏸ Paused';
+      action = () {
+        /* stay paused, don't resume */
+      };
+    } else if (_has(words, ['forward', 'skip', 'next', 'ahead'])) {
+      feedback = '⏩ +10 seconds';
+      action = () => tts.seekForward(10, locale);
+    } else if (_has(words, ['back', 'backward', 'rewind', 'previous'])) {
+      feedback = '⏪ −10 seconds';
+      action = () => tts.seekBackward(10, locale);
+    } else if (_has(words, ['faster', 'speed up', 'increase speed'])) {
+      feedback = '⚡ Speed up';
+      action = () {
         tts.setRate((tts.speechRate + 0.25).clamp(0.5, 2.0), locale);
-        if (mounted)
-          setState(
-            () => _lastCommand =
-                '⚡ Speed up → ${(tts.speechRate).toStringAsFixed(2)}x',
-          );
-        break;
-      case 'slower':
+        if (wasPlaying && !tts.isPlaying) tts.togglePause(locale);
+      };
+    } else if (_has(words, ['slower', 'slow down', 'decrease speed'])) {
+      feedback = '🐢 Slower';
+      action = () {
         tts.setRate((tts.speechRate - 0.25).clamp(0.5, 2.0), locale);
-        if (mounted)
-          setState(
-            () => _lastCommand =
-                '🐢 Slower → ${(tts.speechRate).toStringAsFixed(2)}x',
-          );
-        break;
-      case 'forward':
-        tts.seekForward(10, locale);
-        if (mounted) setState(() => _lastCommand = '⏩ +10 seconds');
-        break;
-      case 'backward':
-        tts.seekBackward(10, locale);
-        if (mounted) setState(() => _lastCommand = '⏪ −10 seconds');
-        break;
-      case 'restart':
-        tts.restart(locale);
-        if (mounted) setState(() => _lastCommand = '🔄 Restarted');
-        break;
-      case 'stop':
+        if (wasPlaying && !tts.isPlaying) tts.togglePause(locale);
+      };
+    } else if (_has(words, ['restart', 'start over', 'beginning'])) {
+      feedback = '🔄 Restarted';
+      action = () => tts.restart(locale);
+    } else if (_has(words, ['stop', 'close', 'exit', 'quit'])) {
+      feedback = '🛑 Stopped';
+      action = () {
         tts.stop();
         if (mounted) Navigator.pop(context);
-        break;
+      };
+    } else if (_has(words, [
+      'highlight',
+      'highlight text',
+      'mark',
+      'mark text',
+    ])) {
+      feedback = '🔆 Sentence highlighted';
+      action = () {
+        // Pin the last known sentence boundaries
+        setState(() {
+          _hasPinnedHighlight = true;
+          _pinnedStart = tts.sentenceStart;
+          _pinnedEnd = tts.sentenceEnd;
+        });
+        // Resume reading
+        if (wasPlaying && !tts.isPlaying) tts.togglePause(locale);
+      };
+    } else {
+      // Unknown command — restore playback
+      if (wasPlaying && !tts.isPlaying) tts.togglePause(locale);
     }
+
+    setState(() {
+      _isListening = false;
+      _commandFeedback = feedback;
+    });
+
+    action?.call();
   }
+
+  bool _has(String words, List<String> keywords) =>
+      keywords.any((k) => words.contains(k));
 
   // ── Helpers ───────────────────────────────────────────
   String _flagFromLocale(String locale) {
@@ -222,11 +251,12 @@ class _ReaderPageState extends State<ReaderPage> {
   }
 
   String _speedLabel(double rate) {
-    if (rate <= 0.8) return 'Slow';
-    if (rate <= 1.0) return 'Normal';
-    if (rate <= 1.3) return 'Fast';
-    if (rate <= 1.6) return 'Very Fast';
-    return 'Ultra Fast';
+    if (rate <= 0.45) return 'Very Slow';
+    if (rate <= 0.55) return 'Normal';
+    if (rate <= 0.85) return 'Fast';
+    if (rate <= 1.1) return 'Very Fast';
+    if (rate <= 1.4) return 'Ultra Fast';
+    return 'Insane';
   }
 
   Widget _circleButton({
@@ -248,22 +278,28 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Highlighted text ──────────────────────────────────
+  // ── Sentence highlight ────────────────────────────────
   Widget _buildHighlightedText(TtsService tts) {
     final text = widget.content;
     if (text.isEmpty) {
       return const Text(
-        "No text content available for this file.",
+        'No text content available for this file.',
         style: TextStyle(fontSize: 16, height: 1.8, color: Colors.black54),
       );
     }
 
-    final wStart = tts.wordStart.clamp(0, text.length);
-    final wEnd = tts.wordEnd.clamp(0, text.length);
-    final sStart = tts.sentenceStart.clamp(0, text.length);
-    final sEnd = tts.sentenceEnd.clamp(0, text.length);
+    // Use pinned highlight if user triggered it, else live sentence
+    final liveSStart = tts.sentenceStart.clamp(0, text.length);
+    final liveSEnd = tts.sentenceEnd.clamp(liveSStart, text.length);
 
-    if (wStart >= text.length || wStart >= wEnd) {
+    final sStart = _hasPinnedHighlight
+        ? _pinnedStart.clamp(0, text.length)
+        : liveSStart;
+    final sEnd = _hasPinnedHighlight
+        ? _pinnedEnd.clamp(sStart, text.length)
+        : liveSEnd;
+
+    if (sStart >= sEnd) {
       return Text(
         text,
         style: const TextStyle(
@@ -274,46 +310,6 @@ class _ReaderPageState extends State<ReaderPage> {
       );
     }
 
-    final List<TextSpan> spans = [];
-    if (sStart > 0) spans.add(TextSpan(text: text.substring(0, sStart)));
-    if (sStart < sEnd) {
-      if (sStart < wStart) {
-        spans.add(
-          TextSpan(
-            text: text.substring(sStart, wStart),
-            style: const TextStyle(
-              backgroundColor: Color(0xFFEEF3FF),
-              color: Colors.black87,
-            ),
-          ),
-        );
-      }
-      if (wStart < wEnd) {
-        spans.add(
-          TextSpan(
-            text: text.substring(wStart, wEnd),
-            style: const TextStyle(
-              backgroundColor: Color(0xFFB3C8FF),
-              fontWeight: FontWeight.bold,
-              color: Colors.black,
-            ),
-          ),
-        );
-      }
-      if (wEnd < sEnd) {
-        spans.add(
-          TextSpan(
-            text: text.substring(wEnd, sEnd),
-            style: const TextStyle(
-              backgroundColor: Color(0xFFEEF3FF),
-              color: Colors.black87,
-            ),
-          ),
-        );
-      }
-    }
-    if (sEnd < text.length) spans.add(TextSpan(text: text.substring(sEnd)));
-
     return RichText(
       text: TextSpan(
         style: const TextStyle(
@@ -321,24 +317,29 @@ class _ReaderPageState extends State<ReaderPage> {
           height: 1.8,
           color: Colors.black87,
         ),
-        children: spans,
+        children: [
+          if (sStart > 0) TextSpan(text: text.substring(0, sStart)),
+
+          // Highlighted sentence — yellow for live, amber for pinned
+          TextSpan(
+            text: text.substring(sStart, sEnd),
+            style: TextStyle(
+              backgroundColor: _hasPinnedHighlight
+                  ? const Color(0xFFFFC107) // amber = pinned
+                  : const Color(0xFFFFE066), // yellow = live
+              color: Colors.black,
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+
+          if (sEnd < text.length) TextSpan(text: text.substring(sEnd)),
+        ],
       ),
     );
   }
 
-  // ── Commands reference panel ───────────────────────────
+  // ── Commands panel ─────────────────────────────────────
   Widget _buildCommandsPanel() {
-    const cmds = [
-      ['▶  play / resume / continue', 'Resume reading'],
-      ['⏸  pause / hold on / wait', 'Pause reading'],
-      ['⏩  forward / skip', '+10 seconds'],
-      ['⏪  back / rewind', '−10 seconds'],
-      ['⚡  faster / speed up', 'Increase speed'],
-      ['🐢  slower / slow down', 'Decrease speed'],
-      ['🔄  restart / start over', 'From beginning'],
-      ['🛑  stop / exit reader', 'Close reader'],
-    ];
-
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
@@ -351,11 +352,7 @@ class _ReaderPageState extends State<ReaderPage> {
         children: [
           Row(
             children: [
-              const Icon(
-                Icons.record_voice_over,
-                color: Color(0xFFD4B96A),
-                size: 14,
-              ),
+              const Icon(Icons.mic, color: Color(0xFFD4B96A), size: 14),
               const SizedBox(width: 6),
               const Text(
                 'Voice Commands',
@@ -373,26 +370,26 @@ class _ReaderPageState extends State<ReaderPage> {
             ],
           ),
           const SizedBox(height: 8),
-          ...cmds.map(
+          ..._commandList.map(
             (c) => Padding(
               padding: const EdgeInsets.only(bottom: 4),
               child: Row(
                 children: [
-                  SizedBox(
-                    width: 190,
+                  Text('${c[0]}  ', style: const TextStyle(fontSize: 12)),
+                  // Just ONE keyword shown
+                  Expanded(
                     child: Text(
-                      c[0],
+                      c[1], // single keyword only
                       style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 11,
+                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ),
-                  Expanded(
-                    child: Text(
-                      c[1],
-                      style: TextStyle(color: Colors.grey[500], fontSize: 10),
-                    ),
+                  Text(
+                    c[2],
+                    style: TextStyle(color: Colors.grey[500], fontSize: 10),
                   ),
                 ],
               ),
@@ -403,42 +400,33 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Voice command status bar ───────────────────────────
-  Widget _buildVoiceBar() {
+  // ── Mic bar ────────────────────────────────────────────
+  Widget _buildMicBar() {
     return GestureDetector(
-      onTap: _toggleVoiceMode,
+      onTap: _listenOnce,
       child: Container(
         margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
-          color: _voiceCommandEnabled
-              ? const Color(0xFFD4B96A).withOpacity(0.15)
-              : Colors.grey[200],
+          color: _isListening ? Colors.red.withOpacity(0.12) : Colors.grey[200],
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: _voiceCommandEnabled
-                ? const Color(0xFFD4B96A)
-                : Colors.transparent,
+            color: _isListening ? Colors.red : Colors.transparent,
             width: 1.5,
           ),
         ),
         child: Row(
           children: [
-            // Animated mic icon
             AnimatedContainer(
-              duration: const Duration(milliseconds: 300),
+              duration: const Duration(milliseconds: 200),
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: _voiceCommandEnabled
-                    ? (_isListening ? Colors.red : const Color(0xFFD4B96A))
-                    : Colors.grey[800],
+                color: _isListening ? Colors.red : Colors.grey[800],
                 shape: BoxShape.circle,
               ),
               child: Icon(
-                _voiceCommandEnabled
-                    ? (_isListening ? Icons.graphic_eq : Icons.mic)
-                    : Icons.mic_none,
+                _isListening ? Icons.graphic_eq : Icons.mic,
                 color: Colors.white,
                 size: 20,
               ),
@@ -449,32 +437,25 @@ class _ReaderPageState extends State<ReaderPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    _voiceCommandEnabled
-                        ? (_isListening ? 'Listening...' : 'Voice commands ON')
-                        : 'Tap to enable voice commands',
+                    _isListening ? 'Listening...' : 'Tap to speak a command',
                     style: TextStyle(
                       color: Colors.grey[800],
                       fontWeight: FontWeight.w600,
                       fontSize: 12,
                     ),
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    _lastCommand.isEmpty
-                        ? 'Say a command while reading'
-                        : _lastCommand,
-                    style: TextStyle(
-                      color: _lastCommand.isEmpty
-                          ? Colors.grey[400]
-                          : Colors.grey[700],
-                      fontSize: 11,
+                  if (_commandFeedback.isNotEmpty) ...[
+                    const SizedBox(height: 2),
+                    Text(
+                      _commandFeedback,
+                      style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                  ],
                 ],
               ),
             ),
-            // Show commands list toggle
+            // Toggle commands panel
             GestureDetector(
               onTap: () =>
                   setState(() => _showCommandsPanel = !_showCommandsPanel),
@@ -499,7 +480,7 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Speed panel ───────────────────────────────────────
+  // ── Speed panel ────────────────────────────────────────
   Widget _buildSpeedPanel(TtsService tts, String locale) {
     final rate = tts.speechRate;
     final wordCount = widget.content.split(RegExp(r'\s+')).length;
@@ -597,6 +578,7 @@ class _ReaderPageState extends State<ReaderPage> {
             ),
           ),
           const SizedBox(height: 16),
+          // Auto speed toggle
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
@@ -638,7 +620,7 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Playback bar ──────────────────────────────────────
+  // ── Playback bar ───────────────────────────────────────
   Widget _buildPlaybackBar(TtsService tts, String locale) {
     final flag = _flagFromLocale(locale);
     final rate = tts.speechRate;
@@ -654,86 +636,77 @@ class _ReaderPageState extends State<ReaderPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          // Voice flag — change voice
-          Semantics(
-            label: 'Change voice',
-            child: GestureDetector(
-              onTap: () => tts.showVoicePicker(context),
-              child: Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: Colors.grey[800],
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(flag, style: const TextStyle(fontSize: 26)),
-                ),
+          // Voice picker
+          GestureDetector(
+            onTap: () => tts.showVoicePicker(context),
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: Colors.grey[800],
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(flag, style: const TextStyle(fontSize: 26)),
               ),
             ),
           ),
 
-          // Seek back 10s — ALWAYS works regardless of voice mode
-          Semantics(
-            label: 'Go back 10 seconds',
-            child: GestureDetector(
-              onTap: () => tts.seekBackward(10, locale),
-              child: Icon(Icons.replay_10, color: Colors.grey[300], size: 34),
-            ),
+          // Seek back 10s
+          GestureDetector(
+            onTap: () => tts.seekBackward(10, locale),
+            child: Icon(Icons.replay_10, color: Colors.grey[300], size: 34),
           ),
 
-          // Play / Pause — ALWAYS works
-          Semantics(
-            label: tts.isPlaying ? 'Pause' : 'Play',
-            child: GestureDetector(
-              onTap: () => tts.togglePause(locale),
-              child: Container(
-                width: 64,
-                height: 64,
-                decoration: const BoxDecoration(
-                  color: Color(0xFFD4B96A),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(
-                  tts.isPlaying ? Icons.pause : Icons.play_arrow,
-                  color: Colors.black,
-                  size: 34,
-                ),
+          // Play / Pause — direct TTS toggle, never blocked
+          GestureDetector(
+            onTap: () {
+              // Clear pinned highlight when user manually resumes
+              if (!tts.isPlaying && _hasPinnedHighlight) {
+                setState(() => _hasPinnedHighlight = false);
+              }
+              tts.togglePause(locale);
+            },
+            child: Container(
+              width: 64,
+              height: 64,
+              decoration: const BoxDecoration(
+                color: Color(0xFFD4B96A),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(
+                tts.isPlaying ? Icons.pause : Icons.play_arrow,
+                color: Colors.black,
+                size: 34,
               ),
             ),
           ),
 
-          // Seek forward 10s — ALWAYS works
-          Semantics(
-            label: 'Skip forward 10 seconds',
-            child: GestureDetector(
-              onTap: () => tts.seekForward(10, locale),
-              child: Icon(Icons.forward_10, color: Colors.grey[300], size: 34),
-            ),
+          // Seek forward 10s
+          GestureDetector(
+            onTap: () => tts.seekForward(10, locale),
+            child: Icon(Icons.forward_10, color: Colors.grey[300], size: 34),
           ),
 
           // Speed badge
-          Semantics(
-            label: 'Speed ${rate.toStringAsFixed(2)}x, tap to change',
-            child: GestureDetector(
-              onTap: () => setState(() => _showSpeedPanel = !_showSpeedPanel),
-              child: Container(
-                width: 52,
-                height: 52,
-                decoration: BoxDecoration(
-                  color: _showSpeedPanel
-                      ? const Color(0xFFD4B96A)
-                      : Colors.grey[800],
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: Text(
-                    rate.toStringAsFixed(2),
-                    style: TextStyle(
-                      color: _showSpeedPanel ? Colors.black : Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
+          GestureDetector(
+            onTap: () => setState(() => _showSpeedPanel = !_showSpeedPanel),
+            child: Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: _showSpeedPanel
+                    ? const Color(0xFFD4B96A)
+                    : Colors.grey[800],
+                shape: BoxShape.circle,
+              ),
+              child: Center(
+                child: Text(
+                  rate.toStringAsFixed(2),
+                  style: TextStyle(
+                    color: _showSpeedPanel ? Colors.black : Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
                   ),
                 ),
               ),
@@ -742,13 +715,6 @@ class _ReaderPageState extends State<ReaderPage> {
         ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _speech.stop();
-    _scrollController.dispose();
-    super.dispose();
   }
 
   @override
@@ -766,12 +732,9 @@ class _ReaderPageState extends State<ReaderPage> {
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
                 children: [
-                  Semantics(
-                    label: 'Go back',
-                    child: GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: const Icon(Icons.keyboard_arrow_down, size: 32),
-                    ),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: const Icon(Icons.keyboard_arrow_down, size: 32),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -784,19 +747,12 @@ class _ReaderPageState extends State<ReaderPage> {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  Semantics(
-                    label: 'Stop reading and close',
-                    child: GestureDetector(
-                      onTap: () async {
-                        await tts.stop();
-                        if (context.mounted) Navigator.pop(context);
-                      },
-                      child: Icon(
-                        Icons.close,
-                        color: Colors.grey[700],
-                        size: 24,
-                      ),
-                    ),
+                  GestureDetector(
+                    onTap: () async {
+                      await tts.stop();
+                      if (context.mounted) Navigator.pop(context);
+                    },
+                    child: Icon(Icons.close, color: Colors.grey[700], size: 24),
                   ),
                 ],
               ),
@@ -821,17 +777,17 @@ class _ReaderPageState extends State<ReaderPage> {
               ),
             ),
 
-            // ── Commands reference (shown by default) ─────
+            // ── Commands panel (default visible) ──────────
             if (_showCommandsPanel) _buildCommandsPanel(),
 
-            // ── Voice command status bar ──────────────────
-            _buildVoiceBar(),
+            // ── Mic bar ───────────────────────────────────
+            _buildMicBar(),
 
             // ── Speed panel (animated) ────────────────────
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 220),
-              transitionBuilder: (child, animation) => SizeTransition(
-                sizeFactor: animation,
+              transitionBuilder: (child, anim) => SizeTransition(
+                sizeFactor: anim,
                 axisAlignment: 1.0,
                 child: child,
               ),

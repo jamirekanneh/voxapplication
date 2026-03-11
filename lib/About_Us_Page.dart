@@ -1,139 +1,84 @@
 import 'package:flutter/material.dart';
 
-class AboutUsPage extends StatefulWidget {
+class AboutUsPage extends StatelessWidget {
   const AboutUsPage({super.key});
 
-  @override
-  State<AboutUsPage> createState() => _AboutUsPageState();
-}
-
-class _AboutUsPageState extends State<AboutUsPage>
-    with SingleTickerProviderStateMixin {
-  // ── VOX Color Palette (matches menu + contact pages) ──────────────
-  static const Color primaryGold = Color(0xFFD4B96A); // header gold
-  static const Color darkGold = Color(0xFFB89A45);
-  static const Color creamBg = Color(0xFFF3E5AB); // menu bg
-  static const Color sectionBg1 = Color(0xFFF2EDE0); // light warm cream
-  static const Color sectionBg2 = Color(0xFFF7F3EA); // slightly lighter
+  static const Color primaryGold = Color(0xFFD4B96A);
+  static const Color creamBg = Color(0xFFF3E5AB);
+  static const Color cardGrey = Color(0xFFE8E8E8);
   static const Color darkText = Color(0xFF1A1A1A);
   static const Color bodyText = Color(0xFF444433);
-  static const Color mutedText = Color(0xFF888877);
-
-  // Board of Directors
-  final List<Map<String, String>> _directors = [
-    {
-      'name': 'Abdurrahman Masduki',
-      'id': '20212609',
-      'title': 'Team Leader',
-      'role':
-          'Overall coordination\nBackend command-execution logic and flow of the system.',
-      'initials': 'AM',
-    },
-    {
-      'name': 'Shaheer Ahmed Farooqi',
-      'id': '20224848',
-      'title': '',
-      'role':
-          'Dashboard development\nViewer of system logs and real-time feedback interface.',
-      'initials': 'SA',
-    },
-    {
-      'name': 'Jamire M. Kanneh',
-      'id': '20213799',
-      'title': '',
-      'role':
-          'Development of voice interface UI.\nLanguages: Dart, JavaScript, and others.',
-      'initials': 'JK',
-    },
-    {
-      'name': 'Abdubakr Idris',
-      'id': '20223372',
-      'title': '',
-      'role':
-          'Command recognition model tuning.\nVoice recognition and device operation.',
-      'initials': 'AI',
-    },
-  ];
-
-  // Testimonials
-  final List<Map<String, String>> _testimonials = [
-    {
-      'quote':
-          '"VOX is a platform that listens and invests in its users. They know that our success is their success."',
-      'name': 'FRANK LOUGHAN',
-      'role': 'VP Revenue Operations',
-      'company': 'ARC Document Solutions',
-      'initials': 'FL',
-    },
-    {
-      'quote':
-          '"Since using VOX, our team productivity has grown by over 40%. The interface is intuitive and powerful."',
-      'name': 'SARAH MITCHELL',
-      'role': 'Head of Marketing',
-      'company': 'Brightwave Inc.',
-      'initials': 'SM',
-    },
-    {
-      'quote':
-          '"VOX transformed how we manage customer relationships. We would not go back to any other tool."',
-      'name': 'JAMES OKORO',
-      'role': 'CEO',
-      'company': 'Nexus Retail Group',
-      'initials': 'JO',
-    },
-    {
-      'quote':
-          '"The onboarding was seamless and the support team is world-class. Highly recommend VOX to every business."',
-      'name': 'LINDA VOSS',
-      'role': 'Operations Director',
-      'company': 'Summit Logistics',
-      'initials': 'LV',
-    },
-  ];
-
-  int _currentTestimonial = 0;
-  late AnimationController _fadeCtrl;
-  late Animation<double> _fadeAnim;
-
-  @override
-  void initState() {
-    super.initState();
-    _fadeCtrl = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 500),
-    );
-    _fadeAnim = CurvedAnimation(parent: _fadeCtrl, curve: Curves.easeOut);
-    _fadeCtrl.forward();
-  }
-
-  @override
-  void dispose() {
-    _fadeCtrl.dispose();
-    super.dispose();
-  }
-
-  void _changeTestimonial(int index) {
-    _fadeCtrl.reset();
-    setState(() => _currentTestimonial = index);
-    _fadeCtrl.forward();
-  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: sectionBg1,
+      backgroundColor: creamBg,
       body: Column(
         children: [
           _buildHeader(context),
           Expanded(
             child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _buildHeroSection(),
-                  _buildBoardSection(),
-                  _buildMissionSection(),
-                  _buildStorySection(),
-                  _buildTestimonialsSection(),
+                  // ── Developers ──────────────────────────
+                  _sectionLabel('Developers'),
+                  const SizedBox(height: 12),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    clipBehavior: Clip.none,
+                    child: Row(
+                      children: [
+                        _memberCard(
+                          1,
+                          'Abdurrahman Masduki',
+                          '20212609',
+                          'Technical Lead / Group Leader',
+                          'Flutter Project Lead & Final Decision Maker',
+                          isLeader: true,
+                        ),
+                        const SizedBox(width: 14),
+                        _memberCard(
+                          2,
+                          'Shaheer Ahmed Farooqi',
+                          '20224848',
+                          'Voice & NLP Specialist',
+                          'AI Integration & Speech Logic',
+                        ),
+                        const SizedBox(width: 14),
+                        _memberCard(
+                          3,
+                          'Jamire M. Kanneh',
+                          '20213799',
+                          'Backend Infrastructure Lead',
+                          'Firebase Cloud Specialist',
+                        ),
+                        const SizedBox(width: 14),
+                        _memberCard(
+                          4,
+                          'Abdubakr Idris',
+                          '20223372',
+                          'UX/UI Interaction Designer',
+                          'Visual Feedback & Animations',
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 28),
+
+                  // ── Supervisor ──────────────────────────
+                  _sectionLabel('Supervisor'),
+                  const SizedBox(height: 12),
+                  _supervisorCard(),
+
+                  const SizedBox(height: 28),
+
+                  // ── About the App ───────────────────────
+                  _sectionLabel('About the App'),
+                  const SizedBox(height: 12),
+                  _aboutCard(),
                 ],
               ),
             ),
@@ -143,7 +88,7 @@ class _AboutUsPageState extends State<AboutUsPage>
     );
   }
 
-  // ── Header ─────────────────────────────────────────────────────────
+  // ── Header ─────────────────────────────────────────────
   Widget _buildHeader(BuildContext context) {
     return Container(
       width: double.infinity,
@@ -176,11 +121,11 @@ class _AboutUsPageState extends State<AboutUsPage>
             ),
           ),
           const SizedBox(width: 14),
-          Expanded(
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'About Us',
                   style: TextStyle(
                     fontSize: 20,
@@ -190,350 +135,380 @@ class _AboutUsPageState extends State<AboutUsPage>
                   ),
                 ),
                 Text(
-                  'We\'d love to share our story',
+                  'VOX — Voice Command Reader',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white.withOpacity(0.75),
+                    color: Colors.white70,
                     fontWeight: FontWeight.w500,
                   ),
                 ),
               ],
             ),
           ),
-          Container(width: 38, height: 38), // spacer to balance header
         ],
       ),
     );
   }
 
-  // ── Hero ───────────────────────────────────────────────────────────
-  Widget _buildHeroSection() {
-    return Container(
-      color: sectionBg1,
-      padding: const EdgeInsets.fromLTRB(24, 28, 24, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'About Us',
-            style: TextStyle(
-              fontSize: 30,
-              fontWeight: FontWeight.w900,
-              color: darkText,
-              letterSpacing: -0.5,
-              height: 1.1,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            "We are Group 1, presenting our project and providing an overview of our team, our objectives, and the purpose behind our application.",
-            style: TextStyle(fontSize: 12.5, color: bodyText, height: 1.6),
-          ),
-        ],
+  // ── Section label ───────────────────────────────────────
+  Widget _sectionLabel(String label) {
+    return Text(
+      label,
+      style: const TextStyle(
+        fontSize: 16,
+        fontWeight: FontWeight.w900,
+        color: darkText,
+        letterSpacing: -0.3,
       ),
     );
   }
 
-  // ── Board of Directors ─────────────────────────────────────────────
-  Widget _buildBoardSection() {
+  // ── Member card ─────────────────────────────────────────
+  Widget _memberCard(
+    int index,
+    String name,
+    String id,
+    String role,
+    String resp, {
+    bool isLeader = false,
+  }) {
     return Container(
-      color: sectionBg2,
-      padding: const EdgeInsets.fromLTRB(16, 28, 16, 32),
-      child: Column(
-        children: [
-          const Text(
-            'Group Members',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              color: darkText,
-              letterSpacing: -0.3,
-            ),
+      width: 290,
+      decoration: BoxDecoration(
+        color: cardGrey,
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
-          const SizedBox(height: 24),
-
-          // Stacked column of 4 wide horizontal cards
-          Column(
-            children: _directors.asMap().entries.map((entry) {
-              return Padding(
-                padding: EdgeInsets.only(
-                  bottom: entry.key < _directors.length - 1 ? 10 : 0,
+        ],
+      ),
+      child: Row(
+        children: [
+          // Number strip
+          Container(
+            width: 44,
+            height: 88,
+            decoration: BoxDecoration(
+              color: primaryGold,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(14),
+                bottomLeft: Radius.circular(14),
+              ),
+            ),
+            child: Center(
+              child: Text(
+                '0$index',
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
                 ),
-                child: _directorCard(entry.value, entry.key + 1),
-              );
-            }).toList(),
+              ),
+            ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          name,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w900,
+                            color: darkText,
+                          ),
+                        ),
+                      ),
+                      if (isLeader)
+                        Container(
+                          margin: const EdgeInsets.only(right: 12),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 7,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: primaryGold,
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: const Text(
+                            'Leader',
+                            style: TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    id,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: Colors.grey[500],
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.3,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    role,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: darkText,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    resp,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: Colors.grey[600],
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
-  Widget _directorCard(Map<String, String> director, int index) {
-    final name = director['name']!;
-    final id = director['id']!;
-    final title = director['title']!;
-    final role = director['role']!;
-
+  // ── Supervisor card ─────────────────────────────────────
+  // Deliberately different: centred layout, gold top banner,
+  // circular avatar, no number strip.
+  Widget _supervisorCard() {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.zero,
-        gradient: const LinearGradient(
-          begin: Alignment.centerLeft,
-          end: Alignment.centerRight,
-          colors: [Color(0xFFD4B96A), Color(0xFF9A7A2E)],
-        ),
+        color: cardGrey,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: primaryGold.withOpacity(0.5), width: 1.5),
         boxShadow: [
           BoxShadow(
-            color: const Color(0xFFB89A45).withOpacity(0.3),
-            blurRadius: 8,
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
             offset: const Offset(0, 3),
           ),
         ],
       ),
-      child: Stack(
-        children: [
-          // ── Top-right corner accent ──────────────────────────
-          Positioned(
-            top: 0,
-            right: 0,
-            child: Container(
-              width: 24,
-              height: 38,
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.18),
-                borderRadius: const BorderRadius.only(
-                  bottomLeft: Radius.circular(12),
-                ),
-              ),
-            ),
-          ),
-
-          // ── Number badge on left ─────────────────────────────
-          Positioned(
-            left: 0,
-            top: 0,
-            bottom: 0,
-            child: Container(
-              width: 42,
-              color: Colors.black.withOpacity(0.18),
-              child: Center(
-                child: Text(
-                  '0$index',
-                  style: const TextStyle(
-                    fontSize: 17,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // ── Text content ────────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.fromLTRB(54, 10, 36, 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Name + title badge on same row
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Flexible(
-                      child: Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                          height: 1.2,
-                        ),
-                      ),
-                    ),
-                    if (title.isNotEmpty) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.25),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          title,
-                          style: const TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                            letterSpacing: 0.2,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 3),
-                // ID
-                Text(
-                  id,
-                  style: TextStyle(
-                    fontSize: 10.5,
-                    color: Colors.white.withOpacity(0.82),
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.3,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                // Role — full multi-line
-                Text(
-                  role,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: Colors.white.withOpacity(0.78),
-                    fontWeight: FontWeight.w500,
-                    height: 1.45,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Mission ────────────────────────────────────────────────────────
-  Widget _buildMissionSection() {
-    return Container(
-      color: sectionBg1,
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Our Mission: Improve Education, blind or visually impaired people, and Productivity',
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w900,
-              color: darkText,
-              height: 1.35,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            'We were working on voice command application, which is an intelligent application that enables the user to control what is read aloud, perform certain functions, and access different forms of knowledge by merely giving commands by the mouth. The solution is innovative, as it eliminates the necessity of a manual interaction with the user as it provides a hands-free and efficient experience with digital content.',
-            style: TextStyle(fontSize: 12, color: bodyText, height: 1.6),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Story ──────────────────────────────────────────────────────────
-  Widget _buildStorySection() {
-    return Container(
-      color: sectionBg2,
-      padding: const EdgeInsets.fromLTRB(24, 24, 24, 24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'About the App',
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-              color: darkText,
-            ),
-          ),
-          const SizedBox(height: 11),
-          Text(
-            'This project focuses on the design and development of a Voice Command Mobile Application that allows users to control application features, access documents, and receive audio-based information using natural voice commands. The importance of this project comes from addressing common limitations in many existing applications, such as poor design, heavy dependence on internet connectivity, and lack of proper documentation. In addition, most current voice-enabled applications are general-purpose and do not specifically support students or users who need academic assistance.',
-            style: TextStyle(fontSize: 12, color: bodyText, height: 1.65),
-          ),
-          const SizedBox(height: 11),
-          Text(
-            'The main objective of the application is to provide a user-friendly and customizable learning tool. It enables users to upload documents, listen to content through text-to-speech, generate study summaries, create flashcards, and use personalized voice commands. A key feature of the system is the ability to work offline for certain functions, which improves accessibility and usability for students.',
-            style: TextStyle(fontSize: 12, color: bodyText, height: 1.65),
-          ),
-          const SizedBox(height: 11),
-          Text(
-            'The system is developed following the Software Development Life Cycle (SDLC) using the Agile methodology, allowing iterative development, continuous testing, and user feedback. The application uses Flutter (Dart) for cross-platform mobile development and JavaScript for backend logic. Python-based Natural Language Processing (NLP) is used for speech-to-text and summarization, while Firebase Firestore stores user data, documents, and learning materials securely. Overall, the application aims to improve learning efficiency and accessibility, especially for users with visual or physical impairments.',
-            style: TextStyle(fontSize: 12, color: bodyText, height: 1.65),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Testimonials ───────────────────────────────────────────────────
-  Widget _buildTestimonialsSection() {
-    final t = _testimonials[0]; // show only the first testimonial
-
-    return Container(
-      color: sectionBg1,
-      padding: const EdgeInsets.fromLTRB(24, 32, 24, 32),
       child: Column(
         children: [
-          const Text(
-            'Our Sincere',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 21,
-              fontWeight: FontWeight.w900,
-              color: darkText,
-              letterSpacing: -0.3,
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // Single card
+          // Gold top banner
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.fromLTRB(20, 24, 20, 20),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(
-                color: Colors.black.withOpacity(0.07),
-                width: 1,
+            padding: const EdgeInsets.symmetric(vertical: 10),
+            decoration: const BoxDecoration(
+              color: primaryGold,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+            ),
+            child: const Center(
+              child: Text(
+                'PROJECT SUPERVISOR',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w900,
+                  color: Colors.white,
+                  letterSpacing: 2.5,
+                ),
               ),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 14,
-                  offset: const Offset(0, 4),
+            ),
+          ),
+
+          // Body
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+            child: Column(
+              children: [
+                // Circular avatar
+                Container(
+                  width: 64,
+                  height: 64,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: primaryGold.withOpacity(0.15),
+                    border: Border.all(color: primaryGold, width: 2),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'NC',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                        color: primaryGold,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                const Text(
+                  'Prof. Dr. Nadire Çavuş',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
+                    color: darkText,
+                  ),
+                ),
+                const SizedBox(height: 6),
+
+                // Title pill
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: primaryGold.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: const Text(
+                    'Project Supervisor',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: primaryGold,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+
+                Divider(color: Colors.black.withOpacity(0.08)),
+                const SizedBox(height: 12),
+
+                Text(
+                  'We extend our sincere gratitude for her continuous support, guidance, and encouragement throughout this project. Her valuable insights played a major role in helping us complete this work.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: Colors.grey[600],
+                    height: 1.65,
+                  ),
                 ),
               ],
             ),
-            child: Column(
-              children: [
-                Text(
-                  'This project represents not only our effort but also the shared dedication and inspiration provided and gratitude by Prof. Dr. Nadire Çavuş for her continuous support, guidance and encouragement throughout this project. Her valuable insights and advice have played a major role in helping us complete this work. Our Assist. Dr. Oke Oluwafemi for giving us some tips for this project and Assist. Prof. Nasim Ahmedzadeh, also our Course Advisor Assoc. Dr. Sahar Ebadinezhad for helping us revising the diagrams by her guidance we leant how to draw the diagrams and make them more meaningful and clearer.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: bodyText,
-                    height: 1.7,
-                  ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ── About card ──────────────────────────────────────────
+  Widget _aboutCard() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Description
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: cardGrey,
+            borderRadius: BorderRadius.circular(14),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Voice Command Document Reader Application',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                  color: darkText,
+                  height: 1.3,
                 ),
-                const SizedBox(height: 18),
-                Divider(color: Colors.black.withOpacity(0.07)),
-                const SizedBox(height: 12),
-                const Text(
-                  'VOX',
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w900,
-                    color: darkText,
-                    letterSpacing: 3,
-                  ),
+              ),
+              const SizedBox(height: 10),
+              Text(
+                'This application is designed to assist users, especially visually impaired individuals, by allowing them to upload documents and have them read aloud using text-to-speech technology. The app also supports voice commands such as play, pause, and navigation to make the interaction hands-free. The system is developed using Flutter and Dart, and it integrates modern accessibility features to improve usability.',
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey[600],
+                  height: 1.65,
                 ),
-              ],
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 10),
+
+        // Features label
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
+          child: Text(
+            'Main Features',
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w800,
+              color: Colors.grey[700],
+            ),
+          ),
+        ),
+
+        // Feature rows
+        _featureRow('Uploading documents'),
+        const SizedBox(height: 8),
+        _featureRow('Text-to-speech reading'),
+        const SizedBox(height: 8),
+        _featureRow('Voice commands for controlling playback'),
+      ],
+    );
+  }
+
+  Widget _featureRow(String text) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      decoration: BoxDecoration(
+        color: cardGrey,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          Container(
+            width: 7,
+            height: 7,
+            decoration: const BoxDecoration(
+              color: primaryGold,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Text(
+            text,
+            style: const TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w600,
+              color: darkText,
             ),
           ),
         ],

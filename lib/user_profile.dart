@@ -32,6 +32,24 @@ class _UserProfilePageState extends State<UserProfilePage> {
   bool _googleLoading = false;
 
   @override
+  void initState() {
+    super.initState();
+    _ensureAuth();
+  }
+
+  /// Ensure we have at least an anonymous session so we can query Firestore
+  /// (Security rules require request.auth != null to read users collection)
+  Future<void> _ensureAuth() async {
+    if (FirebaseAuth.instance.currentUser == null) {
+      try {
+        await FirebaseAuth.instance.signInAnonymously();
+      } catch (e) {
+        debugPrint("Silent anon sign-in error: $e");
+      }
+    }
+  }
+
+  @override
   void dispose() {
     _nameController.dispose();
     _emailController.dispose();
@@ -1379,8 +1397,8 @@ class _GoogleButton extends StatelessWidget {
                   SizedBox(
                       width: 20,
                       height: 20,
-                      child:
-                          CustomPaint(painter: _GoogleLogoPainter())),
+                      child: Image.network(
+                          'https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/1024px-Google_%22G%22_logo.svg.png')),
                   const SizedBox(width: 12),
                   const Text("Continue with Google",
                       style: TextStyle(
@@ -1392,40 +1410,4 @@ class _GoogleButton extends StatelessWidget {
       ),
     );
   }
-}
-
-class _GoogleLogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final cx = size.width / 2;
-    final cy = size.height / 2;
-    final r = size.width / 2;
-    const colors = [
-      Color(0xFF4285F4),
-      Color(0xFF34A853),
-      Color(0xFFFBBC04),
-      Color(0xFFEA4335),
-    ];
-    final starts = [0.0, pi / 2, pi, 3 * pi / 2];
-    for (int i = 0; i < 4; i++) {
-      canvas.drawArc(
-        Rect.fromCircle(center: Offset(cx, cy), radius: r * 0.72),
-        starts[i], pi / 2, false,
-        Paint()
-          ..color = colors[i]
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = size.width * 0.18,
-      );
-    }
-    canvas.drawRect(
-      Rect.fromLTWH(
-          cx, cy - size.height * 0.1, r * 0.85, size.height * 0.2),
-      Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.fill,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_) => false;
-}
+}
