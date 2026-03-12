@@ -265,28 +265,13 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             .collection('library')
                             .doc(docId);
 
-                        // ── Soft-delete: copy to bin, then remove from library ──
-                        if (uid != null) {
-                          final snap = await libRef.get();
-                          if (snap.exists) {
-                            final data = Map<String, dynamic>.from(
-                              snap.data() as Map<String, dynamic>,
-                            );
-                            data['deletedAt'] = FieldValue.serverTimestamp();
-                            await FirebaseFirestore.instance
-                                .collection('users')
-                                .doc(uid)
-                                .collection('deleted_library')
-                                .add(data);
-                          }
-                        }
                         await libRef.delete();
-
+ 
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                '"$displayName" ${lang.t('deleted')} — restore from Menu > Deleted Files',
+                                '"$displayName" ${lang.t('deleted')}',
                               ),
                               behavior: SnackBarBehavior.floating,
                               backgroundColor: const Color(0xFF333333),

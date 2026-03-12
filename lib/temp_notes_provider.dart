@@ -29,6 +29,19 @@ class TempNotesProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  void update(String id, String title, String content) {
+    final index = _notes.indexWhere((n) => n.id == id);
+    if (index != -1) {
+      _notes[index] = TempNote(
+        id: id,
+        title: title.isNotEmpty ? title : 'Note',
+        content: content,
+        createdAt: _notes[index].createdAt, // Preserve original timestamp
+      );
+      notifyListeners();
+    }
+  }
+
   void remove(String id) {
     _notes.removeWhere((n) => n.id == id);
     notifyListeners();

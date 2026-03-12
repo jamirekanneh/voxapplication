@@ -734,33 +734,6 @@ class _MenuPageState extends State<MenuPage> {
                     ),
                   ),
 
-                  // Deleted files — only for users with a real profile
-                  _buildMenuItem(
-                    icon: Icons.restore_from_trash_rounded,
-                    title: 'Deleted Files',
-                    onTap: () {
-                      if (!_hasProfile) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              'Sign in or create a profile to access deleted files.',
-                            ),
-                            backgroundColor: Color(0xFF333333),
-                            behavior: SnackBarBehavior.floating,
-                          ),
-                        );
-                        return;
-                      }
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              DeletedFilesPage(resolvedUid: _resolvedUid),
-                        ),
-                      );
-                    },
-                  ),
-
                   // Logout — show for any user that has a verified account
                   if (_hasProfile && !_isFirebaseAnonymous) ...[
                     const SizedBox(height: 4),

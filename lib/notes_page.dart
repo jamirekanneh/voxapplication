@@ -7,6 +7,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'language_provider.dart';
 import 'temp_notes_provider.dart';
+import 'tts_service.dart';
 
 const int _kMaxTitleLength = 100;
 const int _kMaxContentLength = 5000;
@@ -23,6 +24,8 @@ class _NotesPageState extends State<NotesPage> {
   bool _isListeningTitle = false;
   bool _isListeningContent = false;
   bool _isSaving = false;
+  bool _isEditing = false;
+  String? _editingId;
 
   final TextEditingController _titleController = TextEditingController();
   final TextEditingController _contentController = TextEditingController();
@@ -54,16 +57,26 @@ class _NotesPageState extends State<NotesPage> {
   Future<void> _resolveUser() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      debugPrint('NotesPage: Resolving user... Current Auth User: ${user?.uid}');
+      debugPrint(
+        'NotesPage: Resolving user... Current Auth User: ${user?.uid}',
+      );
 
       if (user == null) {
-        if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+        if (mounted)
+          setState(() {
+            _isAnonymousUser = true;
+            _resolvedUid = null;
+          });
         return;
       }
 
       if (!user.isAnonymous) {
         debugPrint('NotesPage: Authenticated user detected.');
-        if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
+        if (mounted)
+          setState(() {
+            _isAnonymousUser = false;
+            _resolvedUid = user.uid;
+          });
         return;
       }
 
@@ -73,7 +86,11 @@ class _NotesPageState extends State<NotesPage> {
 
       if (!hasProfile) {
         debugPrint('NotesPage: Guest user (no profile).');
-        if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+        if (mounted)
+          setState(() {
+            _isAnonymousUser = true;
+            _resolvedUid = null;
+          });
         return;
       }
 
@@ -85,7 +102,11 @@ class _NotesPageState extends State<NotesPage> {
 
       if (uidDoc.exists) {
         debugPrint('NotesPage: Found user doc by UID.');
-        if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
+        if (mounted)
+          setState(() {
+            _isAnonymousUser = false;
+            _resolvedUid = user.uid;
+          });
         return;
       }
 
@@ -100,18 +121,32 @@ class _NotesPageState extends State<NotesPage> {
             .get();
 
         if (query.docs.isNotEmpty) {
-          debugPrint('NotesPage: Found user doc by email. ID: ${query.docs.first.id}');
-          if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = query.docs.first.id; });
+          debugPrint(
+            'NotesPage: Found user doc by email. ID: ${query.docs.first.id}',
+          );
+          if (mounted)
+            setState(() {
+              _isAnonymousUser = false;
+              _resolvedUid = query.docs.first.id;
+            });
           return;
         }
       }
 
       debugPrint('NotesPage: No profile found, falling back to Guest.');
       // Profile pref set but no doc found — treat as guest
-      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+      if (mounted)
+        setState(() {
+          _isAnonymousUser = true;
+          _resolvedUid = null;
+        });
     } catch (e) {
       debugPrint('NotesPage: Error in _resolveUser: $e');
-      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+      if (mounted)
+        setState(() {
+          _isAnonymousUser = true;
+          _resolvedUid = null;
+        });
     }
   }
 
@@ -123,24 +158,30 @@ class _NotesPageState extends State<NotesPage> {
     if (status.isGranted) return true;
     if (status.isPermanentlyDenied) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: const Text('Microphone permission denied. Enable it in Settings.'),
-          backgroundColor: const Color(0xFF333333),
-          behavior: SnackBarBehavior.floating,
-          action: SnackBarAction(
-            label: 'Settings',
-            textColor: const Color(0xFFD4B96A),
-            onPressed: openAppSettings,
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Microphone permission denied. Enable it in Settings.',
+            ),
+            backgroundColor: const Color(0xFF333333),
+            behavior: SnackBarBehavior.floating,
+            action: SnackBarAction(
+              label: 'Settings',
+              textColor: const Color(0xFFD4B96A),
+              onPressed: openAppSettings,
+            ),
           ),
-        ));
+        );
       }
     } else {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('Microphone permission is required to record.'),
-          backgroundColor: Color(0xFF333333),
-          behavior: SnackBarBehavior.floating,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Microphone permission is required to record.'),
+            backgroundColor: Color(0xFF333333),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
     return false;
@@ -180,7 +221,8 @@ class _NotesPageState extends State<NotesPage> {
               ? text.substring(0, _kMaxTitleLength)
               : text;
           _titleController.selection = TextSelection.fromPosition(
-              TextPosition(offset: _titleController.text.length));
+            TextPosition(offset: _titleController.text.length),
+          );
         },
         listenFor: const Duration(seconds: 10),
         pauseFor: const Duration(seconds: 3),
@@ -221,7 +263,7 @@ class _NotesPageState extends State<NotesPage> {
         localeId: langProvider.sttLocale,
         onResult: (val) {
           String newText = val.recognizedWords;
-          
+
           if (val.finalResult && newText.isNotEmpty) {
             String lastChar = newText.substring(newText.length - 1);
             if (lastChar != '.' && lastChar != '?' && lastChar != '!') {
@@ -234,7 +276,8 @@ class _NotesPageState extends State<NotesPage> {
               ? combined.substring(0, _kMaxContentLength)
               : combined;
           _contentController.selection = TextSelection.fromPosition(
-              TextPosition(offset: _contentController.text.length));
+            TextPosition(offset: _contentController.text.length),
+          );
           setState(() {});
         },
         listenFor: const Duration(minutes: 5),
@@ -253,87 +296,140 @@ class _NotesPageState extends State<NotesPage> {
     final title = rawTitle.isNotEmpty ? rawTitle : 'Note';
 
     if (rawTitle.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Please add a title before saving.'),
-        backgroundColor: Color(0xFF333333),
-        behavior: SnackBarBehavior.floating,
-        margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Please add a title before saving.'),
+          backgroundColor: Color(0xFF333333),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+        ),
+      );
       return;
     }
     if (content.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text(lang.t('add_content')),
-        backgroundColor: const Color(0xFF333333),
-        behavior: SnackBarBehavior.floating,
-        margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
-      ));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(lang.t('add_content')),
+          backgroundColor: const Color(0xFF333333),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+        ),
+      );
       return;
     }
-    if (title.length > _kMaxTitleLength || content.length > _kMaxContentLength) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-        content: Text('Note is too long. Please shorten it.'),
-        backgroundColor: Color(0xFF333333),
-        behavior: SnackBarBehavior.floating,
-        margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
-      ));
+    if (title.length > _kMaxTitleLength ||
+        content.length > _kMaxContentLength) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Note is too long. Please shorten it.'),
+          backgroundColor: Color(0xFF333333),
+          behavior: SnackBarBehavior.floating,
+          margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+        ),
+      );
       return;
     }
 
     setState(() => _isSaving = true);
 
     try {
-      if (_isAnonymousUser) {
-        // ── Guest: store in memory ──────────────────────
-        final tempNotes = context.read<TempNotesProvider>();
-        tempNotes.add(title, content);
+      if (_isEditing && _editingId != null) {
+        if (_isAnonymousUser) {
+          context.read<TempNotesProvider>().update(_editingId!, title, content);
+        } else {
+          await FirebaseFirestore.instance
+              .collection('notes')
+              .doc(_editingId)
+              .update({
+                'title': title,
+                'content': content,
+                'lastUpdated': FieldValue.serverTimestamp(),
+              });
+        }
         if (mounted) {
-          setState(() { _contentController.clear(); _titleController.clear(); });
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-            content: Text('Note saved temporarily. Create an account to keep it.'),
-            backgroundColor: Color(0xFF333333),
-            behavior: SnackBarBehavior.floating,
-            margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
-          ));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                lang.t('note_saved'),
+              ), // Or a specific 'note_updated' key if available
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: const Color(0xFF333333),
+              margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+            ),
+          );
         }
       } else {
-        // ── Logged in: save to Firestore under the Firebase auth UID ──
-        final authUid = FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid!;
-        await FirebaseFirestore.instance.collection('notes').add({
-          'userId': authUid,
-          'title': title,
-          'content': content,
-          'timestamp': FieldValue.serverTimestamp(),
-        });
-        if (mounted) {
-          setState(() { _contentController.clear(); _titleController.clear(); });
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text(lang.t('note_saved')),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: const Color(0xFF333333),
-            margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
-          ));
+        if (_isAnonymousUser) {
+          // ── Guest: store in memory ──────────────────────
+          final tempNotes = context.read<TempNotesProvider>();
+          tempNotes.add(title, content);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text(
+                  'Note saved temporarily. Create an account to keep it.',
+                ),
+                backgroundColor: Color(0xFF333333),
+                behavior: SnackBarBehavior.floating,
+                margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+              ),
+            );
+          }
+        } else {
+          // ── Logged in: save to Firestore under the Firebase auth UID ──
+          final authUid =
+              FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid!;
+          await FirebaseFirestore.instance.collection('notes').add({
+            'userId': authUid,
+            'title': title,
+            'content': content,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(lang.t('note_saved')),
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: const Color(0xFF333333),
+                margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+              ),
+            );
+          }
         }
+      }
+      if (mounted) {
+        setState(() {
+          _contentController.clear();
+          _titleController.clear();
+          _isEditing = false;
+          _editingId = null;
+        });
       }
     } on FirebaseException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.code == 'unavailable'
-              ? 'No internet. Note will sync when back online.'
-              : '${lang.t('error_saving')} ${e.message}'),
-          backgroundColor: const Color(0xFF333333),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.code == 'unavailable'
+                  ? 'No internet. Note will sync when back online.'
+                  : '${lang.t('error_saving')} ${e.message}',
+            ),
+            backgroundColor: const Color(0xFF333333),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text('${lang.t('error_saving')} $e'),
-          backgroundColor: const Color(0xFF333333),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${lang.t('error_saving')} $e'),
+            backgroundColor: const Color(0xFF333333),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          ),
+        );
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -348,13 +444,17 @@ class _NotesPageState extends State<NotesPage> {
       await FirebaseFirestore.instance.collection('notes').doc(docId).delete();
     } on FirebaseException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.code == 'unavailable'
-              ? 'Cannot delete while offline.'
-              : 'Delete failed: ${e.message}'),
-          backgroundColor: const Color(0xFF333333),
-          behavior: SnackBarBehavior.floating,
-        ));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.code == 'unavailable'
+                  ? 'Cannot delete while offline.'
+                  : 'Delete failed: ${e.message}',
+            ),
+            backgroundColor: const Color(0xFF333333),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
       }
     }
   }
@@ -364,13 +464,350 @@ class _NotesPageState extends State<NotesPage> {
   // ─────────────────────────────────────────────
   void _deleteTempNote(String id, TempNotesProvider tempNotes) {
     tempNotes.remove(id);
-    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-      content: Text('Note deleted.'),
-      behavior: SnackBarBehavior.floating,
-      backgroundColor: Color(0xFF333333),
-      margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
-    ));
+    if (_isEditing && _editingId == id) {
+      _cancelEdit();
+    }
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Note deleted.'),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: Color(0xFF333333),
+        margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+      ),
+    );
   }
+
+  // ─────────────────────────────────────────────
+  //  VIEW / EDIT NOTE
+  // ─────────────────────────────────────────────
+  void _startEditing(String id, String title, String content) {
+    setState(() {
+      _isEditing = true;
+      _editingId = id;
+      _titleController.text = title;
+      _contentController.text = content;
+    });
+    // Scroll to top to see editing fields
+    _scrollController.animateTo(
+      0,
+      duration: const Duration(milliseconds: 300),
+      curve: Curves.easeOut,
+    );
+  }
+
+  void _cancelEdit() {
+    setState(() {
+      _isEditing = false;
+      _editingId = null;
+      _titleController.clear();
+      _contentController.clear();
+    });
+  }
+
+  void _showNoteDetails(String id, String title, String content) {
+    final lang = context.read<LanguageProvider>();
+    final tts = context.read<TtsService>();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFFF3E5AB),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        // Local controllers so editing stays inside the popup
+        final popupTitleController = TextEditingController(text: title);
+        final popupContentController = TextEditingController(text: content);
+        bool isEditMode = false;
+        bool isSaving = false;
+
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Padding(
+              padding: EdgeInsets.only(
+                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+              ),
+              child: DraggableScrollableSheet(
+                initialChildSize: 0.6,
+                minChildSize: 0.4,
+                maxChildSize: 0.95,
+                expand: false,
+                builder: (_, scrollController) => Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Drag handle
+                      Center(
+                        child: Container(
+                          width: 40,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Colors.grey[400],
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      // Header row
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: isEditMode
+                                ? TextField(
+                                    controller: popupTitleController,
+                                    autofocus: true,
+                                    maxLength: _kMaxTitleLength,
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    decoration: InputDecoration(
+                                      hintText: lang.t('title_hint'),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      enabledBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      focusedBorder: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide.none,
+                                      ),
+                                      counterText: '',
+                                      filled: true,
+                                      fillColor: Colors.black.withValues(
+                                        alpha: 0.05,
+                                      ),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            horizontal: 10,
+                                            vertical: 6,
+                                          ),
+                                    ),
+                                  )
+                                : Text(
+                                    title,
+                                    style: const TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                          ),
+                          const SizedBox(width: 4),
+                          // Action buttons
+                          if (!isEditMode) ...[
+                            IconButton(
+                              icon: const Icon(
+                                Icons.volume_up_rounded,
+                                color: Colors.black87,
+                              ),
+                              onPressed: () =>
+                                  tts.play(title, content, lang.ttsLocale),
+                            ),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.edit_note_rounded,
+                                color: Colors.black87,
+                              ),
+                              onPressed: () =>
+                                  setSheetState(() => isEditMode = true),
+                            ),
+                          ] else ...[
+                            // Cancel edit
+                            IconButton(
+                              icon: const Icon(
+                                Icons.close,
+                                color: Colors.black54,
+                              ),
+                              tooltip: 'Cancel',
+                              onPressed: () {
+                                popupTitleController.text = title;
+                                popupContentController.text = content;
+                                setSheetState(() => isEditMode = false);
+                              },
+                            ),
+                            // Save edit
+                            isSaving
+                                ? const Padding(
+                                    padding: EdgeInsets.all(12),
+                                    child: SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: Colors.black,
+                                      ),
+                                    ),
+                                  )
+                                : IconButton(
+                                    icon: const Icon(
+                                      Icons.check_rounded,
+                                      color: Colors.black87,
+                                    ),
+                                    tooltip: 'Save',
+                                    onPressed: () async {
+                                      final newTitle = popupTitleController.text
+                                          .trim();
+                                      final newContent = popupContentController
+                                          .text
+                                          .trim();
+
+                                      if (newTitle.isEmpty) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          const SnackBar(
+                                            content: Text(
+                                              'Please add a title before saving.',
+                                            ),
+                                            backgroundColor: Color(0xFF333333),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                        return;
+                                      }
+                                      if (newContent.isEmpty) {
+                                        ScaffoldMessenger.of(
+                                          context,
+                                        ).showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              lang.t('add_content'),
+                                            ),
+                                            backgroundColor: const Color(
+                                              0xFF333333,
+                                            ),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                        return;
+                                      }
+
+                                      setSheetState(() => isSaving = true);
+                                      try {
+                                        if (_isAnonymousUser) {
+                                          context
+                                              .read<TempNotesProvider>()
+                                              .update(id, newTitle, newContent);
+                                        } else {
+                                          await FirebaseFirestore.instance
+                                              .collection('notes')
+                                              .doc(id)
+                                              .update({
+                                                'title': newTitle,
+                                                'content': newContent,
+                                                'lastUpdated':
+                                                    FieldValue.serverTimestamp(),
+                                              });
+                                        }
+                                        if (context.mounted) {
+                                          Navigator.pop(ctx);
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                lang.t('note_saved'),
+                                              ),
+                                              backgroundColor: const Color(
+                                                0xFF333333,
+                                              ),
+                                              behavior:
+                                                  SnackBarBehavior.floating,
+                                            ),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        setSheetState(() => isSaving = false);
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(
+                                            context,
+                                          ).showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                '${lang.t('error_saving')} $e',
+                                              ),
+                                              backgroundColor: const Color(
+                                                0xFF333333,
+                                              ),
+                                              behavior:
+                                                  SnackBarBehavior.floating,
+                                            ),
+                                          );
+                                        }
+                                      }
+                                    },
+                                  ),
+                          ],
+                        ],
+                      ),
+                      const Divider(height: 24),
+                      // Body
+                      Expanded(
+                        child: isEditMode
+                            ? TextField(
+                                controller: popupContentController,
+                                maxLines: null,
+                                expands: true,
+                                maxLength: _kMaxContentLength,
+                                textAlignVertical: TextAlignVertical.top,
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  height: 1.6,
+                                ),
+                                decoration: InputDecoration(
+                                  hintText: lang.t('content_hint'),
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(12),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  counterText: '',
+                                  filled: true,
+                                  fillColor: Colors.black.withValues(
+                                    alpha: 0.05,
+                                  ),
+                                  contentPadding: const EdgeInsets.all(12),
+                                ),
+                              )
+                            : ListView(
+                                controller: scrollController,
+                                children: [
+                                  Text(
+                                    content,
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      height: 1.6,
+                                      color: Colors.black87,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  final ScrollController _scrollController = ScrollController();
 
   // ─────────────────────────────────────────────
   //  BUILD
@@ -382,9 +819,13 @@ class _NotesPageState extends State<NotesPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF3E5AB),
       appBar: AppBar(
-        title: Text(lang.t('notes_title'),
-            style: const TextStyle(
-                color: Colors.black, fontWeight: FontWeight.bold)),
+        title: Text(
+          lang.t('notes_title'),
+          style: const TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
         backgroundColor: Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
@@ -394,267 +835,337 @@ class _NotesPageState extends State<NotesPage> {
             child: Center(
               child: Container(
                 padding: const EdgeInsets.symmetric(
-                    horizontal: 10, vertical: 4),
+                  horizontal: 10,
+                  vertical: 4,
+                ),
                 decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(20)),
-                child: Text(lang.selectedLanguage,
-                    style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.black87)),
+                  color: Colors.grey[300],
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  lang.selectedLanguage,
+                  style: const TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
               ),
             ),
           ),
         ],
       ),
-      body: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Guest banner ──────────────────────────
-                if (_isAnonymousUser) ...[
-                  Container(
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.06),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(
-                          color: Colors.black.withOpacity(0.1)),
-                    ),
-                    child: const Row(
-                      children: [
-                        Icon(Icons.info_outline,
-                            color: Colors.black54, size: 15),
-                        SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Guest mode — notes are temporary. Create an account to keep them.',
-                            style: TextStyle(
+      body: SingleChildScrollView(
+        controller: _scrollController,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ── Guest banner ──────────────────────────
+                  if (_isAnonymousUser) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.06),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: Colors.black.withValues(alpha: 0.1),
+                        ),
+                      ),
+                      child: const Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: Colors.black54,
+                            size: 15,
+                          ),
+                          SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Guest mode — notes are temporary. Create an account to keep them.',
+                              style: TextStyle(
                                 color: Colors.black54,
                                 fontSize: 11,
-                                height: 1.4),
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // ── Title field ───────────────────────────
+                  Row(
+                    children: [
+                      Expanded(
+                        child: TextField(
+                          controller: _titleController,
+                          maxLength: _kMaxTitleLength,
+                          textCapitalization: TextCapitalization.sentences,
+                          decoration: InputDecoration(
+                            hintText: _isListeningTitle
+                                ? lang.t('listening_title')
+                                : lang
+                                      .t('title_hint')
+                                      .replaceFirst('(optional)', '(required)'),
+                            counterText: '',
+                            filled: true,
+                            fillColor: _isListeningTitle
+                                ? Colors.grey[200]
+                                : Colors.white.withValues(alpha: 0.7),
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
+                            ),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(16),
+                              borderSide: BorderSide.none,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      GestureDetector(
+                        onTap: _listenForTitle,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          width: 46,
+                          height: 46,
+                          decoration: BoxDecoration(
+                            color: _isListeningTitle
+                                ? Colors.red
+                                : Colors.grey[700],
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: Icon(
+                            _isListeningTitle ? Icons.stop : Icons.mic,
+                            color: Colors.white,
+                            size: 22,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+
+                  // ── Content field ─────────────────────────
+                  Stack(
+                    children: [
+                      TextField(
+                        controller: _contentController,
+                        maxLines: 6,
+                        minLines: 4,
+                        maxLength: _kMaxContentLength,
+                        textCapitalization: TextCapitalization.sentences,
+                        onChanged: (_) => setState(() {}),
+                        decoration: InputDecoration(
+                          hintText: _isListeningContent
+                              ? '${lang.t('listening_content')} ${lang.selectedLanguage}...'
+                              : lang.t('content_hint'),
+                          counterText: '',
+                          filled: true,
+                          fillColor: _isListeningContent
+                              ? Colors.grey[200]
+                              : Colors.white.withValues(alpha: 0.7),
+                          contentPadding: const EdgeInsets.fromLTRB(
+                            16,
+                            14,
+                            56,
+                            14,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: _isListeningContent
+                                ? BorderSide(
+                                    color: Colors.grey[600]!,
+                                    width: 1.5,
+                                  )
+                                : BorderSide.none,
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: BorderSide.none,
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: BorderSide(
+                              color: Colors.grey[400]!,
+                              width: 1,
+                            ),
+                          ),
+                        ),
+                      ),
+                      Positioned(
+                        right: 8,
+                        bottom: 8,
+                        child: GestureDetector(
+                          onTap: _listenForContent,
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: _isListeningContent
+                                  ? Colors.red
+                                  : Colors.grey[700],
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              _isListeningContent ? Icons.stop : Icons.mic,
+                              color: Colors.white,
+                              size: 20,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+
+                  // ── Save & Clear buttons ──────────────────
+                  Row(
+                    children: [
+                      if (_contentController.text.isNotEmpty) ...[
+                        Expanded(
+                          flex: 1,
+                          child: OutlinedButton(
+                            onPressed: () =>
+                                setState(() => _contentController.clear()),
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.black,
+                              side: BorderSide(color: Colors.grey[400]!),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 12),
+                            ),
+                            child: Text(lang.t('clear')),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                      ],
+                      Expanded(
+                        flex: 2,
+                        child: ElevatedButton.icon(
+                          onPressed:
+                              (!_isSaving &&
+                                  _contentController.text.trim().isNotEmpty)
+                              ? () => _saveNote(lang)
+                              : null,
+                          icon: _isSaving
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: Colors.white,
+                                  ),
+                                )
+                              : const Icon(Icons.save_alt),
+                          label: Text(lang.t('save_note')),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black,
+                            foregroundColor: Colors.white,
+                            disabledBackgroundColor: Colors.grey[400],
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (_isEditing) ...[
+                    const SizedBox(height: 8),
+                    SizedBox(
+                      width: double.infinity,
+                      child: TextButton.icon(
+                        onPressed: _cancelEdit,
+                        icon: const Icon(
+                          Icons.close,
+                          size: 16,
+                          color: Colors.redAccent,
+                        ),
+                        label: const Text(
+                          'Cancel Edit',
+                          style: TextStyle(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 8),
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // ── Divider ───────────────────────────────────
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(child: Divider(color: Colors.grey[400])),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          lang.t('saved_notes'),
+                          style: TextStyle(
+                            color: Colors.grey[600],
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        // DIAGNOSTIC TAG
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _isAnonymousUser
+                                ? Colors.orange[100]
+                                : Colors.green[100],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            _isAnonymousUser ? 'GUEST' : 'USER',
+                            style: TextStyle(
+                              color: _isAnonymousUser
+                                  ? Colors.orange[800]
+                                  : Colors.green[800],
+                              fontSize: 9,
+                              fontWeight: FontWeight.bold,
+                            ),
                           ),
                         ),
                       ],
                     ),
                   ),
+                  Expanded(child: Divider(color: Colors.grey[400])),
                 ],
-
-                // ── Title field ───────────────────────────
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _titleController,
-                        maxLength: _kMaxTitleLength,
-                        textCapitalization: TextCapitalization.sentences,
-                        decoration: InputDecoration(
-                          hintText: _isListeningTitle
-                              ? lang.t('listening_title')
-                              : lang.t('title_hint').replaceFirst(
-                                  '(optional)', '(required)'),
-                          counterText: '',
-                          filled: true,
-                          fillColor: _isListeningTitle
-                              ? Colors.grey[200]
-                              : Colors.white.withOpacity(0.7),
-                          contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(16),
-                            borderSide: BorderSide.none,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: _listenForTitle,
-                      child: AnimatedContainer(
-                        duration: const Duration(milliseconds: 200),
-                        width: 46, height: 46,
-                        decoration: BoxDecoration(
-                          color: _isListeningTitle
-                              ? Colors.red
-                              : Colors.grey[700],
-                          borderRadius: BorderRadius.circular(14),
-                        ),
-                        child: Icon(
-                            _isListeningTitle ? Icons.stop : Icons.mic,
-                            color: Colors.white, size: 22),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-
-                // ── Content field ─────────────────────────
-                Stack(
-                  children: [
-                    TextField(
-                      controller: _contentController,
-                      maxLines: 6,
-                      minLines: 4,
-                      maxLength: _kMaxContentLength,
-                      textCapitalization: TextCapitalization.sentences,
-                      onChanged: (_) => setState(() {}),
-                      decoration: InputDecoration(
-                        hintText: _isListeningContent
-                            ? '${lang.t('listening_content')} ${lang.selectedLanguage}...'
-                            : lang.t('content_hint'),
-                        counterText: '',
-                        filled: true,
-                        fillColor: _isListeningContent
-                            ? Colors.grey[200]
-                            : Colors.white.withOpacity(0.7),
-                        contentPadding: const EdgeInsets.fromLTRB(
-                            16, 14, 56, 14),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: _isListeningContent
-                              ? BorderSide(
-                                  color: Colors.grey[600]!, width: 1.5)
-                              : BorderSide.none,
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide.none,
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide(
-                              color: Colors.grey[400]!, width: 1),
-                        ),
-                      ),
-                    ),
-                    Positioned(
-                      right: 8, bottom: 8,
-                      child: GestureDetector(
-                        onTap: _listenForContent,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 38, height: 38,
-                          decoration: BoxDecoration(
-                            color: _isListeningContent
-                                ? Colors.red
-                                : Colors.grey[700],
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Icon(
-                              _isListeningContent ? Icons.stop : Icons.mic,
-                              color: Colors.white, size: 20),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-
-                // ── Save & Clear buttons ──────────────────
-                Row(
-                  children: [
-                    if (_contentController.text.isNotEmpty) ...[
-                      Expanded(
-                        flex: 1,
-                        child: OutlinedButton(
-                          onPressed: () =>
-                              setState(() => _contentController.clear()),
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.black,
-                            side: BorderSide(color: Colors.grey[400]!),
-                            shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30)),
-                            padding:
-                                const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                          child: Text(lang.t('clear')),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                    ],
-                    Expanded(
-                      flex: 2,
-                      child: ElevatedButton.icon(
-                        onPressed: (!_isSaving &&
-                                _contentController.text.trim().isNotEmpty)
-                            ? () => _saveNote(lang)
-                            : null,
-                        icon: _isSaving
-                            ? const SizedBox(
-                                width: 16, height: 16,
-                                child: CircularProgressIndicator(
-                                    strokeWidth: 2, color: Colors.white))
-                            : const Icon(Icons.save_alt),
-                        label: Text(lang.t('save_note')),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.black,
-                          foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey[400],
-                          shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30)),
-                          padding:
-                              const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+              ),
             ),
-          ),
 
-          // ── Divider ───────────────────────────────────
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Row(
-              children: [
-                Expanded(child: Divider(color: Colors.grey[400])),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 10),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(lang.t('saved_notes'),
-                          style: TextStyle(
-                              color: Colors.grey[600],
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(width: 8),
-                      // DIAGNOSTIC TAG
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _isAnonymousUser ? Colors.orange[100] : Colors.green[100],
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          _isAnonymousUser ? 'GUEST' : 'USER',
-                          style: TextStyle(
-                            color: _isAnonymousUser ? Colors.orange[800] : Colors.green[800],
-                            fontSize: 9,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(child: Divider(color: Colors.grey[400])),
-              ],
-            ),
-          ),
-
-          // ── Notes list ────────────────────────────────
-          Expanded(
-            child: Consumer<TempNotesProvider>(
+            // ── Notes list ────────────────────────────────
+            Consumer<TempNotesProvider>(
               builder: (context, tempNotes, _) {
-
                 // ── Guest: in-memory notes ───────────────
                 if (_isAnonymousUser) {
                   if (tempNotes.notes.isEmpty) {
@@ -662,64 +1173,96 @@ class _NotesPageState extends State<NotesPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.note_outlined,
-                              color: Colors.grey[400], size: 44),
+                          Icon(
+                            Icons.note_outlined,
+                            color: Colors.grey[400],
+                            size: 44,
+                          ),
                           const SizedBox(height: 12),
-                          Text(lang.t('no_notes'),
-                              style: TextStyle(color: Colors.grey[500])),
+                          Text(
+                            lang.t('no_notes'),
+                            style: TextStyle(color: Colors.grey[500]),
+                          ),
                           const SizedBox(height: 6),
-                          Text('Notes are temporary in guest mode.',
-                              style: TextStyle(
-                                  color: Colors.grey[400], fontSize: 12)),
+                          Text(
+                            'Notes are temporary in guest mode.',
+                            style: TextStyle(
+                              color: Colors.grey[400],
+                              fontSize: 12,
+                            ),
+                          ),
                         ],
                       ),
                     );
                   }
                   return ListView.builder(
                     padding: const EdgeInsets.symmetric(
-                        horizontal: 20, vertical: 8),
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
                     itemCount: tempNotes.notes.length,
                     itemBuilder: (ctx, i) {
                       final note = tempNotes.notes[i];
                       return Container(
                         margin: const EdgeInsets.only(bottom: 10),
                         decoration: BoxDecoration(
-                            color: Colors.grey[200],
-                            borderRadius: BorderRadius.circular(16)),
+                          color: Colors.grey[200],
+                          borderRadius: BorderRadius.circular(16),
+                        ),
                         child: ListTile(
                           contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 8),
+                            horizontal: 16,
+                            vertical: 8,
+                          ),
+                          onTap: () => _showNoteDetails(
+                            note.id,
+                            note.title,
+                            note.content,
+                          ),
                           title: Row(
                             children: [
                               Expanded(
-                                child: Text(note.title,
-                                    style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 14)),
+                                child: Text(
+                                  note.title,
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                  ),
+                                ),
                               ),
                               Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
+                                  horizontal: 6,
+                                  vertical: 2,
+                                ),
                                 decoration: BoxDecoration(
-                                    color:
-                                        Colors.black.withOpacity(0.07),
-                                    borderRadius:
-                                        BorderRadius.circular(6)),
-                                child: const Text('temp',
-                                    style: TextStyle(
-                                        fontSize: 9,
-                                        color: Colors.black45,
-                                        fontWeight: FontWeight.w700)),
+                                  color: Colors.black.withValues(alpha: 0.07),
+                                  borderRadius: BorderRadius.circular(6),
+                                ),
+                                child: const Text(
+                                  'temp',
+                                  style: TextStyle(
+                                    fontSize: 9,
+                                    color: Colors.black45,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
                               ),
                             ],
                           ),
-                          subtitle: Text(note.content,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12)),
+                          subtitle: Text(
+                            note.content,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12),
+                          ),
                           trailing: IconButton(
-                            icon: const Icon(Icons.delete_outline,
-                                color: Colors.grey),
+                            icon: const Icon(
+                              Icons.delete_outline,
+                              color: Colors.grey,
+                            ),
                             onPressed: () =>
                                 _deleteTempNote(note.id, tempNotes),
                           ),
@@ -737,7 +1280,12 @@ class _NotesPageState extends State<NotesPage> {
                 return StreamBuilder<QuerySnapshot>(
                   stream: FirebaseFirestore.instance
                       .collection('notes')
-                      .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid)
+                      .where(
+                        'userId',
+                        isEqualTo:
+                            FirebaseAuth.instance.currentUser?.uid ??
+                            _resolvedUid,
+                      )
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
@@ -748,19 +1296,24 @@ class _NotesPageState extends State<NotesPage> {
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
-                                isOffline
-                                    ? Icons.wifi_off
-                                    : Icons.error_outline,
-                                color: Colors.grey[500], size: 36),
+                              isOffline ? Icons.wifi_off : Icons.error_outline,
+                              color: Colors.grey[500],
+                              size: 36,
+                            ),
                             const SizedBox(height: 10),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 24),
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 24,
+                              ),
                               child: Text(
                                 isOffline
                                     ? 'You\'re offline.\nShowing cached notes.'
                                     : 'Could not load notes:\n$errStr',
                                 textAlign: TextAlign.center,
-                                style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                                style: TextStyle(
+                                  color: Colors.grey[500],
+                                  fontSize: 11,
+                                ),
                               ),
                             ),
                           ],
@@ -769,15 +1322,16 @@ class _NotesPageState extends State<NotesPage> {
                     }
 
                     if (!snapshot.hasData) {
-                      return const Center(
-                          child: CircularProgressIndicator());
+                      return const Center(child: CircularProgressIndicator());
                     }
 
                     // Sort client-side by timestamp descending (avoids composite index requirement)
                     final docs = List.of(snapshot.data!.docs)
                       ..sort((a, b) {
-                        final aTs = (a.data() as Map<String, dynamic>?)?['timestamp'];
-                        final bTs = (b.data() as Map<String, dynamic>?)?['timestamp'];
+                        final aTs =
+                            (a.data() as Map<String, dynamic>?)?['timestamp'];
+                        final bTs =
+                            (b.data() as Map<String, dynamic>?)?['timestamp'];
                         if (aTs == null && bTs == null) return 0;
                         if (aTs == null) return 1;
                         if (bTs == null) return -1;
@@ -786,42 +1340,60 @@ class _NotesPageState extends State<NotesPage> {
 
                     if (docs.isEmpty) {
                       return Center(
-                        child: Text(lang.t('no_notes'),
-                            style: TextStyle(color: Colors.grey[500])),
+                        child: Text(
+                          lang.t('no_notes'),
+                          style: TextStyle(color: Colors.grey[500]),
+                        ),
                       );
                     }
 
                     return ListView.builder(
                       padding: const EdgeInsets.symmetric(
-                          horizontal: 20, vertical: 8),
+                        horizontal: 20,
+                        vertical: 8,
+                      ),
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
                       itemCount: docs.length,
                       itemBuilder: (ctx, i) {
                         final data =
                             docs[i].data() as Map<String, dynamic>? ?? {};
-                        final title =
-                            (data['title'] as String? ?? 'Note').trim();
-                        final content =
-                            (data['content'] as String? ?? '').trim();
+                        final title = (data['title'] as String? ?? 'Note')
+                            .trim();
+                        final content = (data['content'] as String? ?? '')
+                            .trim();
                         final docId = docs[i].id;
                         return Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(16)),
+                            color: Colors.grey[200],
+                            borderRadius: BorderRadius.circular(16),
+                          ),
                           child: ListTile(
                             contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16, vertical: 8),
-                            title: Text(title,
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14)),
-                            subtitle: Text(content,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(fontSize: 12)),
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            onTap: () =>
+                                _showNoteDetails(docId, title, content),
+                            title: Text(
+                              title,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 14,
+                              ),
+                            ),
+                            subtitle: Text(
+                              content,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(fontSize: 12),
+                            ),
                             trailing: IconButton(
-                              icon: const Icon(Icons.delete_outline,
-                                  color: Colors.grey),
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                color: Colors.grey,
+                              ),
                               onPressed: () => _deleteNote(docId),
                             ),
                           ),
@@ -832,8 +1404,8 @@ class _NotesPageState extends State<NotesPage> {
                 );
               },
             ),
-          ),
-        ],
+          ],
+        ),
       ),
 
       bottomNavigationBar: BottomAppBar(
@@ -845,25 +1417,36 @@ class _NotesPageState extends State<NotesPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _navItem(Icons.home, lang.t('nav_home'), Colors.grey[400]!,
-                  onTap: () =>
-                      Navigator.pushReplacementNamed(context, '/home')),
               _navItem(
-                  Icons.note_alt_outlined, lang.t('nav_notes'), Colors.white),
+                Icons.home,
+                lang.t('nav_home'),
+                Colors.grey[400]!,
+                onTap: () => Navigator.pushReplacementNamed(context, '/home'),
+              ),
+              _navItem(
+                Icons.note_alt_outlined,
+                lang.t('nav_notes'),
+                Colors.white,
+              ),
               const SizedBox(width: 48),
-              _navItem(Icons.book, lang.t('nav_dictionary'),
-                  Colors.grey[400]!,
-                  onTap: () => Navigator.pushReplacementNamed(
-                      context, '/dictionary')),
-              _navItem(Icons.menu, lang.t('nav_menu'), Colors.grey[400]!,
-                  onTap: () =>
-                      Navigator.pushReplacementNamed(context, '/menu')),
+              _navItem(
+                Icons.book,
+                lang.t('nav_dictionary'),
+                Colors.grey[400]!,
+                onTap: () =>
+                    Navigator.pushReplacementNamed(context, '/dictionary'),
+              ),
+              _navItem(
+                Icons.menu,
+                lang.t('nav_menu'),
+                Colors.grey[400]!,
+                onTap: () => Navigator.pushReplacementNamed(context, '/menu'),
+              ),
             ],
           ),
         ),
       ),
-      floatingActionButtonLocation:
-          FloatingActionButtonLocation.centerDocked,
+      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
         backgroundColor: Colors.black,
         onPressed: () => Navigator.pushNamed(context, '/upload'),
@@ -872,17 +1455,26 @@ class _NotesPageState extends State<NotesPage> {
     );
   }
 
-  Widget _navItem(IconData icon, String label, Color color,
-      {VoidCallback? onTap}) {
+  Widget _navItem(
+    IconData icon,
+    String label,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, color: color, size: 24),
-          Text(label,
-              style: TextStyle(
-                  color: color, fontSize: 9, fontWeight: FontWeight.bold)),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
         ],
       ),
     );
