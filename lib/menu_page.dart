@@ -10,6 +10,8 @@ import 'contact_us_page.dart';
 import 'About_Us_Page.dart';
 import 'deleted_files_page.dart';
 import 'custom_commands_page.dart';
+import 'Statistics_page.dart';
+import 'analytics_service.dart';
 
 class MenuPage extends StatefulWidget {
   const MenuPage({super.key});
@@ -40,6 +42,13 @@ class _MenuPageState extends State<MenuPage> {
   void initState() {
     super.initState();
     _loadProfile();
+    AnalyticsService.instance.startFeatureSession('Menu');
+  }
+
+  @override
+  void dispose() {
+    AnalyticsService.instance.endFeatureSession('Menu');
+    super.dispose();
   }
 
   // ─────────────────────────────────────────────
@@ -703,7 +712,10 @@ class _MenuPageState extends State<MenuPage> {
                   _buildMenuItem(
                     icon: Icons.bar_chart_outlined,
                     title: lang.t('menu_statistics'),
-                    onTap: () {},
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const StatisticsPage()),
+                    ),
                   ),
                   _buildMenuItem(
                     icon: Icons.mic_none_rounded,

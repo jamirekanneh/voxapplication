@@ -17,10 +17,15 @@ import 'temp_library_provider.dart';
 import 'temp_notes_provider.dart';
 import 'global_stt_wrapper.dart';
 import 'custom_commands_provider.dart';
+import 'analytics_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Load saved analytics data and record this app launch
+  await AnalyticsService.instance.load();
+  await AnalyticsService.instance.recordAppOpen();
 
   runApp(
     MultiProvider(
