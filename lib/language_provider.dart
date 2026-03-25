@@ -39,6 +39,7 @@ class LanguageProvider extends ChangeNotifier {
   String get selectedLanguage => _selectedLanguage;
   String get ttsLocale => _ttsLocales[_selectedLanguage] ?? 'en-US';
   String get sttLocale => _sttLocales[_selectedLanguage] ?? 'en_US';
+  String get currentLocale => ttsLocale;
 
   // Translate shortcut
   String t(String key) => AppStrings.of(_selectedLanguage)[key] ?? key;

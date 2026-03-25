@@ -15,6 +15,8 @@ import 'language_provider.dart';
 import 'tts_service.dart';
 import 'temp_library_provider.dart';
 import 'temp_notes_provider.dart';
+import 'global_stt_wrapper.dart';
+import 'custom_commands_provider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +29,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => TtsService()),
         ChangeNotifierProvider(create: (_) => TempLibraryProvider()),
         ChangeNotifierProvider(create: (_) => TempNotesProvider()),
+        ChangeNotifierProvider(create: (_) => CustomCommandsProvider()),
       ],
       child: const TheVoxApp(),
     ),
@@ -80,10 +83,11 @@ class _TheVoxAppState extends State<TheVoxApp> {
   }
 
   @override
-  Widget build(BuildContext context) {
+ Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      home: const SplashScreen(),
+      // Wrap the SplashScreen with the GlobalSttWrapper
+      home: const GlobalSttWrapper(child: SplashScreen()), 
       routes: {
         '/home': (context) => const VoxHomePage(),
         '/upload': (context) => const UploadPage(),

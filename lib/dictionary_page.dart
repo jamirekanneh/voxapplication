@@ -169,8 +169,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
         _fetchMedical(word),
       ]);
 
-      final generalResult = futures[0] as Map<String, dynamic>?;
-      final medicalResult = futures[1] as Map<String, dynamic>?;
+      final generalResult = futures[0];
+      final medicalResult = futures[1];
 
       // ── Decide which result to show ───────────────────
       final generalDefs = _countDefinitions(generalResult);

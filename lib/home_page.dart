@@ -47,20 +47,22 @@ class _VoxHomePageState extends State<VoxHomePage> {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isAnonymousUser = true;
           _resolvedUid = null;
         });
+      }
       return;
     }
 
     if (!user.isAnonymous) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isAnonymousUser = false;
           _resolvedUid = user.uid;
         });
+      }
       return;
     }
 
@@ -68,11 +70,12 @@ class _VoxHomePageState extends State<VoxHomePage> {
     final hasProfile = prefs.getBool('hasProfile') ?? false;
 
     if (!hasProfile) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isAnonymousUser = true;
           _resolvedUid = null;
         });
+      }
       return;
     }
 
@@ -82,11 +85,12 @@ class _VoxHomePageState extends State<VoxHomePage> {
         .get();
 
     if (uidDoc.exists) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _isAnonymousUser = false;
           _resolvedUid = user.uid;
         });
+      }
       return;
     }
 
@@ -100,20 +104,22 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
       if (query.docs.isNotEmpty) {
         final docUid = query.docs.first.id;
-        if (mounted)
+        if (mounted) {
           setState(() {
             _isAnonymousUser = false;
             _resolvedUid = docUid;
           });
+        }
         return;
       }
     }
 
-    if (mounted)
+    if (mounted) {
       setState(() {
         _isAnonymousUser = true;
         _resolvedUid = null;
       });
+    }
   }
 
   // ─────────────────────────────────────────────

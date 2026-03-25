@@ -41,48 +41,56 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions web = FirebaseOptions(
-    apiKey: 'AIzaSyAbs4cKylm-XNA4fB63p3TDS7LGvFVcM50',
-    appId: '1:265615744997:web:2d28437a90498c3fe8990c',
-    messagingSenderId: '265615744997',
-    projectId: 'vox-application-76ecd',
-    authDomain: 'vox-application-76ecd.firebaseapp.com',
-    storageBucket: 'vox-application-76ecd.firebasestorage.app',
-    measurementId: 'G-FLFGDXJW8L',
+    apiKey: 'AIzaSyAYO2N189vadDto8I2wOdfiquhfG15oVG4',
+    appId: '1:650391636557:web:5f1fa32c9341beea10ea04',
+    messagingSenderId: '650391636557',
+    projectId: 'the-vox-application',
+    authDomain: 'the-vox-application.firebaseapp.com',
+    databaseURL: 'https://the-vox-application-default-rtdb.firebaseio.com',
+    storageBucket: 'the-vox-application.firebasestorage.app',
+    measurementId: 'G-Q5B06K52VG',
   );
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyBlV7kVOayanaeyoWFnm7GkFxAoDp8GnvQ',
-    appId: '1:265615744997:android:bfbcf8562ea47aebe8990c',
-    messagingSenderId: '265615744997',
-    projectId: 'vox-application-76ecd',
-    storageBucket: 'vox-application-76ecd.firebasestorage.app',
+    apiKey: 'AIzaSyDVLxpPN6CV3T_fkG7nK20WcRKxAhcqXqU',
+    appId: '1:650391636557:android:061cb13b6de1461b10ea04',
+    messagingSenderId: '650391636557',
+    projectId: 'the-vox-application',
+    databaseURL: 'https://the-vox-application-default-rtdb.firebaseio.com',
+    storageBucket: 'the-vox-application.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyCwq_eJYAoqrIuNjbmiRKmp-f8TuGxsbhA',
-    appId: '1:265615744997:ios:356ad4e7e954cf96e8990c',
-    messagingSenderId: '265615744997',
-    projectId: 'vox-application-76ecd',
-    storageBucket: 'vox-application-76ecd.firebasestorage.app',
+    apiKey: 'AIzaSyBCD0Xs0XLcjQyCZ7le0etwZzLib1Z4Urw',
+    appId: '1:650391636557:ios:e928e402888ac69210ea04',
+    messagingSenderId: '650391636557',
+    projectId: 'the-vox-application',
+    databaseURL: 'https://the-vox-application-default-rtdb.firebaseio.com',
+    storageBucket: 'the-vox-application.firebasestorage.app',
+    iosClientId: '650391636557-ahl0b6bvceqtcg6p47p2e5svt9v6dqdm.apps.googleusercontent.com',
     iosBundleId: 'com.example.voxapplication',
   );
 
   static const FirebaseOptions macos = FirebaseOptions(
-    apiKey: 'AIzaSyCwq_eJYAoqrIuNjbmiRKmp-f8TuGxsbhA',
-    appId: '1:265615744997:ios:356ad4e7e954cf96e8990c',
-    messagingSenderId: '265615744997',
-    projectId: 'vox-application-76ecd',
-    storageBucket: 'vox-application-76ecd.firebasestorage.app',
+    apiKey: 'AIzaSyBCD0Xs0XLcjQyCZ7le0etwZzLib1Z4Urw',
+    appId: '1:650391636557:ios:e928e402888ac69210ea04',
+    messagingSenderId: '650391636557',
+    projectId: 'the-vox-application',
+    databaseURL: 'https://the-vox-application-default-rtdb.firebaseio.com',
+    storageBucket: 'the-vox-application.firebasestorage.app',
+    iosClientId: '650391636557-ahl0b6bvceqtcg6p47p2e5svt9v6dqdm.apps.googleusercontent.com',
     iosBundleId: 'com.example.voxapplication',
   );
 
   static const FirebaseOptions windows = FirebaseOptions(
-    apiKey: 'AIzaSyAbs4cKylm-XNA4fB63p3TDS7LGvFVcM50',
-    appId: '1:265615744997:web:7fe1ff7b086563fae8990c',
-    messagingSenderId: '265615744997',
-    projectId: 'vox-application-76ecd',
-    authDomain: 'vox-application-76ecd.firebaseapp.com',
-    storageBucket: 'vox-application-76ecd.firebasestorage.app',
-    measurementId: 'G-E59NTSLRXT',
+    apiKey: 'AIzaSyAYO2N189vadDto8I2wOdfiquhfG15oVG4',
+    appId: '1:650391636557:web:049fb2d56fe179c110ea04',
+    messagingSenderId: '650391636557',
+    projectId: 'the-vox-application',
+    authDomain: 'the-vox-application.firebaseapp.com',
+    databaseURL: 'https://the-vox-application-default-rtdb.firebaseio.com',
+    storageBucket: 'the-vox-application.firebasestorage.app',
+    measurementId: 'G-SFT2TH0PY4',
   );
+
 }

@@ -684,7 +684,7 @@ class _ReaderPageState extends State<ReaderPage> {
                 Switch(
                   value: _autoSpeed,
                   onChanged: (v) => setState(() => _autoSpeed = v),
-                  activeColor: const Color(0xFFD4B96A),
+                  activeThumbColor: const Color(0xFFD4B96A),
                   inactiveTrackColor: Colors.grey[700],
                 ),
               ],

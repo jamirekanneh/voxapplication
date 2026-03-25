@@ -259,8 +259,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
       _emailCtrl,
       _phoneCtrl,
       _messageCtrl,
-    ])
+    ]) {
       c.dispose();
+    }
     _speech.stop();
     _flutterTts.stop();
     super.dispose();
@@ -808,8 +809,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                 _emailCtrl,
                 _phoneCtrl,
                 _messageCtrl,
-              ])
+              ]) {
                 c.clear();
+              }
               _sent = false;
             }),
             child: const Text(
@@ -1068,12 +1070,14 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   ),
                                 ),
                             validator: (v) {
-                              if (v == null || v.trim().isEmpty)
+                              if (v == null || v.trim().isEmpty) {
                                 return 'Required';
+                              }
                               if (!RegExp(
                                 r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,}$',
-                              ).hasMatch(v.trim()))
+                              ).hasMatch(v.trim())) {
                                 return 'Invalid email address';
+                              }
                               return null;
                             },
                           ),
@@ -1136,8 +1140,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                         ),
                                       ),
                                   validator: (v) {
-                                    if (v == null || v.trim().isEmpty)
+                                    if (v == null || v.trim().isEmpty) {
                                       return 'Required';
+                                    }
                                     if (v.trim().length < 6) return 'Too short';
                                     return null;
                                   },
@@ -1176,10 +1181,12 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   ),
                                 ),
                                 validator: (v) {
-                                  if (v == null || v.trim().isEmpty)
+                                  if (v == null || v.trim().isEmpty) {
                                     return 'Please write your message';
-                                  if (v.trim().length < 10)
+                                  }
+                                  if (v.trim().length < 10) {
                                     return 'Message is too short';
+                                  }
                                   return null;
                                 },
                               ),

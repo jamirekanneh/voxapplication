@@ -48,6 +48,7 @@ dependencies:
   http: ^1.2.0
   url_launcher: ^6.2.5
   archive: ^3.4.9
+  uuid: ^4.3.3
 
 dev_dependencies:
   flutter_test:

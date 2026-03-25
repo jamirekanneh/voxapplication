@@ -19,10 +19,6 @@ class UserProfilePage extends StatefulWidget {
 }
 
 class _UserProfilePageState extends State<UserProfilePage> {
-  // Stages:
-  // 'form'          → new user, filling in name + email
-  // 'returning'     → email exists in DB, ask restore vs fresh
-  // 'awaiting_link' → magic link sent, waiting for tap
   String _stage = 'form';
 
   final _nameController = TextEditingController();
@@ -38,7 +34,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   /// Ensure we have at least an anonymous session so we can query Firestore
-  /// (Security rules require request.auth != null to read users collection)
   Future<void> _ensureAuth() async {
     if (FirebaseAuth.instance.currentUser == null) {
       try {
@@ -85,10 +80,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
       setState(() => _isLoading = false);
 
       if (snapshot.docs.isNotEmpty) {
-        // Email already in Firebase — show returning user screen
         setState(() => _stage = 'returning');
       } else {
-        // Brand new user — save immediately and go home
         await _saveNewUserAndGoHome();
       }
     } catch (e) {
@@ -100,14 +93,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   // ─────────────────────────────────────────────
-  //  NEW USER — sign in anonymously, save profile,
-  //  mark phone memory, go home
+  //  NEW USER — sign in anonymously, save profile
   // ─────────────────────────────────────────────
   Future<void> _saveNewUserAndGoHome() async {
     setState(() => _isLoading = true);
     try {
-      // Use existing auth user or sign in anonymously
-      // (anonymous = guest until they verify email)
       User? user = FirebaseAuth.instance.currentUser;
       if (user == null) {
         final cred = await FirebaseAuth.instance.signInAnonymously();
@@ -118,8 +108,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
       final email = _emailController.text.trim();
       final name = _nameController.text.trim();
 
-      // Save profile to Firestore — linked by email
-      // uid may be anonymous for now but email is the real identity key
       await FirebaseFirestore.instance.collection('users').doc(uid).set({
         'username': name,
         'email': email,
@@ -129,14 +117,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
         'userId': uid,
       });
 
-      // Mark phone as having a profile
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('hasProfile', true);
       await prefs.setString('userEmail', email);
       await prefs.setString('userName', name);
 
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/home');
+      Navigator.of(context, rootNavigator: true)
+          .pushReplacementNamed('/home');
     } catch (e) {
       _showSnack("Error saving profile: $e");
     } finally {
@@ -146,7 +134,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   // ─────────────────────────────────────────────
   //  SEND MAGIC LINK
-  //  Used for: restore data + start fresh verification
   // ─────────────────────────────────────────────
   Future<void> _sendMagicLink({bool isFreshStart = false}) async {
     setState(() => _isLoading = true);
@@ -168,7 +155,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
         actionCodeSettings: acs,
       );
 
-      // Store pending data so we can finish after verification
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pendingEmailLink', email);
       await prefs.setString('pendingName', _nameController.text.trim());
@@ -320,15 +306,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
 
     if (confirmed != true || !mounted) return;
-
-    // Send magic link — on verify we'll delete old data then save fresh
     await _sendMagicLink(isFreshStart: true);
   }
 
   // ─────────────────────────────────────────────
   //  MAGIC LINK VERIFIED
-  //  Called when Firebase auth state changes to a
-  //  real (non-anonymous) signed-in user
   // ─────────────────────────────────────────────
   Future<void> _onMagicLinkVerified() async {
     try {
@@ -342,14 +324,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
       final photo = prefs.getString('pendingPhoto') ?? '';
 
       if (isFreshStart) {
-        // ── Delete all old data for this email ──────────
-        // Delete old user profile docs
         final oldUsers = await FirebaseFirestore.instance
             .collection('users')
             .where('email', isEqualTo: email)
             .get();
         for (final doc in oldUsers.docs) {
-          // Also delete their notes
           final notes = await FirebaseFirestore.instance
               .collection('notes')
               .where('userId', isEqualTo: doc.id)
@@ -357,7 +336,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
           for (final note in notes.docs) {
             await note.reference.delete();
           }
-          // Also delete their library files
           final library = await FirebaseFirestore.instance
               .collection('library')
               .where('userId', isEqualTo: doc['email'])
@@ -368,7 +346,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
           await doc.reference.delete();
         }
 
-        // Save fresh profile under new UID
         await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
           'username': name.isNotEmpty ? name : user.displayName ?? '',
           'email': email,
@@ -378,10 +355,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
           'userId': user.uid,
         });
       } else {
-        // ── Restore: just make sure profile has correct UID ──
-        // Find the existing profile by email and update its userId
-        // so notes/library (which were saved under old UID) still
-        // match — notes use userId field, we update it to new UID
         final oldUsers = await FirebaseFirestore.instance
             .collection('users')
             .where('email', isEqualTo: email)
@@ -392,7 +365,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
         if (oldUsers.docs.isNotEmpty) {
           oldUid = oldUsers.docs.first.id;
           oldData = oldUsers.docs.first.data();
-          // Delete old doc, re-save under new UID
           await oldUsers.docs.first.reference.delete();
         }
 
@@ -405,7 +377,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
           'userId': user.uid,
         });
 
-        // Update notes to point to new UID
         if (oldUid != null && oldUid != user.uid) {
           final notes = await FirebaseFirestore.instance
               .collection('notes')
@@ -417,39 +388,41 @@ class _UserProfilePageState extends State<UserProfilePage> {
         }
       }
 
-      // Mark phone memory
       await prefs.setBool('hasProfile', true);
       await prefs.setString('userEmail', email);
       await prefs.setString('userName', prefs.getString('pendingName') ?? '');
-
-      // Clean up pending keys
       await prefs.remove('pendingEmailLink');
       await prefs.remove('pendingName');
       await prefs.remove('pendingPhoto');
       await prefs.remove('pendingIsFreshStart');
 
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/home');
+      Navigator.of(context, rootNavigator: true)
+          .pushReplacementNamed('/home');
     } catch (e) {
       _showSnack("Error completing sign-in: $e");
     }
   }
 
   // ─────────────────────────────────────────────
-  //  GOOGLE SIGN-IN — platform aware
+  //  GOOGLE SIGN-IN — FIX: sign out anon first
   // ─────────────────────────────────────────────
   Future<void> _handleGoogleSignIn() async {
     setState(() => _googleLoading = true);
     try {
+      // ── Sign out anonymous session first so it doesn't block Google auth ──
+      final currentUser = FirebaseAuth.instance.currentUser;
+      if (currentUser != null && currentUser.isAnonymous) {
+        await FirebaseAuth.instance.signOut();
+      }
+
       UserCredential result;
 
       if (kIsWeb) {
-        // ── Web / Chrome: Firebase popup ─────────────
         final googleProvider = GoogleAuthProvider();
         googleProvider.setCustomParameters({'prompt': 'select_account'});
         result = await FirebaseAuth.instance.signInWithPopup(googleProvider);
       } else {
-        // ── Mobile: google_sign_in package ───────────
         final googleUser = await GoogleSignIn().signIn();
         if (googleUser == null) {
           setState(() => _googleLoading = false);
@@ -488,7 +461,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
       await prefs.setString('userName', user.displayName ?? '');
 
       if (!mounted) return;
-      Navigator.pushReplacementNamed(context, '/home');
+      // ── FIX: use rootNavigator to ensure navigation works after auth ──
+      Navigator.of(context, rootNavigator: true)
+          .pushReplacementNamed('/home');
     } catch (e) {
       _showSnack("Google sign-in failed: $e");
     } finally {
@@ -559,9 +534,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           'awaiting_link' => _AwaitingLinkView(
             key: const ValueKey('awaiting_link'),
             email: _emailController.text.trim(),
-            onResend: () => _sendMagicLink(
-              isFreshStart: false,
-            ), // resend always uses same mode
+            onResend: () => _sendMagicLink(isFreshStart: false),
             onVerified: _onMagicLinkVerified,
           ),
           _ => const SizedBox.shrink(),
@@ -709,12 +682,17 @@ class _ProfileFormView extends StatelessWidget {
                 const SizedBox(width: 12),
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
                       Navigator.pop(context);
-                      // Sign in anonymously for guest mode
-                      FirebaseAuth.instance.signInAnonymously().then(
-                        (_) => Navigator.pushReplacementNamed(context, '/home'),
-                      );
+                      try {
+                        await FirebaseAuth.instance.signInAnonymously();
+                        if (context.mounted) {
+                          Navigator.of(context, rootNavigator: true)
+                              .pushReplacementNamed('/home');
+                        }
+                      } catch (e) {
+                        debugPrint("Guest sign-in error: $e");
+                      }
                     },
                     style: ElevatedButton.styleFrom(
                       backgroundColor: Colors.black,
@@ -1173,7 +1151,8 @@ class _AwaitingLinkViewState extends State<_AwaitingLinkView>
                   final prefs = await SharedPreferences.getInstance();
                   await prefs.setBool('hasProfile', true);
                   if (context.mounted) {
-                    Navigator.pushReplacementNamed(context, '/home');
+                    Navigator.of(context, rootNavigator: true)
+                        .pushReplacementNamed('/home');
                   }
                 },
                 child: const Text(
@@ -1511,7 +1490,6 @@ class _GoogleButton extends StatelessWidget {
   }
 }
 
-/// Draws the official Google "G" logo using coloured arcs — no network needed.
 class _GoogleLogo extends StatelessWidget {
   final double size;
   const _GoogleLogo({this.size = 24});
@@ -1531,7 +1509,7 @@ class _GoogleLogoPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final c = Offset(size.width / 2, size.height / 2);
     final r = size.width / 2;
-    const sw = 0.22; // stroke width as fraction of diameter
+    const sw = 0.22;
 
     void arc(Color color, double start, double sweep) {
       canvas.drawArc(
@@ -1548,17 +1526,11 @@ class _GoogleLogoPainter extends CustomPainter {
     }
 
     const pi = 3.1415926535;
-    // Google colours: Blue, Red, Yellow, Green (each ~quarter circle)
-    arc(const Color(0xFF4285F4), -pi / 2, pi * 0.5); // top → right (blue)
-    arc(const Color(0xFFEA4335), 0, pi * 0.5); // right → bottom (red)
-    arc(const Color(0xFFFBBC05), pi / 2, pi * 0.4); // bottom-right (yellow)
-    arc(
-      const Color(0xFF34A853),
-      pi * 0.9,
-      pi * 0.6,
-    ); // bottom-left → top (green)
+    arc(const Color(0xFF4285F4), -pi / 2, pi * 0.5);
+    arc(const Color(0xFFEA4335), 0, pi * 0.5);
+    arc(const Color(0xFFFBBC05), pi / 2, pi * 0.4);
+    arc(const Color(0xFF34A853), pi * 0.9, pi * 0.6);
 
-    // White fill for the horizontal bar of the "G"
     final barPaint = Paint()
       ..color = const Color(0xFF4285F4)
       ..style = PaintingStyle.fill;
@@ -1568,10 +1540,8 @@ class _GoogleLogoPainter extends CustomPainter {
       barPaint,
     );
 
-    // White circle in centre to knock out inner ring
     canvas.drawCircle(c, r * (1 - sw), Paint()..color = Colors.white);
 
-    // Redraw the blue horizontal bar visible inside the cutout
     canvas.drawRect(
       Rect.fromLTWH(c.dx, c.dy - barH / 2, r * 0.72, barH),
       barPaint,

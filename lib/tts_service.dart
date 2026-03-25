@@ -77,7 +77,9 @@ class TtsService extends ChangeNotifier {
       sStart--;
     }
     // Skip leading whitespace
-    while (sStart < charPos && text[sStart] == ' ') sStart++;
+    while (sStart < charPos && text[sStart] == ' ') {
+      sStart++;
+    }
 
     // Find end of sentence
     int sEnd = charPos;
@@ -237,7 +239,9 @@ class TtsService extends ChangeNotifier {
       text.length - 1,
     );
     // Snap to next word boundary
-    while (newOffset < text.length && text[newOffset] != ' ') newOffset++;
+    while (newOffset < text.length && text[newOffset] != ' ') {
+      newOffset++;
+    }
     newOffset = (newOffset + 1).clamp(0, text.length);
     final remaining = text.substring(newOffset);
     if (remaining.isEmpty) return;
@@ -263,7 +267,9 @@ class TtsService extends ChangeNotifier {
       text.length - 1,
     );
     // Snap back to previous word boundary
-    while (newOffset > 0 && text[newOffset] != ' ') newOffset--;
+    while (newOffset > 0 && text[newOffset] != ' ') {
+      newOffset--;
+    }
     newOffset = (newOffset).clamp(0, text.length);
     final remaining = text.substring(newOffset);
 
