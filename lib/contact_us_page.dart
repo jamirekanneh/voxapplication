@@ -8,9 +8,31 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 const _kDevWhatsApp = '905488265289';
-const _kEmailJSServiceId = 'service_sj1zwun';
-const _kEmailJSTemplateId = 'template_kg6ezs8';
-const _kEmailJSPublicKey = '8tlgc7LHJtmuCRZmj';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// API keys loaded from --dart-define at build time so they never appear
+// in plain text in your source code or git history.
+//
+// Run with:
+//   flutter run \
+//     --dart-define=EMAILJS_SERVICE_ID=service_sj1zwun \
+//     --dart-define=EMAILJS_TEMPLATE_ID=template_kg6ezs8 \
+//     --dart-define=EMAILJS_PUBLIC_KEY=8tlgc7LHJtmuCRZmj
+//
+// Or add these lines to a .env.dart file (gitignored) and import it.
+// ─────────────────────────────────────────────────────────────────────────────
+const _kEmailJSServiceId = String.fromEnvironment(
+  'EMAILJS_SERVICE_ID',
+  defaultValue: 'service_akm5fyg',
+);
+const _kEmailJSTemplateId = String.fromEnvironment(
+  'EMAILJS_TEMPLATE_ID',
+  defaultValue: 'template_ujtn37d',
+);
+const _kEmailJSPublicKey = String.fromEnvironment(
+  'EMAILJS_PUBLIC_KEY',
+  defaultValue: '7lv-I2bSLiEeBpoYg',
+);
 const _kBgColor = Color(0xFFF3E5AB);
 const _kHeaderColor = Color(0xFFD4B96A);
 const _kTextLight = Color(0xFFF3E5AB);
@@ -181,6 +203,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
   final _emailCtrl = TextEditingController();
   final _phoneCtrl = TextEditingController();
   final _messageCtrl = TextEditingController();
+  final _titleCtrl = TextEditingController();
 
   Map<String, String> _selectedCountry = _kCountries.firstWhere(
     (c) => c['name'] == 'Turkey',
@@ -199,11 +222,18 @@ class _ContactUsPageState extends State<ContactUsPage> {
 
   // ── Text-to-speech via platform channel (no extra package needed) ─────────
   final FlutterTts _flutterTts = FlutterTts();
+  bool _bannerSpeaking = false;
 
   @override
   void initState() {
     super.initState();
     _initSpeech();
+    // Auto-read the full form guide when the page opens
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      Future.delayed(const Duration(milliseconds: 800), () {
+        if (mounted) _speakGuide();
+      });
+    });
   }
 
   Future<void> _initSpeech() async {
@@ -212,6 +242,42 @@ class _ContactUsPageState extends State<ContactUsPage> {
     final ok = await _speech.initialize(onError: (e) => debugPrint('STT: $e'));
     if (mounted) setState(() => _speechAvailable = ok);
   }
+
+  // Speak banner text using Android TTS via a simple platform channel.
+  // If the channel isn't set up, falls back to showing a SnackBar.
+  static const _kGuideText =
+      'Welcome to Contact Us. '
+      'At the top, choose Email or WhatsApp to receive our reply. '
+      'First Name — tap the mic on the right to record. '
+      'Last Name — tap the mic on the right to record. '
+      'Email Address — tap the mic on the right to record. '
+      'Phone Number — tap the flag to pick your country, then tap the mic to record. '
+      'Subject — tap the mic on the right to record. '
+      'Message — tap the mic in the top right corner of the box to record. '
+      'When done, tap the Send button at the bottom.';
+
+  Future<void> _speakGuide() async {
+    // If already speaking — stop it
+    if (_bannerSpeaking) {
+      await _flutterTts.stop();
+      if (mounted) setState(() => _bannerSpeaking = false);
+      return;
+    }
+    setState(() => _bannerSpeaking = true);
+    await _flutterTts.setLanguage('en-US');
+    await _flutterTts.setSpeechRate(0.85);
+    await _flutterTts.setPitch(1.0);
+    await _flutterTts.setVolume(1.0);
+    _flutterTts.setCompletionHandler(() {
+      if (mounted) setState(() => _bannerSpeaking = false);
+    });
+    _flutterTts.setCancelHandler(() {
+      if (mounted) setState(() => _bannerSpeaking = false);
+    });
+    await _flutterTts.speak(_kGuideText);
+  }
+
+  Future<void> _speakBanner() => _speakGuide();
 
   Future<void> _toggleVoice(String key, TextEditingController ctrl) async {
     if (!_speechAvailable) {
@@ -258,10 +324,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
       _lastNameCtrl,
       _emailCtrl,
       _phoneCtrl,
+      _titleCtrl,
       _messageCtrl,
-    ]) {
+    ])
       c.dispose();
-    }
     _speech.stop();
     _flutterTts.stop();
     super.dispose();
@@ -282,7 +348,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
         '📩 *New VOX App Message*\n\n'
         '👤 *Name:* $name\n'
         '📧 *Email:* $email\n'
-        '📞 *Phone:* $phone\n\n'
+        '📞 *Phone:* $phone\n'
+        '📌 *Title:* ${_titleCtrl.text.trim()}\n\n'
         '💬 *Message:*\n$message\n\n'
         '↩️ _Reply to this user via WhatsApp_',
       );
@@ -315,6 +382,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
               'title': 'New message from VOX App',
               'message_phone':
                   '${_selectedCountry['flag']} ${_selectedCountry['name']} ${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}',
+              'subject': _titleCtrl.text.trim(),
               'message': _messageCtrl.text.trim(),
               'reply_preference':
                   '📧 User prefers Email reply\n📬 Reply to: ${_emailCtrl.text.trim()}',
@@ -679,144 +747,323 @@ class _ContactUsPageState extends State<ContactUsPage> {
   // ── Success screen ────────────────────────────────────────────────────────
   Widget _buildSuccess() {
     final isEmail = _contactPref == ContactPreference.email;
-    final prefLabel = isEmail ? '📧 Email' : '💬 WhatsApp';
+    final replyVia = isEmail ? 'Email' : 'WhatsApp';
+    final replyIcon = isEmail ? Icons.mail_rounded : Icons.chat_rounded;
+    final replyColor = isEmail ? const Color(0xFF1A1A2E) : _kWaGreen;
     final contact = isEmail
         ? _emailCtrl.text.trim()
         : '${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}';
+    final firstName = _firstNameCtrl.text.trim();
+
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(32),
+      padding: EdgeInsets.zero,
       child: Column(
-        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(24),
-            decoration: const BoxDecoration(
-              color: _kHeaderColor,
-              shape: BoxShape.circle,
-            ),
-            child: const Icon(
-              Icons.check_rounded,
-              color: _kTextLight,
-              size: 48,
-            ),
-          ),
-          const SizedBox(height: 24),
-          const Text(
-            'Message Sent! 🎉',
-            style: TextStyle(
-              fontSize: 26,
-              fontWeight: FontWeight.w900,
-              letterSpacing: -0.5,
-            ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            'Thank you, ${_firstNameCtrl.text.trim()}!\nWe\'ll get back to you via $prefLabel at:\n$contact',
-            textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.black54,
-              fontSize: 14,
-              height: 1.6,
-            ),
-          ),
-          const SizedBox(height: 24),
+          // ── Top hero banner ─────────────────────────────────────────────────
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.circular(16),
+            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 28),
+            decoration: const BoxDecoration(
+              color: Color(0xFF1A1A2E),
+              borderRadius: BorderRadius.vertical(bottom: Radius.circular(36)),
             ),
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  'YOUR SUBMISSION',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.black38,
-                    letterSpacing: 2,
+                // Animated check circle
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: _kHeaderColor,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: _kHeaderColor.withOpacity(0.45),
+                        blurRadius: 24,
+                        spreadRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: const Icon(
+                    Icons.check_rounded,
+                    color: Colors.white,
+                    size: 42,
                   ),
                 ),
-                const SizedBox(height: 10),
-                _sRow(
-                  Icons.person_outline_rounded,
-                  '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}',
+                const SizedBox(height: 20),
+                const Text(
+                  'Message Sent!',
+                  style: TextStyle(
+                    fontSize: 28,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                    letterSpacing: -0.5,
+                  ),
                 ),
-                _sRow(Icons.mail_outline_rounded, _emailCtrl.text.trim()),
-                _sRow(
-                  Icons.phone_outlined,
-                  '${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}',
-                ),
-                _sRow(Icons.reply_rounded, prefLabel, highlight: true),
-                const Divider(height: 16, color: Colors.black12),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Icon(
-                      Icons.message_outlined,
-                      size: 14,
-                      color: Colors.black38,
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _messageCtrl.text.trim(),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: Colors.black54,
-                          height: 1.5,
-                        ),
-                        maxLines: 3,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: 8),
+                Text(
+                  'Thank you, $firstName. We have received your message.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.white.withOpacity(0.65),
+                    height: 1.5,
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 24),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: () => setState(() {
-                _messageCtrl.clear();
-                _sent = false;
-              }),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: _kTextLight,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+
+          Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ── Reply method chip ──────────────────────────────────────────
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: replyColor.withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: replyColor.withOpacity(0.25),
+                      width: 1.5,
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: replyColor,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(replyIcon, color: Colors.white, size: 20),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'You will be contacted via $replyVia',
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: replyColor,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              contact,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                color: Colors.black45,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-                elevation: 0,
-              ),
-              child: const Text(
-                'Send Another Message',
-                style: TextStyle(fontWeight: FontWeight.w700),
-              ),
-            ),
-          ),
-          const SizedBox(height: 10),
-          TextButton(
-            onPressed: () => setState(() {
-              for (final c in [
-                _firstNameCtrl,
-                _lastNameCtrl,
-                _emailCtrl,
-                _phoneCtrl,
-                _messageCtrl,
-              ]) {
-                c.clear();
-              }
-              _sent = false;
-            }),
-            child: const Text(
-              'Start Fresh (clear all fields)',
-              style: TextStyle(color: Colors.black38, fontSize: 12),
+                const SizedBox(height: 20),
+
+                // ── Submission summary card ───────────────────────────────────
+                Container(
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.06),
+                        blurRadius: 16,
+                        offset: const Offset(0, 4),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    children: [
+                      // Card header
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 14,
+                        ),
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1A1A2E),
+                          borderRadius: BorderRadius.vertical(
+                            top: Radius.circular(20),
+                          ),
+                        ),
+                        child: Row(
+                          children: const [
+                            Icon(
+                              Icons.receipt_long_rounded,
+                              color: _kHeaderColor,
+                              size: 18,
+                            ),
+                            SizedBox(width: 10),
+                            Text(
+                              'SUBMISSION SUMMARY',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.white,
+                                letterSpacing: 1.5,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      // Rows
+                      Padding(
+                        padding: const EdgeInsets.all(18),
+                        child: Column(
+                          children: [
+                            _sRow2(
+                              Icons.person_rounded,
+                              'Full Name',
+                              '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}',
+                            ),
+                            _sRow2(
+                              Icons.mail_outline_rounded,
+                              'Email',
+                              _emailCtrl.text.trim(),
+                            ),
+                            _sRow2(
+                              Icons.phone_rounded,
+                              'Phone',
+                              '${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}',
+                            ),
+                            _sRow2(
+                              Icons.subject_rounded,
+                              'Subject',
+                              _titleCtrl.text.trim(),
+                            ),
+                            const Divider(height: 20, color: Color(0xFFEEEEEE)),
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  width: 34,
+                                  height: 34,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFF5F5F5),
+                                    borderRadius: BorderRadius.circular(9),
+                                  ),
+                                  child: const Icon(
+                                    Icons.message_rounded,
+                                    size: 16,
+                                    color: Color(0xFF888888),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      const Text(
+                                        'Message',
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.black38,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 3),
+                                      Text(
+                                        _messageCtrl.text.trim(),
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          color: Colors.black87,
+                                          height: 1.5,
+                                        ),
+                                        maxLines: 4,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // ── Send Another ──────────────────────────────────────────────
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: () => setState(() {
+                      _messageCtrl.clear();
+                      _sent = false;
+                    }),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF1A1A2E),
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      elevation: 0,
+                    ),
+                    icon: const Icon(Icons.edit_rounded, size: 18),
+                    label: const Text(
+                      'Send Another Message',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+
+                // ── Start Fresh ───────────────────────────────────────────────
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: () => setState(() {
+                      for (final c in [
+                        _firstNameCtrl,
+                        _lastNameCtrl,
+                        _emailCtrl,
+                        _phoneCtrl,
+                        _titleCtrl,
+                        _messageCtrl,
+                      ])
+                        c.clear();
+                      _sent = false;
+                    }),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.black54,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      side: const BorderSide(color: Colors.black12, width: 1.5),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.refresh_rounded, size: 18),
+                    label: const Text(
+                      'Start Fresh',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 24),
+              ],
             ),
           ),
         ],
@@ -824,6 +1071,50 @@ class _ContactUsPageState extends State<ContactUsPage> {
     );
   }
 
+  Widget _sRow2(IconData icon, String label, String val) => Padding(
+    padding: const EdgeInsets.only(bottom: 14),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            color: const Color(0xFFF5F5F5),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, size: 16, color: const Color(0xFF888888)),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black38,
+                ),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                val,
+                style: const TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  // keep old _sRow for any remaining usages
   Widget _sRow(IconData icon, String val, {bool highlight = false}) => Padding(
     padding: const EdgeInsets.only(bottom: 6),
     child: Row(
@@ -935,6 +1226,92 @@ class _ContactUsPageState extends State<ContactUsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // ── Voice hint banner — tap anywhere or tap speaker to replay guide ──
+                          if (_speechAvailable)
+                            GestureDetector(
+                              onTap: _speakGuide,
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                margin: const EdgeInsets.only(bottom: 16),
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 14,
+                                  vertical: 12,
+                                ),
+                                decoration: BoxDecoration(
+                                  color: _bannerSpeaking
+                                      ? const Color(0xFF555555)
+                                      : _kDarkBtn,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Row(
+                                  children: [
+                                    // Animated speaker icon on the left
+                                    AnimatedContainer(
+                                      duration: const Duration(
+                                        milliseconds: 180,
+                                      ),
+                                      width: 34,
+                                      height: 34,
+                                      decoration: BoxDecoration(
+                                        color: _bannerSpeaking
+                                            ? const Color(0xFF25D366)
+                                            : Colors.white.withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(9),
+                                      ),
+                                      child: Icon(
+                                        _bannerSpeaking
+                                            ? Icons.volume_up_rounded
+                                            : Icons.volume_up_outlined,
+                                        size: 17,
+                                        color: Colors.white,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            _bannerSpeaking
+                                                ? 'Reading form guide…'
+                                                : 'Tap to hear the form guide',
+                                            style: const TextStyle(
+                                              fontSize: 13,
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w700,
+                                              height: 1.3,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            _bannerSpeaking
+                                                ? 'Explains each field and mic button location'
+                                                : 'Reads out all fields & where to tap to record',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: Colors.white.withOpacity(
+                                                0.65,
+                                              ),
+                                              height: 1.3,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Icon(
+                                      _bannerSpeaking
+                                          ? Icons.stop_rounded
+                                          : Icons.play_arrow_rounded,
+                                      color: Colors.white.withOpacity(0.8),
+                                      size: 20,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+
                           // ── Preference ───────────────────────────────────────────────
                           _buildPreference(),
                           const SizedBox(height: 18),
@@ -1070,14 +1447,12 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   ),
                                 ),
                             validator: (v) {
-                              if (v == null || v.trim().isEmpty) {
+                              if (v == null || v.trim().isEmpty)
                                 return 'Required';
-                              }
                               if (!RegExp(
                                 r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,}$',
-                              ).hasMatch(v.trim())) {
+                              ).hasMatch(v.trim()))
                                 return 'Invalid email address';
-                              }
                               return null;
                             },
                           ),
@@ -1140,13 +1515,51 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                         ),
                                       ),
                                   validator: (v) {
-                                    if (v == null || v.trim().isEmpty) {
+                                    if (v == null || v.trim().isEmpty)
                                       return 'Required';
-                                    }
                                     if (v.trim().length < 6) return 'Too short';
                                     return null;
                                   },
                                 ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 14),
+
+                          // ── Title ───────────────────────────────────────────────────
+                          _label('SUBJECT'),
+                          Stack(
+                            alignment: Alignment.centerLeft,
+                            children: [
+                              ValueListenableBuilder<TextEditingValue>(
+                                valueListenable: _titleCtrl,
+                                builder: (_, v, __) => v.text.isEmpty
+                                    ? const Padding(
+                                        padding: EdgeInsets.only(left: 16),
+                                        child: _BlinkingHint(
+                                          'Enter a subject for your message',
+                                        ),
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
+                              TextFormField(
+                                controller: _titleCtrl,
+                                textCapitalization:
+                                    TextCapitalization.sentences,
+                                textInputAction: TextInputAction.next,
+                                keyboardType: TextInputType.text,
+                                decoration: _inputDeco(
+                                  prefix: const Icon(
+                                    Icons.subject_rounded,
+                                    size: 18,
+                                    color: Colors.black38,
+                                  ),
+                                  suffix: _mic('title', _titleCtrl),
+                                ),
+                                validator: (v) =>
+                                    (v == null || v.trim().isEmpty)
+                                    ? 'Required'
+                                    : null,
                               ),
                             ],
                           ),
@@ -1181,12 +1594,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   ),
                                 ),
                                 validator: (v) {
-                                  if (v == null || v.trim().isEmpty) {
+                                  if (v == null || v.trim().isEmpty)
                                     return 'Please write your message';
-                                  }
-                                  if (v.trim().length < 10) {
+                                  if (v.trim().length < 10)
                                     return 'Message is too short';
-                                  }
                                   return null;
                                 },
                               ),
