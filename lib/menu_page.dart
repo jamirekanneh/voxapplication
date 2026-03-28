@@ -11,6 +11,7 @@ import 'About_Us_Page.dart';
 import 'deleted_files_page.dart';
 import 'custom_commands_page.dart';
 import 'Statistics_page.dart';
+import 'ask_questions_page.dart';
 import 'analytics_service.dart';
 
 class MenuPage extends StatefulWidget {
@@ -735,6 +736,16 @@ class _MenuPageState extends State<MenuPage> {
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(builder: (_) => const AboutUsPage()),
+                    ),
+                  ),
+                  _buildMenuItem(
+                    icon: Icons.question_answer_outlined,
+                    title: 'Ask Questions',
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AskQuestionsPage(),
+                      ),
                     ),
                   ),
                   _buildMenuItem(

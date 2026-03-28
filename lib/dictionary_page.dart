@@ -125,8 +125,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
     _speech.listen(
       localeId: langProvider.sttLocale,
       onResult: (val) {
-        final firstWord = val.recognizedWords.trim().split(' ').first;
-        if (mounted) setState(() => _searchController.text = firstWord);
+        final text = val.recognizedWords.trim();
+        if (mounted) setState(() => _searchController.text = text);
       },
       listenFor: const Duration(seconds: 8),
       pauseFor: const Duration(seconds: 2),
@@ -167,31 +167,76 @@ class _DictionaryPageState extends State<DictionaryPage> {
       final futures = await Future.wait([
         _fetchGeneral(word, langCode ?? 'en'),
         _fetchMedical(word),
+        _fetchCS(word),
       ]);
 
       final generalResult = futures[0];
       final medicalResult = futures[1];
+      final csResult = futures[2];
 
-      // ── Decide which result to show ───────────────────
-      final generalDefs = _countDefinitions(generalResult);
-      final medicalDefs = _countDefinitions(medicalResult);
+      final List<Map<String, dynamic>> aggregatedMeanings = [];
+      String wordTitle = word;
+      String phoneticToUse = '';
+      String originToUse = '';
+      final List<dynamic> phoneticsToUse = [];
 
-      if (generalDefs >= 1) {
-        // General has a good answer — use it
+      void processResult(Map<String, dynamic>? res) {
+        if (res == null) return;
+        
+        wordTitle = res['word'] ?? wordTitle;
+        if (phoneticToUse.isEmpty) phoneticToUse = res['phonetic'] ?? '';
+        final o = res['origin'] as String?;
+        if (originToUse.isEmpty && o != null && o.isNotEmpty) originToUse = o;
+        if (phoneticsToUse.isEmpty && res['phonetics'] != null) {
+          phoneticsToUse.addAll(res['phonetics'] as List<dynamic>);
+        }
+
+        final meaningsList = (res['meanings'] as List<dynamic>? ?? []).map((m) => m as Map<String, dynamic>);
+        aggregatedMeanings.addAll(meaningsList);
+      }
+
+      processResult(generalResult);
+      processResult(medicalResult);
+      processResult(csResult);
+
+      _ResultSource determinePrimarySource() {
+          if (medicalResult != null) return _ResultSource.medical;
+          
+          int medicalScore = 0;
+          int techScore = 0;
+          
+          final techKeywords = ['computer', 'software', 'programming', 'algorithm', 'network', 'computing', 'data structure', 'code ', 'developer', 'hardware', 'app ', 'internet', 'technology'];
+          final medKeywords = ['medical', 'disease', 'anatomy', 'blood', 'heart', 'organ ', 'virus', 'infection', 'syndrome', 'clinical', 'hospital', 'surgery', 'patient', 'treatment', 'drug', 'medicine', 'illness', 'muscle'];
+
+          final textToScan = aggregatedMeanings.toString().toLowerCase();
+          for (var kw in techKeywords) { if (textToScan.contains(kw)) techScore += 2; }
+          for (var kw in medKeywords) { if (textToScan.contains(kw)) medicalScore += 2; }
+          
+          final w = word.toLowerCase();
+          if (['python', 'java', 'html', 'css', 'react', 'flutter', 'dart', 'api', 'computer', 'structure'].contains(w)) techScore += 10;
+          if (['heart', 'brain', 'liver', 'cancer', 'flu', 'covid', 'ill', 'sick', 'pain'].contains(w)) medicalScore += 10;
+
+          if (techScore > 0 && techScore > medicalScore) return _ResultSource.cs;
+          if (medicalScore > 0 && medicalScore > techScore) return _ResultSource.medical;
+          return _ResultSource.general;
+      }
+
+      if (aggregatedMeanings.isNotEmpty) {
         setState(() {
-          _result = generalResult;
-          _resultSource = _ResultSource.general;
+           _resultSource = determinePrimarySource();
+           _result = {
+              'word': wordTitle,
+              'phonetic': phoneticToUse,
+              'origin': originToUse,
+              'phonetics': phoneticsToUse,
+              'meanings': aggregatedMeanings,
+           };
         });
-        _extractAudio(generalResult!);
-      } else if (medicalDefs >= 1) {
-        // General failed but medical found it — it's a medical term
-        setState(() {
-          _result = medicalResult;
-          _resultSource = _ResultSource.medical;
-        });
-        _extractAudio(medicalResult!);
+        
+        if (generalResult != null) _extractAudio(generalResult);
+        else if (medicalResult != null) _extractAudio(medicalResult);
+        else if (csResult != null) _extractAudio(csResult);
       } else {
-        // Both failed — compose helpful error
         setState(() => _error = _composeError(word, futures));
       }
     } catch (e) {
@@ -238,6 +283,40 @@ class _DictionaryPageState extends State<DictionaryPage> {
         if (data is List && data.isNotEmpty && data[0] is Map) {
           return _parseMerriamWebster(
               data[0] as Map<String, dynamic>, word);
+        }
+      }
+    } catch (_) {}
+    return null;
+  }
+
+  // ─────────────────────────────────────────────
+  //  FETCH — Technical (Wikipedia)
+  // ─────────────────────────────────────────────
+  Future<Map<String, dynamic>?> _fetchCS(String word) async {
+    try {
+      final uri = Uri.parse(
+        'https://en.wikipedia.org/api/rest_v1/page/summary/${Uri.encodeComponent(word)}',
+      );
+      final response =
+          await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        final extract = data['extract'] as String?;
+        if (extract != null && extract.isNotEmpty) {
+          return {
+            'word': data['title'] ?? word,
+            'phonetic': '',
+            'phonetics': [],
+            'origin': 'Wikipedia Encyclopedia',
+            'meanings': [
+              {
+                'partOfSpeech': 'concept (technical)',
+                'definitions': [{'definition': extract}],
+                'synonyms': [],
+                'antonyms': [],
+              }
+            ],
+          };
         }
       }
     } catch (_) {}
@@ -724,11 +803,10 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                           fontWeight: FontWeight.w900,
                                           letterSpacing: -0.5),
                                     ),
-                                    const SizedBox(height: 4),
-                                    // Source badge — tells user which dictionary answered
+                                    const SizedBox(height: 6),
                                     Container(
                                       padding: const EdgeInsets.symmetric(
-                                          horizontal: 8, vertical: 3),
+                                          horizontal: 8, vertical: 4),
                                       decoration: BoxDecoration(
                                         color: const Color(0xFFD4B96A)
                                             .withOpacity(0.2),
