@@ -38,17 +38,33 @@ class DeletedFilesPage extends StatelessWidget {
         doc.data() as Map<String, dynamic>,
       );
       data.remove('deletedAt');
+
+      final sourceCol = data['sourceCollection'] as String?;
+      final isNote = sourceCol == 'notes';
+
+      if (isNote) {
+        data['title'] = data['fileName'];
+        data.remove('fileName');
+        data.remove('sourceCollection');
+        data.remove('fileType');
+      }
+
       // Make sure userId is set correctly in restored doc
       data['userId'] = _uid;
-      await FirebaseFirestore.instance.collection('library').add({
-        ...data,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
+      data['timestamp'] =
+          data['originalTimestamp'] ?? FieldValue.serverTimestamp();
+      data.remove('originalTimestamp');
+
+      final targetCollection = isNote ? 'notes' : 'library';
+      await FirebaseFirestore.instance.collection(targetCollection).add(data);
       await _bin.doc(doc.id).delete();
+
       if (context.mounted) {
+        final itemName = isNote ? data['title'] : data['fileName'];
+        final destName = isNote ? 'notes' : 'library';
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('"${data['fileName']}" restored to library.'),
+            content: Text('"$itemName" restored to $destName.'),
             backgroundColor: const Color(0xFF333333),
             behavior: SnackBarBehavior.floating,
           ),

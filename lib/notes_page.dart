@@ -441,7 +441,33 @@ class _NotesPageState extends State<NotesPage> {
   // ─────────────────────────────────────────────
   Future<void> _deleteNote(String docId) async {
     try {
-      await FirebaseFirestore.instance.collection('notes').doc(docId).delete();
+      final docRef = FirebaseFirestore.instance.collection('notes').doc(docId);
+      final snapshot = await docRef.get();
+      if (snapshot.exists) {
+        final data = snapshot.data()!;
+        final targetUid =
+            data['userId']?.toString() ??
+            FirebaseAuth.instance.currentUser?.uid ??
+            _resolvedUid;
+
+        if (targetUid != null) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(targetUid)
+              .collection('deleted_library')
+              .add({
+                'fileName': data['title'] ?? 'Note',
+                'content': data['content'],
+                'fileType': 'note',
+                'sourceCollection': 'notes',
+                'deletedAt': FieldValue.serverTimestamp(),
+                'originalTimestamp':
+                    data['timestamp'] ?? FieldValue.serverTimestamp(),
+                'userId': data['userId'] ?? targetUid,
+              });
+        }
+      }
+      await docRef.delete();
     } on FirebaseException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

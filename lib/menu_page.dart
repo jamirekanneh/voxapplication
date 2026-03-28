@@ -745,6 +745,19 @@ class _MenuPageState extends State<MenuPage> {
                       MaterialPageRoute(builder: (_) => const ContactUsPage()),
                     ),
                   ),
+                  if (_hasProfile) ...[
+                    _buildMenuItem(
+                      icon: Icons.delete_outline_rounded,
+                      title: 'Recycle Files',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              DeletedFilesPage(resolvedUid: _resolvedUid),
+                        ),
+                      ),
+                    ),
+                  ],
 
                   // Logout — show for any user that has a verified account
                   if (_hasProfile && !_isFirebaseAnonymous) ...[
