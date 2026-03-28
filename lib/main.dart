@@ -88,11 +88,11 @@ class _TheVoxAppState extends State<TheVoxApp> {
   }
 
   @override
- Widget build(BuildContext context) {
+  Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       // Wrap the SplashScreen with the GlobalSttWrapper
-      home: const GlobalSttWrapper(child: SplashScreen()), 
+      home: const GlobalSttWrapper(child: SplashScreen()),
       routes: {
         '/home': (context) => const VoxHomePage(),
         '/upload': (context) => const UploadPage(),

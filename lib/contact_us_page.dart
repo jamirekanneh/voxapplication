@@ -8,19 +8,6 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 
 const _kDevWhatsApp = '905488265289';
-
-// ─────────────────────────────────────────────────────────────────────────────
-// API keys loaded from --dart-define at build time so they never appear
-// in plain text in your source code or git history.
-//
-// Run with:
-//   flutter run \
-//     --dart-define=EMAILJS_SERVICE_ID=service_sj1zwun \
-//     --dart-define=EMAILJS_TEMPLATE_ID=template_kg6ezs8 \
-//     --dart-define=EMAILJS_PUBLIC_KEY=8tlgc7LHJtmuCRZmj
-//
-// Or add these lines to a .env.dart file (gitignored) and import it.
-// ─────────────────────────────────────────────────────────────────────────────
 const _kEmailJSServiceId = String.fromEnvironment(
   'EMAILJS_SERVICE_ID',
   defaultValue: 'service_akm5fyg',
@@ -38,6 +25,7 @@ const _kHeaderColor = Color(0xFFD4B96A);
 const _kTextLight = Color(0xFFF3E5AB);
 const _kWaGreen = Color(0xFF25D366);
 const _kDarkBtn = Color(0xFF3A3A3A);
+const _kNavy = Color(0xFF1A1A2E);
 
 enum ContactPreference { email, whatsapp }
 
@@ -123,7 +111,6 @@ const List<Map<String, String>> _kCountries = [
   {'name': 'Yemen', 'dial': '+967', 'flag': '🇾🇪'},
 ];
 
-// ── Blinking hint ─────────────────────────────────────────────────────────────
 class _BlinkingHint extends StatefulWidget {
   final String text;
   const _BlinkingHint(this.text);
@@ -161,35 +148,30 @@ class _BlinkingHintState extends State<_BlinkingHint>
   );
 }
 
-// ── Mic button — dark rounded square, no animation/movement ──────────────────
 class _MicButton extends StatelessWidget {
   final bool isListening;
   final VoidCallback onTap;
   const _MicButton({required this.isListening, required this.onTap});
-
   @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 38,
-        height: 38,
-        decoration: BoxDecoration(
-          color: isListening ? const Color(0xFFE53935) : _kDarkBtn,
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(
-          isListening ? Icons.stop_rounded : Icons.mic_rounded,
-          color: Colors.white,
-          size: 20,
-        ),
+  Widget build(BuildContext context) => GestureDetector(
+    onTap: onTap,
+    child: AnimatedContainer(
+      duration: const Duration(milliseconds: 180),
+      width: 38,
+      height: 38,
+      decoration: BoxDecoration(
+        color: isListening ? const Color(0xFFE53935) : _kDarkBtn,
+        borderRadius: BorderRadius.circular(10),
       ),
-    );
-  }
+      child: Icon(
+        isListening ? Icons.stop_rounded : Icons.mic_rounded,
+        color: Colors.white,
+        size: 20,
+      ),
+    ),
+  );
 }
 
-// ── Main page ─────────────────────────────────────────────────────────────────
 class ContactUsPage extends StatefulWidget {
   const ContactUsPage({super.key});
   @override
@@ -214,13 +196,11 @@ class _ContactUsPageState extends State<ContactUsPage> {
   bool _isSending = false;
   bool _sent = false;
 
-  // ── Speech-to-text ────────────────────────────────────────────────────────
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _speechAvailable = false;
   String? _listeningField;
   bool _voiceBusy = false;
 
-  // ── Text-to-speech via platform channel (no extra package needed) ─────────
   final FlutterTts _flutterTts = FlutterTts();
   bool _bannerSpeaking = false;
 
@@ -228,7 +208,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
   void initState() {
     super.initState();
     _initSpeech();
-    // Auto-read the full form guide when the page opens
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Future.delayed(const Duration(milliseconds: 800), () {
         if (mounted) _speakGuide();
@@ -243,8 +222,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
     if (mounted) setState(() => _speechAvailable = ok);
   }
 
-  // Speak banner text using Android TTS via a simple platform channel.
-  // If the channel isn't set up, falls back to showing a SnackBar.
   static const _kGuideText =
       'Welcome to Contact Us. '
       'At the top, choose Email or WhatsApp to receive our reply. '
@@ -257,7 +234,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
       'When done, tap the Send button at the bottom.';
 
   Future<void> _speakGuide() async {
-    // If already speaking — stop it
     if (_bannerSpeaking) {
       await _flutterTts.stop();
       if (mounted) setState(() => _bannerSpeaking = false);
@@ -268,6 +244,34 @@ class _ContactUsPageState extends State<ContactUsPage> {
     await _flutterTts.setSpeechRate(0.85);
     await _flutterTts.setPitch(1.0);
     await _flutterTts.setVolume(1.0);
+    final voices = await _flutterTts.getVoices as List?;
+    if (voices != null) {
+      const preferred = [
+        'en-us-x-sfg#male_2-local',
+        'en-us-x-sfg#female_2-local',
+        'en-us-x-iom#male_2-local',
+        'en-us-x-iom#female_2-local',
+        'en-US-language',
+      ];
+      for (final pref in preferred) {
+        final match = voices.firstWhere(
+          (v) =>
+              (v is Map &&
+              (v['name'] as String?)?.toLowerCase().contains(
+                    pref.toLowerCase(),
+                  ) ==
+                  true),
+          orElse: () => null,
+        );
+        if (match != null) {
+          await _flutterTts.setVoice({
+            'name': match['name'],
+            'locale': 'en-US',
+          });
+          break;
+        }
+      }
+    }
     _flutterTts.setCompletionHandler(() {
       if (mounted) setState(() => _bannerSpeaking = false);
     });
@@ -333,11 +337,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
     super.dispose();
   }
 
-  // ── Send ──────────────────────────────────────────────────────────────────
   Future<void> _send() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _isSending = true);
-
     if (_contactPref == ContactPreference.whatsapp) {
       final name = '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}';
       final phone =
@@ -349,7 +351,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
         '👤 *Name:* $name\n'
         '📧 *Email:* $email\n'
         '📞 *Phone:* $phone\n'
-        '📌 *Title:* ${_titleCtrl.text.trim()}\n\n'
+        '📌 *Subject:* ${_titleCtrl.text.trim()}\n\n'
         '💬 *Message:*\n$message\n\n'
         '↩️ _Reply to this user via WhatsApp_',
       );
@@ -416,7 +418,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
     ),
   );
 
-  // ── Country picker ────────────────────────────────────────────────────────
   void _showCountryPicker() {
     final search = ValueNotifier<String>('');
     showModalBottomSheet(
@@ -546,7 +547,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────────────────────────
   InputDecoration _inputDeco({Widget? prefix, Widget? suffix}) =>
       InputDecoration(
         prefixIcon: prefix,
@@ -598,7 +598,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
         )
       : const SizedBox.shrink();
 
-  // ── Segmented preference selector ─────────────────────────────────────────
   Widget _buildPreference() {
     final isEmail = _contactPref == ContactPreference.email;
     return Column(
@@ -631,7 +630,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                   child: Container(
                     margin: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: isEmail ? const Color(0xFF1A1A2E) : _kWaGreen,
+                      color: isEmail ? _kNavy : _kWaGreen,
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
@@ -722,7 +721,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                 width: 6,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: isEmail ? const Color(0xFF1A1A2E) : _kWaGreen,
+                  color: isEmail ? _kNavy : _kWaGreen,
                   shape: BoxShape.circle,
                 ),
               ),
@@ -744,398 +743,125 @@ class _ContactUsPageState extends State<ContactUsPage> {
     );
   }
 
-  // ── Success screen ────────────────────────────────────────────────────────
+  // ── Professional success screen ───────────────────────────────────────────
   Widget _buildSuccess() {
     final isEmail = _contactPref == ContactPreference.email;
     final replyVia = isEmail ? 'Email' : 'WhatsApp';
-    final replyIcon = isEmail ? Icons.mail_rounded : Icons.chat_rounded;
-    final replyColor = isEmail ? const Color(0xFF1A1A2E) : _kWaGreen;
-    final contact = isEmail
-        ? _emailCtrl.text.trim()
-        : '${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}';
-    final firstName = _firstNameCtrl.text.trim();
 
     return SingleChildScrollView(
-      padding: EdgeInsets.zero,
+      padding: const EdgeInsets.all(24),
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // ── Top hero banner ─────────────────────────────────────────────────
+          const SizedBox(height: 24),
+
+          // ── Check icon ────────────────────────────────────────────────────
           Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 28),
+            width: 72,
+            height: 72,
             decoration: const BoxDecoration(
+              shape: BoxShape.circle,
+              color: _kNavy,
+            ),
+            child: const Icon(
+              Icons.check_rounded,
+              color: _kHeaderColor,
+              size: 38,
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ── Title ─────────────────────────────────────────────────────────
+          const Text(
+            'Thank you for contacting us!',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w800,
               color: Color(0xFF1A1A2E),
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(36)),
-            ),
-            child: Column(
-              children: [
-                // Animated check circle
-                Container(
-                  width: 80,
-                  height: 80,
-                  decoration: BoxDecoration(
-                    color: _kHeaderColor,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: _kHeaderColor.withOpacity(0.45),
-                        blurRadius: 24,
-                        spreadRadius: 4,
-                      ),
-                    ],
-                  ),
-                  child: const Icon(
-                    Icons.check_rounded,
-                    color: Colors.white,
-                    size: 42,
-                  ),
-                ),
-                const SizedBox(height: 20),
-                const Text(
-                  'Message Sent!',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    color: Colors.white,
-                    letterSpacing: -0.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'Thank you, $firstName. We have received your message.',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 14,
-                    color: Colors.white.withOpacity(0.65),
-                    height: 1.5,
-                  ),
-                ),
-              ],
+              letterSpacing: -0.3,
             ),
           ),
-
-          Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // ── Reply method chip ──────────────────────────────────────────
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: replyColor.withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: replyColor.withOpacity(0.25),
-                      width: 1.5,
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 42,
-                        height: 42,
-                        decoration: BoxDecoration(
-                          color: replyColor,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Icon(replyIcon, color: Colors.white, size: 20),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'You will be contacted via $replyVia',
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w700,
-                                color: replyColor,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              contact,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.black45,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // ── Submission summary card ───────────────────────────────────
-                Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(20),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(0.06),
-                        blurRadius: 16,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    children: [
-                      // Card header
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 18,
-                          vertical: 14,
-                        ),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF1A1A2E),
-                          borderRadius: BorderRadius.vertical(
-                            top: Radius.circular(20),
-                          ),
-                        ),
-                        child: Row(
-                          children: const [
-                            Icon(
-                              Icons.receipt_long_rounded,
-                              color: _kHeaderColor,
-                              size: 18,
-                            ),
-                            SizedBox(width: 10),
-                            Text(
-                              'SUBMISSION SUMMARY',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.white,
-                                letterSpacing: 1.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      // Rows
-                      Padding(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          children: [
-                            _sRow2(
-                              Icons.person_rounded,
-                              'Full Name',
-                              '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}',
-                            ),
-                            _sRow2(
-                              Icons.mail_outline_rounded,
-                              'Email',
-                              _emailCtrl.text.trim(),
-                            ),
-                            _sRow2(
-                              Icons.phone_rounded,
-                              'Phone',
-                              '${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}',
-                            ),
-                            _sRow2(
-                              Icons.subject_rounded,
-                              'Subject',
-                              _titleCtrl.text.trim(),
-                            ),
-                            const Divider(height: 20, color: Color(0xFFEEEEEE)),
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: 34,
-                                  height: 34,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFF5F5F5),
-                                    borderRadius: BorderRadius.circular(9),
-                                  ),
-                                  child: const Icon(
-                                    Icons.message_rounded,
-                                    size: 16,
-                                    color: Color(0xFF888888),
-                                  ),
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      const Text(
-                                        'Message',
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.black38,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        _messageCtrl.text.trim(),
-                                        style: const TextStyle(
-                                          fontSize: 13,
-                                          color: Colors.black87,
-                                          height: 1.5,
-                                        ),
-                                        maxLines: 4,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // ── Send Another ──────────────────────────────────────────────
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => setState(() {
-                      _messageCtrl.clear();
-                      _sent = false;
-                    }),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF1A1A2E),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 16),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      elevation: 0,
-                    ),
-                    icon: const Icon(Icons.edit_rounded, size: 18),
-                    label: const Text(
-                      'Send Another Message',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 15,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                // ── Start Fresh ───────────────────────────────────────────────
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: () => setState(() {
-                      for (final c in [
-                        _firstNameCtrl,
-                        _lastNameCtrl,
-                        _emailCtrl,
-                        _phoneCtrl,
-                        _titleCtrl,
-                        _messageCtrl,
-                      ])
-                        c.clear();
-                      _sent = false;
-                    }),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.black54,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      side: const BorderSide(color: Colors.black12, width: 1.5),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    icon: const Icon(Icons.refresh_rounded, size: 18),
-                    label: const Text(
-                      'Start Fresh',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-              ],
+          const SizedBox(height: 12),
+          const Text(
+            'Your message has been received.',
+            textAlign: TextAlign.center,
+            style: TextStyle(fontSize: 14, color: Colors.black87, height: 1.5),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'We will contact you via $replyVia shortly.',
+            textAlign: TextAlign.center,
+            style: const TextStyle(
+              fontSize: 14,
+              color: Colors.black87,
+              fontWeight: FontWeight.w500,
             ),
           ),
+          const SizedBox(height: 32),
+
+          // ── Buttons ───────────────────────────────────────────────────────
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => setState(() {
+                _messageCtrl.clear();
+                _sent = false;
+              }),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: _kNavy,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 15),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                elevation: 0,
+              ),
+              icon: const Icon(Icons.edit_rounded, size: 17),
+              label: const Text(
+                'Send Another Message',
+                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: () => setState(() {
+                for (final c in [
+                  _firstNameCtrl,
+                  _lastNameCtrl,
+                  _emailCtrl,
+                  _phoneCtrl,
+                  _titleCtrl,
+                  _messageCtrl,
+                ]) {
+                  c.clear();
+                }
+                _sent = false;
+              }),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Colors.black45,
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                side: const BorderSide(color: Color(0xFFDDDDDD)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              icon: const Icon(Icons.refresh_rounded, size: 17),
+              label: const Text(
+                'Start Fresh',
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+              ),
+            ),
+          ),
+          const SizedBox(height: 28),
         ],
       ),
     );
   }
 
-  Widget _sRow2(IconData icon, String label, String val) => Padding(
-    padding: const EdgeInsets.only(bottom: 14),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          width: 34,
-          height: 34,
-          decoration: BoxDecoration(
-            color: const Color(0xFFF5F5F5),
-            borderRadius: BorderRadius.circular(9),
-          ),
-          child: Icon(icon, size: 16, color: const Color(0xFF888888)),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black38,
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                val,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.black87,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    ),
-  );
-
-  // keep old _sRow for any remaining usages
-  Widget _sRow(IconData icon, String val, {bool highlight = false}) => Padding(
-    padding: const EdgeInsets.only(bottom: 6),
-    child: Row(
-      children: [
-        Icon(icon, size: 14, color: Colors.black38),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            val,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: highlight ? FontWeight.w700 : FontWeight.normal,
-              color: highlight ? Colors.black87 : Colors.black54,
-            ),
-          ),
-        ),
-      ],
-    ),
-  );
-
-  // ── build ─────────────────────────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final isWa = _contactPref == ContactPreference.whatsapp;
@@ -1143,7 +869,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
       backgroundColor: _kBgColor,
       body: Column(
         children: [
-          // HEADER
           Container(
             width: double.infinity,
             padding: EdgeInsets.only(
@@ -1189,7 +914,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        'We\'d love to hear from you',
+                        "We'd love to hear from you",
                         style: TextStyle(
                           fontSize: 12,
                           color: _kTextLight,
@@ -1215,7 +940,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
             ),
           ),
 
-          // BODY
           Expanded(
             child: _sent
                 ? _buildSuccess()
@@ -1226,7 +950,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // ── Voice hint banner — tap anywhere or tap speaker to replay guide ──
                           if (_speechAvailable)
                             GestureDetector(
                               onTap: _speakGuide,
@@ -1245,7 +968,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 ),
                                 child: Row(
                                   children: [
-                                    // Animated speaker icon on the left
                                     AnimatedContainer(
                                       duration: const Duration(
                                         milliseconds: 180,
@@ -1254,7 +976,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                       height: 34,
                                       decoration: BoxDecoration(
                                         color: _bannerSpeaking
-                                            ? const Color(0xFF25D366)
+                                            ? _kWaGreen
                                             : Colors.white.withOpacity(0.15),
                                         borderRadius: BorderRadius.circular(9),
                                       ),
@@ -1312,11 +1034,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               ),
                             ),
 
-                          // ── Preference ───────────────────────────────────────────────
                           _buildPreference(),
                           const SizedBox(height: 18),
 
-                          // ── Name row ─────────────────────────────────────────────────
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
@@ -1425,7 +1145,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 14),
 
-                          // ── Email ────────────────────────────────────────────────────
                           _label('EMAIL ADDRESS'),
                           TextFormField(
                             controller: _emailCtrl,
@@ -1458,7 +1177,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 14),
 
-                          // ── Phone ────────────────────────────────────────────────────
                           _label('PHONE NUMBER'),
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1526,7 +1244,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 14),
 
-                          // ── Title ───────────────────────────────────────────────────
                           _label('SUBJECT'),
                           Stack(
                             alignment: Alignment.centerLeft,
@@ -1565,7 +1282,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 14),
 
-                          // ── Message ──────────────────────────────────────────────────
                           _label('MESSAGE'),
                           Stack(
                             children: [
@@ -1615,7 +1331,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           const SizedBox(height: 24),
 
-                          // ── Send button ──────────────────────────────────────────────
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
