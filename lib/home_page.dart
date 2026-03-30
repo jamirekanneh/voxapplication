@@ -10,6 +10,7 @@ import 'tts_service.dart';
 import 'reader_page.dart';
 import 'mini_player_bar.dart';
 import 'temp_library_provider.dart';
+import 'ai_result_page.dart';
 
 class VoxHomePage extends StatefulWidget {
   const VoxHomePage({super.key});
@@ -123,24 +124,172 @@ class _VoxHomePageState extends State<VoxHomePage> {
   }
 
   // ─────────────────────────────────────────────
-  //  OPEN READER
+  //  DOCUMENT OPTIONS (3 buttons)
   // ─────────────────────────────────────────────
-  Future<void> _openReader(String fileName, String content) async {
-    final locale = context.read<LanguageProvider>().ttsLocale;
-    await Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => MultiProvider(
-          providers: [
-            ChangeNotifierProvider.value(value: context.read<TtsService>()),
-            ChangeNotifierProvider.value(
-              value: context.read<LanguageProvider>(),
+  Future<void> _showDocumentOptions(String fileName, String content) async {
+    final choice = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.grey[900],
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 16),
+              decoration: BoxDecoration(
+                color: Colors.grey[700],
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            Text(
+              fileName,
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 15,
+              ),
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'What would you like to do?',
+              style: TextStyle(color: Colors.grey[400], fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            _docOptionTile(
+              ctx,
+              icon: Icons.headphones_rounded,
+              iconColor: const Color(0xFFD4B96A),
+              title: 'Read Document',
+              subtitle: 'Listen to the document read aloud',
+              value: 'read',
+            ),
+            const SizedBox(height: 10),
+            _docOptionTile(
+              ctx,
+              icon: Icons.summarize_outlined,
+              iconColor: Colors.blue[300]!,
+              title: 'Summarize',
+              subtitle: 'Get an AI-powered summary of the document',
+              value: 'summary',
+            ),
+            const SizedBox(height: 10),
+            _docOptionTile(
+              ctx,
+              icon: Icons.style_outlined,
+              iconColor: Colors.green[300]!,
+              title: 'Generate Flashcards',
+              subtitle: 'Create study flashcards from the document',
+              value: 'flashcards',
             ),
           ],
-          child: ReaderPage(title: fileName, content: content, locale: locale),
         ),
       ),
     );
+
+    if (choice == null || !mounted) return;
+
+    if (choice == 'read') {
+      final locale = context.read<LanguageProvider>().ttsLocale;
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => MultiProvider(
+            providers: [
+              ChangeNotifierProvider.value(value: context.read<TtsService>()),
+              ChangeNotifierProvider.value(
+                value: context.read<LanguageProvider>(),
+              ),
+            ],
+            child: ReaderPage(
+              title: fileName,
+              content: content,
+              locale: locale,
+            ),
+          ),
+        ),
+      );
+    } else {
+      await Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AiResultPage(
+            documentTitle: fileName,
+            documentContent: content,
+            mode: choice,
+          ),
+        ),
+      );
+    }
+  }
+
+  Widget _docOptionTile(
+    BuildContext ctx, {
+    required IconData icon,
+    required Color iconColor,
+    required String title,
+    required String subtitle,
+    required String value,
+  }) {
+    return GestureDetector(
+      onTap: () => Navigator.pop(ctx, value),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: Colors.grey[800],
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(icon, color: iconColor, size: 22),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 14,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle,
+                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                  ),
+                ],
+              ),
+            ),
+            const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────
+  //  OPEN READER (kept for backward compatibility)
+  // ─────────────────────────────────────────────
+  Future<void> _openReader(String fileName, String content) async {
+    await _showDocumentOptions(fileName, content);
   }
 
   // ─────────────────────────────────────────────
@@ -266,7 +415,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             .doc(docId);
 
                         await libRef.delete();
- 
+
                         if (mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(

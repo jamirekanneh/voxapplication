@@ -4,6 +4,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'tts_service.dart';
 import 'language_provider.dart';
+import 'ai_result_page.dart';
 
 class ReaderPage extends StatefulWidget {
   final String title;
@@ -37,9 +38,12 @@ class _ReaderPageState extends State<ReaderPage> {
   int _pinnedStart = 0;
   int _pinnedEnd = 0;
 
-  // Always-on listening state
+  // Always-on listening
   bool _alwaysOnEnabled = true;
   bool _commandProcessing = false;
+
+  // Debounce timer to prevent restart loops
+  DateTime _lastRestartTime = DateTime.now();
 
   static const List<double> _speedPresets = [
     0.4,
@@ -51,17 +55,16 @@ class _ReaderPageState extends State<ReaderPage> {
     1.5,
   ];
 
-  // Commands shown in panel — one keyword each
   static const _commandList = [
-    ['▶', 'play', 'Resume reading'],
-    ['⏸', 'pause', 'Pause reading'],
-    ['⏩', 'forward', 'Skip +10 seconds'],
-    ['⏪', 'back', 'Go back −10 seconds'],
-    ['⚡', 'faster', 'Increase speed'],
-    ['🐢', 'slower', 'Decrease speed'],
-    ['🔄', 'restart', 'Start from beginning'],
-    ['🛑', 'stop', 'Close reader'],
-    ['🔆', 'highlight', 'Highlight last sentence'],
+    ['▶', 'play / resume', 'Resume reading'],
+    ['⏸', 'pause / wait', 'Pause reading'],
+    ['⏩', 'forward / skip', 'Skip +10 seconds'],
+    ['⏪', 'back / rewind', 'Go back −10 seconds'],
+    ['⚡', 'faster / speed up', 'Increase speed'],
+    ['🐢', 'slower / slow down', 'Decrease speed'],
+    ['🔄', 'restart / beginning', 'Start from beginning'],
+    ['🛑', 'stop / exit', 'Close reader'],
+    ['🔆', 'highlight / mark', 'Highlight last sentence'],
   ];
 
   @override
@@ -85,17 +88,14 @@ class _ReaderPageState extends State<ReaderPage> {
   Future<void> _initSpeech() async {
     final status = await Permission.microphone.request();
     if (!status.isGranted) return;
+
     final ok = await _speech.initialize(
       onError: (e) {
-        if (mounted) {
-          setState(() => _isListening = false);
-          // Auto-restart on error if always-on is enabled
-          if (_alwaysOnEnabled && !_commandProcessing) {
-            Future.delayed(
-              const Duration(milliseconds: 500),
-              _startAlwaysOnListening,
-            );
-          }
+        if (!mounted) return;
+        setState(() => _isListening = false);
+        // Auto-restart on error if always-on is enabled, with debounce
+        if (_alwaysOnEnabled && !_commandProcessing) {
+          _scheduleRestart();
         }
       },
       onStatus: (s) {
@@ -104,86 +104,111 @@ class _ReaderPageState extends State<ReaderPage> {
           setState(() => _isListening = false);
           // Auto-restart continuous listening
           if (_alwaysOnEnabled && !_commandProcessing) {
-            Future.delayed(
-              const Duration(milliseconds: 300),
-              _startAlwaysOnListening,
-            );
+            _scheduleRestart();
           }
         }
       },
     );
+
     if (mounted) {
       setState(() => _speechReady = ok);
       if (ok && _alwaysOnEnabled) {
+        await Future.delayed(const Duration(milliseconds: 300));
         _startAlwaysOnListening();
       }
     }
   }
 
-  // ── Always-on continuous listening (like Google Meet) ──
+  /// Debounced restart — prevents tight restart loops
+  void _scheduleRestart() {
+    final now = DateTime.now();
+    // Minimum 500ms between restarts
+    final msSinceLast = now.difference(_lastRestartTime).inMilliseconds;
+    final delay = msSinceLast < 500 ? 500 - msSinceLast : 150;
+    Future.delayed(Duration(milliseconds: delay), () {
+      if (mounted && _alwaysOnEnabled && !_commandProcessing && !_isListening) {
+        _startAlwaysOnListening();
+      }
+    });
+  }
+
+  // ── Continuous listening (always-on) ──────────────────
   Future<void> _startAlwaysOnListening() async {
     if (!mounted || !_speechReady || _isListening || _commandProcessing) return;
+    _lastRestartTime = DateTime.now();
 
     try {
-      setState(() {
-        _isListening = true;
-      });
+      setState(() => _isListening = true);
 
       await _speech.listen(
         localeId: 'en_US',
-        listenFor: const Duration(seconds: 30),
-        pauseFor: const Duration(seconds: 3),
+        // 60s window — engine auto-chunks; onStatus 'done' restarts it
+        listenFor: const Duration(seconds: 60),
+        // Wait 2.5s of silence before considering the utterance done
+        pauseFor: const Duration(seconds: 2, milliseconds: 500),
         partialResults: true,
+        cancelOnError: false,
         onResult: (result) {
           if (!mounted || _commandProcessing) return;
 
           final words = result.recognizedWords.toLowerCase().trim();
           if (words.isEmpty) return;
 
-          final hasMatch =
-              _commandList.any((c) => words.contains(c[1])) ||
-              [
-                'resume',
-                'continue',
-                'start',
-                'go',
-                'wait',
-                'hold',
-                'stop reading',
-                'skip',
-                'next',
-                'ahead',
-                'backward',
-                'rewind',
-                'previous',
-                'speed up',
-                'increase speed',
-                'slow down',
-                'decrease speed',
-                'start over',
-                'beginning',
-                'exit',
-                'quit',
-                'highlight text',
-                'mark',
-              ].any((k) => words.contains(k));
+          // Only act on final results or clear partial matches
+          final isFinal = result.finalResult;
+          final hasMatch = _matchesAnyCommand(words);
 
-          if (hasMatch) {
+          if (hasMatch && (isFinal || _isHighConfidence(words))) {
             _commandProcessing = true;
             _speech.stop();
+
             final tts = context.read<TtsService>();
             final locale = context.read<LanguageProvider>().ttsLocale;
             final wasPlaying = tts.isPlaying;
-            // Pause TTS briefly so mic hears clearly, then execute
-            Future.delayed(const Duration(milliseconds: 150), () {
+
+            Future.delayed(const Duration(milliseconds: 100), () {
               _executeCommand(words, tts, locale, wasPlaying);
             });
           }
         },
       );
-    } catch (_) {
-      if (mounted) setState(() => _isListening = false);
+    } catch (e) {
+      debugPrint('STT listen error: $e');
+      if (mounted) {
+        setState(() => _isListening = false);
+        if (_alwaysOnEnabled && !_commandProcessing) _scheduleRestart();
+      }
     }
+  }
+
+  bool _matchesAnyCommand(String words) {
+    return _has(words, ['play', 'resume', 'continue', 'start reading', 'go']) ||
+        _has(words, ['pause', 'stop reading', 'wait', 'hold on']) ||
+        _has(words, ['forward', 'skip', 'next', 'skip ahead']) ||
+        _has(words, ['back', 'backward', 'rewind', 'go back', 'previous']) ||
+        _has(words, ['faster', 'speed up', 'increase speed', 'go faster']) ||
+        _has(words, ['slower', 'slow down', 'decrease speed', 'go slower']) ||
+        _has(words, ['restart', 'start over', 'from the beginning']) ||
+        _has(words, ['stop', 'close', 'exit', 'quit reader']) ||
+        _has(words, ['highlight', 'mark', 'highlight that', 'mark text']);
+  }
+
+  /// High-confidence = very short utterance that's clearly a command keyword
+  bool _isHighConfidence(String words) {
+    const highConf = [
+      'play',
+      'pause',
+      'stop',
+      'forward',
+      'back',
+      'faster',
+      'slower',
+      'restart',
+      'highlight',
+      'mark',
+    ];
+    final parts = words.split(' ');
+    return parts.length <= 3 && highConf.any((k) => words.contains(k));
   }
 
   // ── Toggle always-on listening ─────────────────────────
@@ -208,34 +233,50 @@ class _ReaderPageState extends State<ReaderPage> {
     String feedback = '❓ Not recognised';
     VoidCallback? action;
 
-    if (_has(words, ['play', 'resume', 'continue', 'start', 'go'])) {
+    if (_has(words, ['play', 'resume', 'continue', 'start reading', 'go'])) {
       feedback = '▶ Playing';
       action = () {
         if (!tts.isPlaying) tts.togglePause(locale);
       };
-    } else if (_has(words, ['pause', 'stop reading', 'wait', 'hold'])) {
+    } else if (_has(words, ['pause', 'stop reading', 'wait', 'hold on'])) {
       feedback = '⏸ Paused';
       action = () {
         if (tts.isPlaying) tts.togglePause(locale);
       };
-    } else if (_has(words, ['forward', 'skip', 'next', 'ahead'])) {
+    } else if (_has(words, ['forward', 'skip', 'next', 'skip ahead'])) {
       feedback = '⏩ +10 seconds';
       action = () => tts.seekForward(10, locale);
-    } else if (_has(words, ['back', 'backward', 'rewind', 'previous'])) {
+    } else if (_has(words, [
+      'back',
+      'backward',
+      'rewind',
+      'go back',
+      'previous',
+    ])) {
       feedback = '⏪ −10 seconds';
       action = () => tts.seekBackward(10, locale);
-    } else if (_has(words, ['faster', 'speed up', 'increase speed'])) {
+    } else if (_has(words, [
+      'faster',
+      'speed up',
+      'increase speed',
+      'go faster',
+    ])) {
       feedback = '⚡ Speed up';
       action = () =>
           tts.setRate((tts.speechRate + 0.25).clamp(0.5, 2.0), locale);
-    } else if (_has(words, ['slower', 'slow down', 'decrease speed'])) {
+    } else if (_has(words, [
+      'slower',
+      'slow down',
+      'decrease speed',
+      'go slower',
+    ])) {
       feedback = '🐢 Slower';
       action = () =>
           tts.setRate((tts.speechRate - 0.25).clamp(0.5, 2.0), locale);
-    } else if (_has(words, ['restart', 'start over', 'beginning'])) {
+    } else if (_has(words, ['restart', 'start over', 'from the beginning'])) {
       feedback = '🔄 Restarted';
       action = () => tts.restart(locale);
-    } else if (_has(words, ['stop', 'close', 'exit', 'quit'])) {
+    } else if (_has(words, ['stop', 'close', 'exit', 'quit reader'])) {
       feedback = '🛑 Stopped';
       action = () {
         tts.stop();
@@ -243,8 +284,8 @@ class _ReaderPageState extends State<ReaderPage> {
       };
     } else if (_has(words, [
       'highlight',
-      'highlight text',
       'mark',
+      'highlight that',
       'mark text',
     ])) {
       feedback = '🔆 Sentence highlighted';
@@ -268,7 +309,7 @@ class _ReaderPageState extends State<ReaderPage> {
     _commandProcessing = false;
     if (_alwaysOnEnabled) {
       Future.delayed(
-        const Duration(milliseconds: 600),
+        const Duration(milliseconds: 700),
         _startAlwaysOnListening,
       );
     }
@@ -276,6 +317,25 @@ class _ReaderPageState extends State<ReaderPage> {
 
   bool _has(String words, List<String> keywords) =>
       keywords.any((k) => words.contains(k));
+
+  // ── Open AI page ──────────────────────────────
+  void _openAiPage(String mode) {
+    // Pause TTS while using AI features
+    final tts = context.read<TtsService>();
+    final locale = context.read<LanguageProvider>().ttsLocale;
+    if (tts.isPlaying) tts.togglePause(locale);
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => AiResultPage(
+          documentTitle: widget.title,
+          documentContent: widget.content,
+          mode: mode,
+        ),
+      ),
+    );
+  }
 
   // ── Helpers ───────────────────────────────────────────
   String _flagFromLocale(String locale) {
@@ -319,7 +379,7 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Sentence highlight ────────────────────────────────
+  // ── Highlighted text ──────────────────────────
   Widget _buildHighlightedText(TtsService tts) {
     final text = widget.content;
     if (text.isEmpty) {
@@ -329,10 +389,8 @@ class _ReaderPageState extends State<ReaderPage> {
       );
     }
 
-    // Use pinned highlight if user triggered it, else live sentence
     final liveSStart = tts.sentenceStart.clamp(0, text.length);
     final liveSEnd = tts.sentenceEnd.clamp(liveSStart, text.length);
-
     final sStart = _hasPinnedHighlight
         ? _pinnedStart.clamp(0, text.length)
         : liveSStart;
@@ -360,20 +418,102 @@ class _ReaderPageState extends State<ReaderPage> {
         ),
         children: [
           if (sStart > 0) TextSpan(text: text.substring(0, sStart)),
-
-          // Highlighted sentence — yellow for live, amber for pinned
           TextSpan(
             text: text.substring(sStart, sEnd),
             style: TextStyle(
               backgroundColor: _hasPinnedHighlight
-                  ? const Color(0xFFFFC107) // amber = pinned
-                  : const Color(0xFFFFE066), // yellow = live
+                  ? const Color(0xFFFFC107)
+                  : const Color(0xFFFFE066),
               color: Colors.black,
               fontWeight: FontWeight.w600,
             ),
           ),
-
           if (sEnd < text.length) TextSpan(text: text.substring(sEnd)),
+        ],
+      ),
+    );
+  }
+
+  // ── AI Tools bar ──────────────────────────────
+  Widget _buildAiBar() {
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: Colors.black.withOpacity(0.08)),
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.auto_awesome, size: 15, color: Color(0xFF7A6130)),
+          const SizedBox(width: 8),
+          const Text(
+            'AI Tools',
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 12,
+              color: Color(0xFF7A6130),
+            ),
+          ),
+          const Spacer(),
+          // Summarize button
+          GestureDetector(
+            onTap: () => _openAiPage('summary'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.summarize_outlined,
+                    color: Color(0xFFF3E5AB),
+                    size: 13,
+                  ),
+                  SizedBox(width: 5),
+                  Text(
+                    'Summarize',
+                    style: TextStyle(
+                      color: Color(0xFFF3E5AB),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          // Flashcards button
+          GestureDetector(
+            onTap: () => _openAiPage('flashcards'),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+              decoration: BoxDecoration(
+                color: const Color(0xFFD4B96A),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.style_outlined, color: Colors.black, size: 13),
+                  SizedBox(width: 5),
+                  Text(
+                    'Flashcards',
+                    style: TextStyle(
+                      color: Colors.black,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -417,10 +557,9 @@ class _ReaderPageState extends State<ReaderPage> {
               child: Row(
                 children: [
                   Text('${c[0]}  ', style: const TextStyle(fontSize: 12)),
-                  // Just ONE keyword shown
                   Expanded(
                     child: Text(
-                      c[1], // single keyword only
+                      c[1],
                       style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 11,
@@ -653,7 +792,6 @@ class _ReaderPageState extends State<ReaderPage> {
             ),
           ),
           const SizedBox(height: 16),
-          // Auto speed toggle
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
@@ -726,17 +864,12 @@ class _ReaderPageState extends State<ReaderPage> {
               ),
             ),
           ),
-
-          // Seek back 10s
           GestureDetector(
             onTap: () => tts.seekBackward(10, locale),
             child: Icon(Icons.replay_10, color: Colors.grey[300], size: 34),
           ),
-
-          // Play / Pause — direct TTS toggle, never blocked
           GestureDetector(
             onTap: () {
-              // Clear pinned highlight when user manually resumes
               if (!tts.isPlaying && _hasPinnedHighlight) {
                 setState(() => _hasPinnedHighlight = false);
               }
@@ -756,13 +889,10 @@ class _ReaderPageState extends State<ReaderPage> {
               ),
             ),
           ),
-
-          // Seek forward 10s
           GestureDetector(
             onTap: () => tts.seekForward(10, locale),
             child: Icon(Icons.forward_10, color: Colors.grey[300], size: 34),
           ),
-
           // Speed badge
           GestureDetector(
             onTap: () => setState(() => _showSpeedPanel = !_showSpeedPanel),
@@ -792,6 +922,7 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
+  // ── Build ──────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final tts = context.watch<TtsService>();
@@ -802,7 +933,7 @@ class _ReaderPageState extends State<ReaderPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // ── Top bar ──────────────────────────────────
+            // Top bar
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
               child: Row(
@@ -833,7 +964,7 @@ class _ReaderPageState extends State<ReaderPage> {
               ),
             ),
 
-            // ── Progress bar ──────────────────────────────
+            // Progress bar
             LinearProgressIndicator(
               value: tts.progress,
               backgroundColor: Colors.grey[300],
@@ -843,7 +974,7 @@ class _ReaderPageState extends State<ReaderPage> {
               minHeight: 3,
             ),
 
-            // ── Scrollable text ───────────────────────────
+            // Scrollable text
             Expanded(
               child: SingleChildScrollView(
                 controller: _scrollController,
@@ -852,13 +983,16 @@ class _ReaderPageState extends State<ReaderPage> {
               ),
             ),
 
-            // ── Commands panel (default visible) ──────────
+            // ── AI Tools bar (always visible) ──────────
+            _buildAiBar(),
+
+            // Commands panel (collapsible)
             if (_showCommandsPanel) _buildCommandsPanel(),
 
-            // ── Mic bar ───────────────────────────────────
+            // Mic bar
             _buildMicBar(),
 
-            // ── Speed panel (animated) ────────────────────
+            // Speed panel (animated)
             AnimatedSwitcher(
               duration: const Duration(milliseconds: 220),
               transitionBuilder: (child, anim) => SizeTransition(
@@ -871,7 +1005,7 @@ class _ReaderPageState extends State<ReaderPage> {
                   : const SizedBox.shrink(),
             ),
 
-            // ── Playback bar ──────────────────────────────
+            // Playback bar
             _buildPlaybackBar(tts, locale),
           ],
         ),
