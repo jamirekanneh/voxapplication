@@ -37,7 +37,7 @@ class AskQuestionsPage extends StatelessWidget {
       backgroundColor: _kBgColor,
       appBar: AppBar(
         title: const Text(
-          'Ask Questions',
+          'FAQs',
           style: TextStyle(fontWeight: FontWeight.bold, color: _kNavy),
         ),
         backgroundColor: Colors.transparent,
