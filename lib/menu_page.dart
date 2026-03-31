@@ -740,7 +740,7 @@ class _MenuPageState extends State<MenuPage> {
                   ),
                   _buildMenuItem(
                     icon: Icons.question_answer_outlined,
-                    title: 'Ask Questions',
+                    title: 'FAQs',
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
