@@ -9,7 +9,6 @@ class AboutUsPage extends StatelessWidget {
   static const Color creamBg = Color(0xFFF3E5AB);
   static const Color cardGrey = Color(0xFFE8E8E8);
   static const Color darkText = Color(0xFF1A1A1A);
-  static const Color bodyText = Color(0xFF444433);
 
   @override
   Widget build(BuildContext context) {
@@ -25,7 +24,7 @@ class AboutUsPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Developers ──────────────────────────
+                  // ── Developers Section ──────────────────
                   _sectionLabel('Developers'),
                   const SizedBox(height: 12),
                   SingleChildScrollView(
@@ -34,34 +33,38 @@ class AboutUsPage extends StatelessWidget {
                     child: Row(
                       children: [
                         _memberCard(
-                          1,
+                          'assets/images/Abdurahman.jpeg',
                           'Abdurrahman Masduki',
                           '20212609',
+                          'masdukisaleh12@gmail.com',
                           'Technical Lead / Group Leader',
                           'Flutter Project Lead & Final Decision Maker',
                           isLeader: true,
                         ),
                         const SizedBox(width: 14),
                         _memberCard(
-                          2,
+                          'assets/images/shaheer.jpeg',
                           'Shaheer Ahmed Farooqi',
                           '20224848',
+                          'Shaheerahmed748@gmail.com',
                           'Voice & NLP Specialist',
                           'AI Integration & Speech Logic',
                         ),
                         const SizedBox(width: 14),
                         _memberCard(
-                          3,
+                          'assets/images/Jamire.jpeg',
                           'Jamire M. Kanneh',
                           '20213799',
+                          'jamiremkanneh@gmail.com',
                           'Backend Infrastructure Lead',
                           'Firebase Cloud Specialist',
                         ),
                         const SizedBox(width: 14),
                         _memberCard(
-                          4,
+                          'assets/images/Abubakir.jpeg',
                           'Abdubakr Idris',
                           '20223372',
+                          'abubakarelshafie@gmail.com',
                           'UX/UI Interaction Designer',
                           'Visual Feedback & Animations',
                         ),
@@ -71,14 +74,14 @@ class AboutUsPage extends StatelessWidget {
 
                   const SizedBox(height: 28),
 
-                  // ── Supervisor ──────────────────────────
+                  // ── Supervisor Section ──────────────────
                   _sectionLabel('Supervisor'),
                   const SizedBox(height: 12),
                   _supervisorCard(),
 
                   const SizedBox(height: 28),
 
-                  // ── About the App ───────────────────────
+                  // ── About App Section ───────────────────
                   _sectionLabel('About the App'),
                   const SizedBox(height: 12),
                   _aboutCard(),
@@ -91,7 +94,7 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 
-  // ── Header ─────────────────────────────────────────────
+  // ── Header Widget ──────────────────────────────────────
   Widget _buildHeader(BuildContext context, String Function(String) t) {
     return Container(
       width: double.infinity,
@@ -131,16 +134,15 @@ class AboutUsPage extends StatelessWidget {
                 Text(
                   t('about_title'),
                   style: const TextStyle(
-                    fontSize: 20,
+                    fontSize: 22,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
-                    letterSpacing: -0.3,
                   ),
                 ),
                 Text(
                   t('about_subtitle'),
                   style: const TextStyle(
-                    fontSize: 12,
+                    fontSize: 13,
                     color: Colors.white70,
                     fontWeight: FontWeight.w500,
                   ),
@@ -153,69 +155,72 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 
-  // ── Section label ───────────────────────────────────────
   Widget _sectionLabel(String label) {
     return Text(
       label,
       style: const TextStyle(
-        fontSize: 16,
+        fontSize: 18,
         fontWeight: FontWeight.w900,
         color: darkText,
-        letterSpacing: -0.3,
       ),
     );
   }
 
-  // ── Member card ─────────────────────────────────────────
+  // ── Member Card Widget ──────────────────────────────────
   Widget _memberCard(
-    int index,
+    String imagePath,
     String name,
     String id,
+    String email,
     String role,
     String resp, {
     bool isLeader = false,
   }) {
     return Container(
-      width: 290,
+      width: 330,
       decoration: BoxDecoration(
         color: cardGrey,
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
+            color: Colors.black.withOpacity(0.08),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Number strip
           Container(
-            width: 44,
-            height: 88,
-            decoration: BoxDecoration(
+            width: 80,
+            constraints: const BoxConstraints(minHeight: 165),
+            decoration: const BoxDecoration(
               color: primaryGold,
-              borderRadius: const BorderRadius.only(
+              borderRadius: BorderRadius.only(
                 topLeft: Radius.circular(14),
                 bottomLeft: Radius.circular(14),
               ),
             ),
             child: Center(
-              child: Text(
-                '0$index',
-                style: const TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w900,
-                  color: Colors.white,
+              child: Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: Colors.white, width: 2),
+                  image: DecorationImage(
+                    image: AssetImage(imagePath),
+                    fit: BoxFit.cover,
+                  ),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 14),
+          const SizedBox(width: 12),
           Expanded(
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 14),
+              padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -225,7 +230,7 @@ class AboutUsPage extends StatelessWidget {
                         child: Text(
                           name,
                           style: const TextStyle(
-                            fontSize: 13,
+                            fontSize: 15,
                             fontWeight: FontWeight.w900,
                             color: darkText,
                           ),
@@ -233,52 +238,62 @@ class AboutUsPage extends StatelessWidget {
                       ),
                       if (isLeader)
                         Container(
-                          margin: const EdgeInsets.only(right: 12),
+                          margin: const EdgeInsets.only(right: 8),
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 7,
+                            horizontal: 6,
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: primaryGold,
+                            color: Colors.black26,
                             borderRadius: BorderRadius.circular(5),
                           ),
                           child: const Text(
                             'Leader',
                             style: TextStyle(
                               fontSize: 9,
-                              fontWeight: FontWeight.w800,
+                              fontWeight: FontWeight.bold,
                               color: Colors.white,
                             ),
                           ),
                         ),
                     ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
-                    id,
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: Colors.grey[500],
+                    'ID: $id',
+                    style: const TextStyle(
+                      fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      letterSpacing: 0.3,
+                      color: Colors.black87,
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
+                    email,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      color: Color(0xFF1A4675),
+                      fontWeight: FontWeight.w800,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
                     role,
                     style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w900,
                       color: darkText,
                     ),
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
                     resp,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      color: Colors.grey[600],
-                      height: 1.4,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      color: Colors.black54,
+                      height: 1.3,
+                      fontWeight: FontWeight.w500,
                     ),
                   ),
                 ],
@@ -290,9 +305,7 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 
-  // ── Supervisor card ─────────────────────────────────────
-  // Deliberately different: centred layout, gold top banner,
-  // circular avatar, no number strip.
+  // ── Supervisor Card Widget ──────────────────────────────
   Widget _supervisorCard() {
     return Container(
       width: double.infinity,
@@ -300,17 +313,9 @@ class AboutUsPage extends StatelessWidget {
         color: cardGrey,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(color: primaryGold.withOpacity(0.5), width: 1.5),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 10,
-            offset: const Offset(0, 3),
-          ),
-        ],
       ),
       child: Column(
         children: [
-          // Gold top banner
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 10),
@@ -322,7 +327,7 @@ class AboutUsPage extends StatelessWidget {
               child: Text(
                 'PROJECT SUPERVISOR',
                 style: TextStyle(
-                  fontSize: 10,
+                  fontSize: 11,
                   fontWeight: FontWeight.w900,
                   color: Colors.white,
                   letterSpacing: 2.5,
@@ -330,76 +335,39 @@ class AboutUsPage extends StatelessWidget {
               ),
             ),
           ),
-
-          // Body
           Padding(
-            padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+            padding: const EdgeInsets.all(20),
             child: Column(
               children: [
-                // Circular avatar
                 Container(
-                  width: 64,
-                  height: 64,
+                  width: 80,
+                  height: 80,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: primaryGold.withOpacity(0.15),
-                    border: Border.all(color: primaryGold, width: 2),
-                  ),
-                  child: const Center(
-                    child: Text(
-                      'NC',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w900,
-                        color: primaryGold,
-                      ),
+                    border: Border.all(color: primaryGold, width: 2.5),
+                    image: const DecorationImage(
+                      image: AssetImage('assets/images/IMG_3331.jpg'),
+                      fit: BoxFit.cover,
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
-
                 const Text(
                   'Prof. Dr. Nadire Çavuş',
-                  textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 18,
                     fontWeight: FontWeight.w900,
                     color: darkText,
                   ),
                 ),
-                const SizedBox(height: 6),
-
-                // Title pill
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: primaryGold.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: const Text(
-                    'Project Supervisor',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: primaryGold,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 14),
-
-                Divider(color: Colors.black.withOpacity(0.08)),
-                const SizedBox(height: 12),
-
-                Text(
-                  'We extend our sincere gratitude for her continuous support, guidance, and encouragement throughout this project. Her valuable insights played a major role in helping us complete this work.',
+                const SizedBox(height: 8),
+                const Text(
+                  'This project, prepared by Group 1 from the CIS Department at Near East University in 2026, reflects our collective knowledge and commitment. We extend our sincere gratitude for her continuous support, guidance, and encouragement throughout this project. Her valuable insights played a significant role in the successful completion of this work.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
-                    fontSize: 11.5,
-                    color: Colors.grey[600],
-                    height: 1.65,
+                    fontSize: 12.5,
+                    height: 1.6,
+                    color: Colors.black87,
                   ),
                 ),
               ],
@@ -410,72 +378,61 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 
-  // ── About card ──────────────────────────────────────────
+  // ── About App Widget (Merged with Main Features) ────────
   Widget _aboutCard() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // Description
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(18),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: cardGrey,
             borderRadius: BorderRadius.circular(14),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 6,
-                offset: const Offset(0, 2),
-              ),
-            ],
           ),
-          child: Column(
+          child: const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Voice Command Document Reader Application',
+              Text(
+                'Voice Command Document Reader',
                 style: TextStyle(
-                  fontSize: 13,
+                  fontSize: 16,
                   fontWeight: FontWeight.w900,
                   color: darkText,
-                  height: 1.3,
                 ),
               ),
-              const SizedBox(height: 10),
+              SizedBox(height: 10),
               Text(
-                'This application is designed to assist users, especially visually impaired individuals, by allowing them to upload documents and have them read aloud using text-to-speech technology. The app also supports voice commands such as play, pause, and navigation to make the interaction hands-free. The system is developed using Flutter and Dart, and it integrates modern accessibility features to improve usability.',
+                'This application is designed to assist users, especially visually impaired individuals, by allowing them to upload documents and have them read aloud using text-to-speech technology. The app also supports voice commands for a hands-free experience.',
                 style: TextStyle(
-                  fontSize: 12,
-                  color: Colors.grey[600],
-                  height: 1.65,
+                  fontSize: 13,
+                  height: 1.6,
+                  color: Colors.black87,
                 ),
               ),
             ],
           ),
         ),
 
-        const SizedBox(height: 10),
-
-        // Features label
+        // ── تم دمج الأكواد الجديدة هنا ────────────────────────
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
           child: Text(
             'Main Features',
             style: TextStyle(
-              fontSize: 13,
+              fontSize: 16,
               fontWeight: FontWeight.w800,
-              color: Colors.grey[700],
+              color: darkText,
             ),
           ),
         ),
 
-        // Feature rows
         _featureRow('Uploading documents'),
         const SizedBox(height: 8),
         _featureRow('Text-to-speech reading'),
         const SizedBox(height: 8),
         _featureRow('Voice commands for controlling playback'),
+        // ───────────────────────────────────────────────────
       ],
     );
   }

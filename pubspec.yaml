@@ -57,3 +57,13 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+
+
+
+  assets:
+    - assets/images/shaheer.jpeg
+    - assets/images/Jamire.jpeg
+    - assets/images/Abubakir.jpeg
+    - assets/images/Abdurahman.jpeg
+    - assets/images/IMG_3331.jpg
