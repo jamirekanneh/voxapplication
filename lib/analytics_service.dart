@@ -1,11 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  ANALYTICS SERVICE
-//  Singleton.  Persists in SharedPreferences — works fully offline,
-//  requires zero extra pub packages.
+//  Singleton.  Persists in SharedPreferences locally and syncs to Firebase
+//  for authenticated users. Works offline with local storage.
 //
 //  USAGE IN EVERY PAGE:
 //
@@ -24,21 +26,36 @@ class AnalyticsService extends ChangeNotifier {
   static final AnalyticsService instance = AnalyticsService._();
 
   // ── SharedPrefs keys ──────────────────────────────────────
-  static const _kOpens   = 'vox_opens';
-  static const _kFeature = 'vox_feature_ms';
-  static const _kDaily   = 'vox_daily_ms';
+  static const _kOpens     = 'vox_opens';
+  static const _kFeature   = 'vox_feature_ms';
+  static const _kDaily     = 'vox_daily_ms';
+  static const _kDictWords = 'vox_dict_words';
+  static const _kFileOps   = 'vox_file_ops';
+  static const _kVoiceCmds = 'vox_voice_cmds';
+  static const _kUserPrefs = 'vox_user_prefs';
+  static const _kLastSync  = 'vox_last_sync';
 
   // ── In-memory active timers ───────────────────────────────
   final Map<String, DateTime> _active = {};
 
   // ── Loaded data ───────────────────────────────────────────
-  List<DateTime>   _opens     = [];
-  Map<String, int> _featureMs = {};
-  Map<String, int> _dailyMs   = {};
+  List<DateTime>     _opens     = [];
+  Map<String, int>   _featureMs = {};
+  Map<String, int>   _dailyMs   = {};
+  Map<String, int>   _dictWords = {}; // word -> lookup count
+  Map<String, int>   _fileOps   = {}; // operation -> count
+  Map<String, int>   _voiceCmds = {}; // command -> usage count
+  Map<String, dynamic> _userPrefs = {}; // user preferences tracking
+  DateTime?          _lastSync;
 
-  List<DateTime>   get opens     => List.unmodifiable(_opens);
-  Map<String, int> get featureMs => Map.unmodifiable(_featureMs);
-  Map<String, int> get dailyMs   => Map.unmodifiable(_dailyMs);
+  List<DateTime>     get opens     => List.unmodifiable(_opens);
+  Map<String, int>   get featureMs => Map.unmodifiable(_featureMs);
+  Map<String, int>   get dailyMs   => Map.unmodifiable(_dailyMs);
+  Map<String, int>   get dictWords => Map.unmodifiable(_dictWords);
+  Map<String, int>   get fileOps   => Map.unmodifiable(_fileOps);
+  Map<String, int>   get voiceCmds => Map.unmodifiable(_voiceCmds);
+  Map<String, dynamic> get userPrefs => Map.unmodifiable(_userPrefs);
+  DateTime?          get lastSync => _lastSync;
 
   // ── Load all persisted data ───────────────────────────────
   Future<void> load() async {
@@ -63,16 +80,129 @@ class AnalyticsService extends ChangeNotifier {
           .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
     }
 
+    final dw = p.getString(_kDictWords);
+    if (dw != null) {
+      _dictWords = (jsonDecode(dw) as Map)
+          .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+    }
+
+    final fo = p.getString(_kFileOps);
+    if (fo != null) {
+      _fileOps = (jsonDecode(fo) as Map)
+          .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+    }
+
+    final vc = p.getString(_kVoiceCmds);
+    if (vc != null) {
+      _voiceCmds = (jsonDecode(vc) as Map)
+          .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+    }
+
+    final up = p.getString(_kUserPrefs);
+    if (up != null) {
+      _userPrefs = jsonDecode(up) as Map<String, dynamic>;
+    }
+
+    final ls = p.getString(_kLastSync);
+    if (ls != null) {
+      _lastSync = DateTime.tryParse(ls);
+    }
+
     notifyListeners();
   }
 
-  // ── Record app open ───────────────────────────────────────
+  // ── Record dictionary word lookup ────────────────────────
+  Future<void> recordDictionaryLookup(String word) async {
+    final cleanWord = word.toLowerCase().trim();
+    if (cleanWord.isEmpty) return;
+
+    _dictWords[cleanWord] = (_dictWords[cleanWord] ?? 0) + 1;
+    await _persist(_kDictWords, jsonEncode(_dictWords));
+    notifyListeners();
+  }
+
+  // ── Record file operation ──────────────────────────────────
+  Future<void> recordFileOperation(String operation) async {
+    _fileOps[operation] = (_fileOps[operation] ?? 0) + 1;
+    await _persist(_kFileOps, jsonEncode(_fileOps));
+    notifyListeners();
+  }
+
+  // ── Record voice command usage ─────────────────────────────
+  Future<void> recordVoiceCommand(String command) async {
+    _voiceCmds[command] = (_voiceCmds[command] ?? 0) + 1;
+    await _persist(_kVoiceCmds, jsonEncode(_voiceCmds));
+    notifyListeners();
+  }
+
+  // ── Record app open ────────────────────────────────────────
   Future<void> recordAppOpen() async {
     _opens.add(DateTime.now());
-    _prune();
-    await _persist(_kOpens,
-        jsonEncode(_opens.map((d) => d.toIso8601String()).toList()));
+    await _persist(_kOpens, jsonEncode(_opens.map((d) => d.toIso8601String()).toList()));
     notifyListeners();
+  }
+
+  // ── Firebase sync methods ──────────────────────────────────
+  Future<void> syncToFirebase() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) return; // Only sync for authenticated users
+
+    try {
+      final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
+      final analyticsDoc = userDoc.collection('analytics').doc('daily_stats');
+
+      // Get today's date key
+      final todayKey = _dayKey(DateTime.now());
+
+      // Prepare data to sync
+      final syncData = {
+        'lastSync': FieldValue.serverTimestamp(),
+        'totalOpens': _opens.length,
+        'totalTimeMs': _dailyMs.values.fold(0, (a, b) => a + b),
+        'featureUsage': _featureMs,
+        'dailyActivity': _dailyMs,
+        'dictionaryLookups': _dictWords,
+        'fileOperations': _fileOps,
+        'voiceCommands': _voiceCmds,
+        'todayOpens': _opens.where((d) => _dayKey(d) == todayKey).length,
+        'todayTimeMs': _dailyMs[todayKey] ?? 0,
+        'uniqueWords': _dictWords.length,
+        'totalDictLookups': _dictWords.values.fold(0, (a, b) => a + b),
+        'totalFileOps': _fileOps.values.fold(0, (a, b) => a + b),
+        'totalVoiceCmds': _voiceCmds.values.fold(0, (a, b) => a + b),
+        'activeDays': _dailyMs.keys.where((k) {
+          final d = DateTime.tryParse(k);
+          return d != null && d.isAfter(DateTime.now().subtract(const Duration(days: 30)));
+        }).length,
+      };
+
+      await analyticsDoc.set(syncData, SetOptions(merge: true));
+
+      // Update last sync time
+      _lastSync = DateTime.now();
+      final p = await SharedPreferences.getInstance();
+      await p.setString(_kLastSync, _lastSync!.toIso8601String());
+
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Analytics sync failed: $e');
+    }
+  }
+
+  // ── Check if sync is needed (daily sync) ───────────────────
+  bool get needsSync {
+    if (_lastSync == null) return true;
+    final now = DateTime.now();
+    final lastSyncDate = DateTime(_lastSync!.year, _lastSync!.month, _lastSync!.day);
+    final today = DateTime(now.year, now.month, now.day);
+    return lastSyncDate.isBefore(today);
+  }
+
+  // ── Auto-sync if needed ─────────────────────────────────────
+  Future<void> autoSyncIfNeeded() async {
+    if (needsSync) {
+      await syncToFirebase();
+    }
   }
 
   // ── Feature session tracking ──────────────────────────────
@@ -128,6 +258,24 @@ class AnalyticsService extends ChangeNotifier {
       _featureMs.entries.toList()
         ..sort((a, b) => b.value.compareTo(a.value));
 
+  List<MapEntry<String, int>> get sortedDictWords =>
+      _dictWords.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+
+  List<MapEntry<String, int>> get sortedFileOps =>
+      _fileOps.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+
+  List<MapEntry<String, int>> get sortedVoiceCmds =>
+      _voiceCmds.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+
+  int get totalDictLookups => _dictWords.values.fold(0, (a, b) => a + b);
+  int get totalFileOps => _fileOps.values.fold(0, (a, b) => a + b);
+  int get totalVoiceCmds => _voiceCmds.values.fold(0, (a, b) => a + b);
+  int get uniqueWordsLookedUp => _dictWords.length;
+  int get uniqueVoiceCmds => _voiceCmds.length;
+
   // ── Helpers ───────────────────────────────────────────────
   Future<void> _persist(String key, String value) async {
     final p = await SharedPreferences.getInstance();
@@ -141,6 +289,20 @@ class AnalyticsService extends ChangeNotifier {
       final d = DateTime.tryParse(k);
       return d != null && d.isBefore(cutoff);
     });
+
+    // Prune old dictionary words (keep only top 1000 most used)
+    if (_dictWords.length > 1000) {
+      final sorted = _dictWords.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      _dictWords = Map.fromEntries(sorted.take(1000));
+    }
+
+    // Prune old voice commands (keep only top 500 most used)
+    if (_voiceCmds.length > 500) {
+      final sorted = _voiceCmds.entries.toList()
+        ..sort((a, b) => b.value.compareTo(a.value));
+      _voiceCmds = Map.fromEntries(sorted.take(500));
+    }
   }
 
   static String _dayKey(DateTime d) =>

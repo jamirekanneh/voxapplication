@@ -4,14 +4,25 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:record/record.dart';
+import 'package:just_audio/just_audio.dart';
+import 'dart:io';
+import 'dart:async';
 import 'language_provider.dart';
 import 'temp_notes_provider.dart';
 import 'tts_service.dart';
 import 'ai_result_page.dart';
 
 const int _kMaxTitleLength = 100;
-const int _kMaxContentLength = 5000;
+const int _kMaxContentLength = 50000; // increased for long transcripts
+const Duration _kMaxRecordingDuration = Duration(hours: 1);
+
+// ─────────────────────────────────────────────
+//  RECORDING STATE ENUM
+// ─────────────────────────────────────────────
+enum RecordingState { idle, recording, processing, done }
 
 class NotesPage extends StatefulWidget {
   const NotesPage({super.key});
@@ -20,134 +31,113 @@ class NotesPage extends StatefulWidget {
   State<NotesPage> createState() => _NotesPageState();
 }
 
-class _NotesPageState extends State<NotesPage> {
+class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   final stt.SpeechToText _speech = stt.SpeechToText();
-  bool _isListeningTitle = false;
-  bool _isListeningContent = false;
   bool _isSaving = false;
   bool _isEditing = false;
   String? _editingId;
 
   final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _contentController = TextEditingController();
+  final TextEditingController _transcriptController = TextEditingController();
 
-  // Resolved on initState — same logic as home page
+  // Audio recording
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  RecordingState _recordingState = RecordingState.idle;
+  bool _isPlaying = false;
+  String? _audioPath;
+  String? _audioUrl;
+  Duration _audioDuration = Duration.zero;
+  Duration _currentPosition = Duration.zero;
+  Duration _recordingDuration = Duration.zero;
+  Timer? _recordingTimer;
+  Timer? _maxDurationTimer;
+  String _liveTranscript = '';
+  bool _isTranscribing = false;
+
+  // Animation controllers
+  late AnimationController _pulseController;
+  late AnimationController _waveController;
+  late Animation<double> _pulseAnimation;
+
   String? _resolvedUid;
   bool _isAnonymousUser = true;
+  final ScrollController _scrollController = ScrollController();
+
+  // Tab for note detail view
+  int _detailTab = 0; // 0=transcript, 1=audio
 
   @override
   void initState() {
     super.initState();
     _resolveUser();
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+
+    _waveController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+
+    _pulseAnimation = Tween<double>(begin: 0.9, end: 1.1).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
   }
 
   @override
   void dispose() {
     _speech.stop();
+    _audioRecorder.dispose();
+    _audioPlayer.dispose();
     _titleController.dispose();
-    _contentController.dispose();
+    _transcriptController.dispose();
+    _pulseController.dispose();
+    _waveController.dispose();
+    _recordingTimer?.cancel();
+    _maxDurationTimer?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
   // ─────────────────────────────────────────────
   //  RESOLVE USER
-  //  Real Firebase user      → uid directly
-  //  Anonymous + has profile → find Firestore doc by email
-  //  Pure guest              → temp notes only
   // ─────────────────────────────────────────────
   Future<void> _resolveUser() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
-      debugPrint(
-        'NotesPage: Resolving user... Current Auth User: ${user?.uid}',
-      );
-
       if (user == null) {
-        if (mounted)
-          setState(() {
-            _isAnonymousUser = true;
-            _resolvedUid = null;
-          });
+        if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
         return;
       }
-
       if (!user.isAnonymous) {
-        debugPrint('NotesPage: Authenticated user detected.');
-        if (mounted)
-          setState(() {
-            _isAnonymousUser = false;
-            _resolvedUid = user.uid;
-          });
+        if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
         return;
       }
-
-      // Anonymous Firebase user — check SharedPrefs for saved profile
       final prefs = await SharedPreferences.getInstance();
       final hasProfile = prefs.getBool('hasProfile') ?? false;
-
       if (!hasProfile) {
-        debugPrint('NotesPage: Guest user (no profile).');
-        if (mounted)
-          setState(() {
-            _isAnonymousUser = true;
-            _resolvedUid = null;
-          });
+        if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
         return;
       }
-
-      // Try by UID first (new user who just signed up)
-      final uidDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
+      final uidDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
       if (uidDoc.exists) {
-        debugPrint('NotesPage: Found user doc by UID.');
-        if (mounted)
-          setState(() {
-            _isAnonymousUser = false;
-            _resolvedUid = user.uid;
-          });
+        if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
         return;
       }
-
-      // Fallback: look up by saved email
       final savedEmail = prefs.getString('userEmail') ?? '';
-      debugPrint('NotesPage: Checking for user doc by email: $savedEmail');
       if (savedEmail.isNotEmpty) {
-        final query = await FirebaseFirestore.instance
-            .collection('users')
-            .where('email', isEqualTo: savedEmail)
-            .limit(1)
-            .get();
-
+        final query = await FirebaseFirestore.instance.collection('users').where('email', isEqualTo: savedEmail).limit(1).get();
         if (query.docs.isNotEmpty) {
-          debugPrint(
-            'NotesPage: Found user doc by email. ID: ${query.docs.first.id}',
-          );
-          if (mounted)
-            setState(() {
-              _isAnonymousUser = false;
-              _resolvedUid = query.docs.first.id;
-            });
+          if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = query.docs.first.id; });
           return;
         }
       }
-
-      debugPrint('NotesPage: No profile found, falling back to Guest.');
-      // Profile pref set but no doc found — treat as guest
-      if (mounted)
-        setState(() {
-          _isAnonymousUser = true;
-          _resolvedUid = null;
-        });
+      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
     } catch (e) {
-      debugPrint('NotesPage: Error in _resolveUser: $e');
-      if (mounted)
-        setState(() {
-          _isAnonymousUser = true;
-          _resolvedUid = null;
-        });
+      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
     }
   }
 
@@ -157,280 +147,318 @@ class _NotesPageState extends State<NotesPage> {
   Future<bool> _requestMicPermission() async {
     final status = await Permission.microphone.request();
     if (status.isGranted) return true;
-    if (status.isPermanentlyDenied) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'Microphone permission denied. Enable it in Settings.',
-            ),
-            backgroundColor: const Color(0xFF333333),
-            behavior: SnackBarBehavior.floating,
-            action: SnackBarAction(
-              label: 'Settings',
-              textColor: const Color(0xFFD4B96A),
-              onPressed: openAppSettings,
-            ),
-          ),
-        );
-      }
-    } else {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Microphone permission is required to record.'),
-            backgroundColor: Color(0xFF333333),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+    if (status.isPermanentlyDenied && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+        content: const Text('Microphone permission denied. Enable it in Settings.'),
+        backgroundColor: const Color(0xFF333333),
+        behavior: SnackBarBehavior.floating,
+        action: SnackBarAction(label: 'Settings', textColor: const Color(0xFFD4B96A), onPressed: openAppSettings),
+      ));
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Microphone permission is required to record.'),
+        backgroundColor: Color(0xFF333333),
+        behavior: SnackBarBehavior.floating,
+      ));
     }
     return false;
   }
 
   // ─────────────────────────────────────────────
-  //  SPEECH — TITLE
+  //  START LONG-FORM RECORDING + LIVE TRANSCRIPTION
   // ─────────────────────────────────────────────
-  Future<void> _listenForTitle() async {
-    final langProvider = context.read<LanguageProvider>();
-    if (_isListeningTitle) {
-      await _speech.stop();
-      setState(() => _isListeningTitle = false);
+  Future<void> _startRecording() async {
+    if (_titleController.text.trim().isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please enter a title before recording.'),
+        backgroundColor: Color(0xFF333333),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+      ));
       return;
     }
-    if (_isListeningContent) {
-      await _speech.stop();
-      setState(() => _isListeningContent = false);
-    }
+
     final granted = await _requestMicPermission();
     if (!granted) return;
-    bool available = await _speech.initialize(
-      onError: (e) => setState(() => _isListeningTitle = false),
-      onStatus: (s) {
-        if (s == 'done' || s == 'notListening') {
-          if (mounted) setState(() => _isListeningTitle = false);
-        }
-      },
-    );
-    if (available) {
-      setState(() => _isListeningTitle = true);
-      _speech.listen(
-        localeId: langProvider.sttLocale,
-        onResult: (val) {
-          final text = val.recognizedWords.trim();
-          _titleController.text = text.length > _kMaxTitleLength
-              ? text.substring(0, _kMaxTitleLength)
-              : text;
-          _titleController.selection = TextSelection.fromPosition(
-            TextPosition(offset: _titleController.text.length),
-          );
-        },
-        listenFor: const Duration(seconds: 10),
-        pauseFor: const Duration(seconds: 3),
-        partialResults: true,
+
+    try {
+      final langProvider = context.read<LanguageProvider>();
+
+      // Start audio recording
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.m4a';
+      await _audioRecorder.start(
+        const RecordConfig(encoder: AudioEncoder.aacLc, bitRate: 128000, sampleRate: 44100),
+        path: fileName,
       );
+
+      // Start live STT transcription in parallel
+      _liveTranscript = _transcriptController.text;
+      _isTranscribing = true;
+      _startLiveStt(langProvider.sttLocale);
+
+      // Timers
+      _recordingDuration = Duration.zero;
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() => _recordingDuration += const Duration(seconds: 1));
+      });
+
+      // Auto-stop at max duration
+      _maxDurationTimer = Timer(_kMaxRecordingDuration, () {
+        if (_recordingState == RecordingState.recording) _stopRecording();
+      });
+
+      setState(() {
+        _recordingState = RecordingState.recording;
+        _audioPath = fileName;
+      });
+    } catch (e) {
+      debugPrint('Error starting recording: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+          content: Text('Failed to start recording'),
+          backgroundColor: Colors.red,
+        ));
+      }
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  SPEECH — CONTENT
-  // ─────────────────────────────────────────────
-  Future<void> _listenForContent() async {
-    final langProvider = context.read<LanguageProvider>();
-    if (_isListeningContent) {
-      await _speech.stop();
-      setState(() => _isListeningContent = false);
-      return;
-    }
-    if (_isListeningTitle) {
-      await _speech.stop();
-      setState(() => _isListeningTitle = false);
-    }
-    final granted = await _requestMicPermission();
-    if (!granted) return;
+  void _startLiveStt(String locale) async {
     bool available = await _speech.initialize(
-      onError: (e) => setState(() => _isListeningContent = false),
+      onError: (_) {},
       onStatus: (s) {
-        if (s == 'done' || s == 'notListening') {
-          if (mounted) setState(() => _isListeningContent = false);
+        // Restart STT when it stops (keeps live transcription going for long sessions)
+        if ((s == 'done' || s == 'notListening') && _recordingState == RecordingState.recording && _isTranscribing) {
+          Future.delayed(const Duration(milliseconds: 300), () => _startLiveStt(locale));
         }
       },
     );
-    if (available) {
-      final existingText = _contentController.text;
-      final prefix = existingText.isNotEmpty ? '$existingText ' : '';
-      setState(() => _isListeningContent = true);
-      _speech.listen(
-        localeId: langProvider.sttLocale,
-        onResult: (val) {
-          String newText = val.recognizedWords;
+    if (!available || !_isTranscribing) return;
 
-          if (val.finalResult && newText.isNotEmpty) {
-            String lastChar = newText.substring(newText.length - 1);
-            if (lastChar != '.' && lastChar != '?' && lastChar != '!') {
-              newText += '.';
-            }
+    final existingText = _liveTranscript;
+    final prefix = existingText.isNotEmpty ? '$existingText ' : '';
+
+    _speech.listen(
+      localeId: locale,
+      onResult: (val) {
+        String newText = val.recognizedWords;
+        if (val.finalResult && newText.isNotEmpty) {
+          _liveTranscript = '$prefix$newText';
+          if (mounted) {
+            setState(() {
+              _transcriptController.text = _liveTranscript;
+              _transcriptController.selection = TextSelection.fromPosition(
+                TextPosition(offset: _transcriptController.text.length),
+              );
+            });
           }
+        }
+      },
+      listenFor: const Duration(minutes: 5),
+      pauseFor: const Duration(seconds: 6),
+      partialResults: true,
+    );
+  }
 
-          final combined = '$prefix$newText';
-          _contentController.text = combined.length > _kMaxContentLength
-              ? combined.substring(0, _kMaxContentLength)
-              : combined;
-          _contentController.selection = TextSelection.fromPosition(
-            TextPosition(offset: _contentController.text.length),
-          );
-          setState(() {});
-        },
-        listenFor: const Duration(minutes: 5),
-        pauseFor: const Duration(seconds: 4),
-        partialResults: true,
-      );
+  Future<void> _stopRecording() async {
+    _recordingTimer?.cancel();
+    _maxDurationTimer?.cancel();
+    _isTranscribing = false;
+    await _speech.stop();
+
+    setState(() => _recordingState = RecordingState.processing);
+
+    try {
+      final path = await _audioRecorder.stop();
+      final actualPath = path ?? _audioPath;
+      _audioPath = actualPath;
+
+      if (actualPath != null && !_isAnonymousUser) {
+        await _uploadAudioToFirebase(actualPath);
+      }
+
+      setState(() => _recordingState = RecordingState.done);
+    } catch (e) {
+      debugPrint('Error stopping recording: $e');
+      setState(() => _recordingState = RecordingState.done);
     }
+  }
+
+  Future<void> _uploadAudioToFirebase(String localPath) async {
+    if (_resolvedUid == null) return;
+    try {
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final ref = FirebaseStorage.instance.ref().child('user_notes').child(_resolvedUid!).child(fileName);
+      final uploadTask = ref.putFile(File(localPath), SettableMetadata(contentType: 'audio/m4a'));
+      final snapshot = await uploadTask.whenComplete(() {});
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+      setState(() => _audioUrl = downloadUrl);
+      final file = File(localPath);
+      if (await file.exists()) await file.delete();
+    } catch (e) {
+      debugPrint('Error uploading audio: $e');
+    }
+  }
+
+  void _discardRecording() {
+    _recordingTimer?.cancel();
+    _maxDurationTimer?.cancel();
+    _isTranscribing = false;
+    _speech.stop();
+    _audioRecorder.stop();
+    setState(() {
+      _recordingState = RecordingState.idle;
+      _audioPath = null;
+      _audioUrl = null;
+      _recordingDuration = Duration.zero;
+      _audioDuration = Duration.zero;
+      _currentPosition = Duration.zero;
+      _isPlaying = false;
+      _liveTranscript = '';
+      _transcriptController.clear();
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  //  PLAYBACK
+  // ─────────────────────────────────────────────
+  Future<void> _playAudio({String? url}) async {
+    final targetUrl = url ?? _audioUrl;
+    if (targetUrl == null) return;
+    try {
+      if (_isPlaying) {
+        await _audioPlayer.pause();
+        setState(() => _isPlaying = false);
+      } else {
+        await _audioPlayer.setUrl(targetUrl);
+        _audioPlayer.positionStream.listen((p) { if (mounted) setState(() => _currentPosition = p); });
+        _audioPlayer.durationStream.listen((d) { if (d != null && mounted) setState(() => _audioDuration = d); });
+        _audioPlayer.playerStateStream.listen((s) {
+          if (s.processingState == ProcessingState.completed) {
+            if (mounted) setState(() { _isPlaying = false; _currentPosition = Duration.zero; });
+          }
+        });
+        await _audioPlayer.play();
+        setState(() => _isPlaying = true);
+      }
+    } catch (e) {
+      debugPrint('Error playing audio: $e');
+    }
+  }
+
+  String _formatDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    final s = d.inSeconds % 60;
+    if (h > 0) return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
   // ─────────────────────────────────────────────
   //  SAVE NOTE
   // ─────────────────────────────────────────────
   Future<void> _saveNote(LanguageProvider lang) async {
-    final content = _contentController.text.trim();
+    final transcript = _transcriptController.text.trim();
     final rawTitle = _titleController.text.trim();
     final title = rawTitle.isNotEmpty ? rawTitle : 'Note';
 
     if (rawTitle.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add a title before saving.'),
-          backgroundColor: Color(0xFF333333),
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
-        ),
-      );
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Please add a title before saving.'),
+        backgroundColor: Color(0xFF333333),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+      ));
       return;
     }
-    if (content.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(lang.t('add_content')),
-          backgroundColor: const Color(0xFF333333),
-          behavior: SnackBarBehavior.floating,
-          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
-        ),
-      );
-      return;
-    }
-    if (title.length > _kMaxTitleLength ||
-        content.length > _kMaxContentLength) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Note is too long. Please shorten it.'),
-          backgroundColor: Color(0xFF333333),
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
-        ),
-      );
+    if (transcript.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        content: Text('Transcript is empty. Please record or type content.'),
+        backgroundColor: Color(0xFF333333),
+        behavior: SnackBarBehavior.floating,
+        margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+      ));
       return;
     }
 
     setState(() => _isSaving = true);
-
     try {
       if (_isEditing && _editingId != null) {
         if (_isAnonymousUser) {
-          context.read<TempNotesProvider>().update(_editingId!, title, content);
+          context.read<TempNotesProvider>().update(_editingId!, title, transcript);
         } else {
-          await FirebaseFirestore.instance
-              .collection('notes')
-              .doc(_editingId)
-              .update({
-                'title': title,
-                'content': content,
-                'lastUpdated': FieldValue.serverTimestamp(),
-              });
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                lang.t('note_saved'),
-              ), // Or a specific 'note_updated' key if available
-              behavior: SnackBarBehavior.floating,
-              backgroundColor: const Color(0xFF333333),
-              margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
-            ),
-          );
+          await FirebaseFirestore.instance.collection('notes').doc(_editingId).update({
+            'title': title,
+            'content': transcript,
+            'audioUrl': _audioUrl,
+            'recordingDurationSeconds': _recordingDuration.inSeconds,
+            'lastUpdated': FieldValue.serverTimestamp(),
+          });
         }
       } else {
         if (_isAnonymousUser) {
-          // ── Guest: store in memory ──────────────────────
-          final tempNotes = context.read<TempNotesProvider>();
-          tempNotes.add(title, content);
+          context.read<TempNotesProvider>().add(title, transcript);
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
-                  'Note saved temporarily. Create an account to keep it.',
-                ),
-                backgroundColor: Color(0xFF333333),
-                behavior: SnackBarBehavior.floating,
-                margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
-              ),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text('Note saved temporarily. Create an account to keep it.'),
+              backgroundColor: Color(0xFF333333),
+              behavior: SnackBarBehavior.floating,
+              margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+            ));
           }
         } else {
-          // ── Logged in: save to Firestore under the Firebase auth UID ──
-          final authUid =
-              FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid!;
+          final authUid = FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid!;
           await FirebaseFirestore.instance.collection('notes').add({
             'userId': authUid,
             'title': title,
-            'content': content,
+            'content': transcript,
+            'audioUrl': _audioUrl,
+            'recordingDurationSeconds': _recordingDuration.inSeconds,
             'timestamp': FieldValue.serverTimestamp(),
           });
           if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(lang.t('note_saved')),
-                behavior: SnackBarBehavior.floating,
-                backgroundColor: const Color(0xFF333333),
-                margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
-              ),
-            );
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+              content: Text(lang.t('note_saved')),
+              behavior: SnackBarBehavior.floating,
+              backgroundColor: const Color(0xFF333333),
+              margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+            ));
           }
         }
       }
+
       if (mounted) {
         setState(() {
-          _contentController.clear();
           _titleController.clear();
+          _transcriptController.clear();
+          _liveTranscript = '';
           _isEditing = false;
           _editingId = null;
+          _audioPath = null;
+          _audioUrl = null;
+          _recordingState = RecordingState.idle;
+          _recordingDuration = Duration.zero;
+          _audioDuration = Duration.zero;
+          _currentPosition = Duration.zero;
+          _isPlaying = false;
         });
       }
     } on FirebaseException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e.code == 'unavailable'
-                  ? 'No internet. Note will sync when back online.'
-                  : '${lang.t('error_saving')} ${e.message}',
-            ),
-            backgroundColor: const Color(0xFF333333),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.code == 'unavailable' ? 'No internet. Note will sync when back online.' : '${lang.t('error_saving')} ${e.message}'),
+          backgroundColor: const Color(0xFF333333),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+        ));
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${lang.t('error_saving')} $e'),
-            backgroundColor: const Color(0xFF333333),
-            behavior: SnackBarBehavior.floating,
-            margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text('${lang.t('error_saving')} $e'),
+          backgroundColor: const Color(0xFF333333),
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+        ));
       }
     } finally {
       if (mounted) setState(() => _isSaving = false);
@@ -438,7 +466,7 @@ class _NotesPageState extends State<NotesPage> {
   }
 
   // ─────────────────────────────────────────────
-  //  DELETE — Firestore
+  //  DELETE
   // ─────────────────────────────────────────────
   Future<void> _deleteNote(String docId) async {
     try {
@@ -446,80 +474,41 @@ class _NotesPageState extends State<NotesPage> {
       final snapshot = await docRef.get();
       if (snapshot.exists) {
         final data = snapshot.data()!;
-        final targetUid =
-            data['userId']?.toString() ??
-            FirebaseAuth.instance.currentUser?.uid ??
-            _resolvedUid;
-
+        final targetUid = data['userId']?.toString() ?? FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid;
         if (targetUid != null) {
-          await FirebaseFirestore.instance
-              .collection('users')
-              .doc(targetUid)
-              .collection('deleted_library')
-              .add({
-                'fileName': data['title'] ?? 'Note',
-                'content': data['content'],
-                'fileType': 'note',
-                'sourceCollection': 'notes',
-                'deletedAt': FieldValue.serverTimestamp(),
-                'originalTimestamp':
-                    data['timestamp'] ?? FieldValue.serverTimestamp(),
-                'userId': data['userId'] ?? targetUid,
-              });
+          await FirebaseFirestore.instance.collection('users').doc(targetUid).collection('deleted_library').add({
+            'fileName': data['title'] ?? 'Note',
+            'content': data['content'],
+            'audioUrl': data['audioUrl'],
+            'fileType': 'note',
+            'sourceCollection': 'notes',
+            'deletedAt': FieldValue.serverTimestamp(),
+            'originalTimestamp': data['timestamp'] ?? FieldValue.serverTimestamp(),
+            'userId': data['userId'] ?? targetUid,
+          });
         }
       }
       await docRef.delete();
     } on FirebaseException catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              e.code == 'unavailable'
-                  ? 'Cannot delete while offline.'
-                  : 'Delete failed: ${e.message}',
-            ),
-            backgroundColor: const Color(0xFF333333),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.code == 'unavailable' ? 'Cannot delete while offline.' : 'Delete failed: ${e.message}'),
+          backgroundColor: const Color(0xFF333333),
+          behavior: SnackBarBehavior.floating,
+        ));
       }
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  DELETE — temp note
-  // ─────────────────────────────────────────────
   void _deleteTempNote(String id, TempNotesProvider tempNotes) {
     tempNotes.remove(id);
-    if (_isEditing && _editingId == id) {
-      _cancelEdit();
-    }
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Note deleted.'),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: Color(0xFF333333),
-        margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────
-  //  VIEW / EDIT NOTE
-  // ─────────────────────────────────────────────
-  void _startEditing(String id, String title, String content) {
-    setState(() {
-      _isEditing = true;
-      _editingId = id;
-      _titleController.text = title;
-      _contentController.text = content;
-    });
-    // Scroll to top to see editing fields
-    _scrollController.animateTo(
-      0,
-      duration: const Duration(milliseconds: 300),
-      curve: Curves.easeOut,
-    );
+    if (_isEditing && _editingId == id) _cancelEdit();
+    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+      content: Text('Note deleted.'),
+      behavior: SnackBarBehavior.floating,
+      backgroundColor: Color(0xFF333333),
+      margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+    ));
   }
 
   void _cancelEdit() {
@@ -527,29 +516,38 @@ class _NotesPageState extends State<NotesPage> {
       _isEditing = false;
       _editingId = null;
       _titleController.clear();
-      _contentController.clear();
+      _transcriptController.clear();
+      _liveTranscript = '';
+      _recordingState = RecordingState.idle;
+      _audioPath = null;
+      _audioUrl = null;
+      _recordingDuration = Duration.zero;
     });
   }
 
-  void _showNoteDetails(String id, String title, String content) {
+  // ─────────────────────────────────────────────
+  //  NOTE DETAIL BOTTOM SHEET
+  // ─────────────────────────────────────────────
+  void _showNoteDetails(String id, String title, String content, {String? audioUrl, int? durationSeconds}) {
     final lang = context.read<LanguageProvider>();
     final tts = context.read<TtsService>();
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFFF3E5AB),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+      backgroundColor: Colors.transparent,
       builder: (ctx) {
         final popupTitleController = TextEditingController(text: title);
         final popupContentController = TextEditingController(text: content);
         bool isEditMode = false;
         bool isSaving = false;
         bool isSpeaking = false;
+        int activeTab = 0; // 0=transcript, 1=audio
+        AudioPlayer localPlayer = AudioPlayer();
+        bool isPlayingLocal = false;
+        Duration localPos = Duration.zero;
+        Duration localDur = Duration.zero;
 
-        // Auto-start reading when note opens
         WidgetsBinding.instance.addPostFrameCallback((_) {
           tts.play(title, content, lang.ttsLocale);
           isSpeaking = true;
@@ -557,430 +555,210 @@ class _NotesPageState extends State<NotesPage> {
 
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
-            return Padding(
-              padding: EdgeInsets.only(
-                bottom: MediaQuery.of(ctx).viewInsets.bottom,
+            return Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFFF3E5AB),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
               ),
-              child: DraggableScrollableSheet(
-                initialChildSize: 0.75,
-                minChildSize: 0.4,
-                maxChildSize: 0.95,
-                expand: false,
-                builder: (_, scrollController) => Padding(
-                  padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+              child: Padding(
+                padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+                child: DraggableScrollableSheet(
+                  initialChildSize: 0.88,
+                  minChildSize: 0.5,
+                  maxChildSize: 0.97,
+                  expand: false,
+                  builder: (_, scrollController) => Column(
                     children: [
-                      // Drag handle
+                      // Handle
+                      const SizedBox(height: 12),
                       Center(
                         child: Container(
-                          width: 40,
+                          width: 36,
                           height: 4,
-                          decoration: BoxDecoration(
-                            color: Colors.grey[400],
-                            borderRadius: BorderRadius.circular(10),
-                          ),
+                          decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
                       const SizedBox(height: 16),
 
-                      // Header row
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(
-                            child: isEditMode
-                                ? TextField(
-                                    controller: popupTitleController,
-                                    autofocus: true,
-                                    maxLength: _kMaxTitleLength,
-                                    style: const TextStyle(
-                                      fontSize: 20,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                    decoration: InputDecoration(
-                                      hintText: lang.t('title_hint'),
-                                      border: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                        borderSide: BorderSide.none,
+                      // Header
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: isEditMode
+                                  ? TextField(
+                                      controller: popupTitleController,
+                                      autofocus: true,
+                                      maxLength: _kMaxTitleLength,
+                                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                                      decoration: InputDecoration(
+                                        hintText: 'Title',
+                                        counterText: '',
+                                        filled: true,
+                                        fillColor: Colors.black.withOpacity(0.05),
+                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
+                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                       ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                        borderSide: BorderSide.none,
-                                      ),
-                                      focusedBorder: OutlineInputBorder(
-                                        borderRadius: BorderRadius.circular(8),
-                                        borderSide: BorderSide.none,
-                                      ),
-                                      counterText: '',
-                                      filled: true,
-                                      fillColor: Colors.black.withValues(
-                                        alpha: 0.05,
-                                      ),
-                                      contentPadding:
-                                          const EdgeInsets.symmetric(
-                                            horizontal: 10,
-                                            vertical: 6,
-                                          ),
-                                    ),
-                                  )
-                                : Text(
-                                    title,
-                                    style: const TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                          ),
-                          const SizedBox(width: 4),
-
-                          if (!isEditMode) ...[
-                            // Speaker toggle button
-                            IconButton(
-                              icon: Icon(
-                                isSpeaking
-                                    ? Icons.stop_circle_outlined
-                                    : Icons.volume_up_rounded,
-                                color: isSpeaking
-                                    ? const Color(0xFFD4B96A)
-                                    : Colors.black87,
-                              ),
-                              tooltip: isSpeaking
-                                  ? 'Stop reading'
-                                  : 'Read aloud',
-                              onPressed: () {
-                                if (isSpeaking) {
-                                  tts.stop();
-                                  setSheetState(() => isSpeaking = false);
-                                } else {
-                                  tts.play(title, content, lang.ttsLocale);
-                                  setSheetState(() => isSpeaking = true);
-                                }
-                              },
+                                    )
+                                  : Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
                             ),
-                            IconButton(
-                              icon: const Icon(
-                                Icons.edit_note_rounded,
-                                color: Colors.black87,
+                            if (!isEditMode) ...[
+                              _sheetIconBtn(
+                                icon: isSpeaking ? Icons.stop_circle_outlined : Icons.volume_up_rounded,
+                                color: isSpeaking ? const Color(0xFFD4B96A) : Colors.black54,
+                                onTap: () {
+                                  if (isSpeaking) { tts.stop(); setSheetState(() => isSpeaking = false); }
+                                  else { tts.play(title, content, lang.ttsLocale); setSheetState(() => isSpeaking = true); }
+                                },
                               ),
-                              onPressed: () {
-                                tts.stop();
-                                setSheetState(() {
-                                  isEditMode = true;
-                                  isSpeaking = false;
-                                });
-                              },
-                            ),
-                          ] else ...[
-                            IconButton(
-                              icon: const Icon(
-                                Icons.close,
+                              _sheetIconBtn(
+                                icon: Icons.edit_note_rounded,
                                 color: Colors.black54,
+                                onTap: () {
+                                  tts.stop();
+                                  setSheetState(() { isEditMode = true; isSpeaking = false; });
+                                },
                               ),
-                              tooltip: 'Cancel',
-                              onPressed: () {
+                            ] else ...[
+                              _sheetIconBtn(icon: Icons.close, color: Colors.black38, onTap: () {
                                 popupTitleController.text = title;
                                 popupContentController.text = content;
                                 setSheetState(() => isEditMode = false);
-                              },
-                            ),
-                            isSaving
-                                ? const Padding(
-                                    padding: EdgeInsets.all(12),
-                                    child: SizedBox(
-                                      width: 20,
-                                      height: 20,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2,
-                                        color: Colors.black,
-                                      ),
-                                    ),
-                                  )
-                                : IconButton(
-                                    icon: const Icon(
-                                      Icons.check_rounded,
-                                      color: Colors.black87,
-                                    ),
-                                    tooltip: 'Save',
-                                    onPressed: () async {
-                                      final newTitle = popupTitleController.text
-                                          .trim();
-                                      final newContent = popupContentController
-                                          .text
-                                          .trim();
-                                      if (newTitle.isEmpty) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          const SnackBar(
-                                            content: Text(
-                                              'Please add a title before saving.',
-                                            ),
-                                            backgroundColor: Color(0xFF333333),
-                                            behavior: SnackBarBehavior.floating,
-                                          ),
-                                        );
-                                        return;
-                                      }
-                                      if (newContent.isEmpty) {
-                                        ScaffoldMessenger.of(
-                                          context,
-                                        ).showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              lang.t('add_content'),
-                                            ),
-                                            backgroundColor: const Color(
-                                              0xFF333333,
-                                            ),
-                                            behavior: SnackBarBehavior.floating,
-                                          ),
-                                        );
-                                        return;
-                                      }
+                              }),
+                              isSaving
+                                  ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)))
+                                  : _sheetIconBtn(icon: Icons.check_rounded, color: Colors.black87, onTap: () async {
+                                      final newTitle = popupTitleController.text.trim();
+                                      final newContent = popupContentController.text.trim();
+                                      if (newTitle.isEmpty || newContent.isEmpty) return;
                                       setSheetState(() => isSaving = true);
                                       try {
                                         if (_isAnonymousUser) {
-                                          context
-                                              .read<TempNotesProvider>()
-                                              .update(id, newTitle, newContent);
+                                          context.read<TempNotesProvider>().update(id, newTitle, newContent);
                                         } else {
-                                          await FirebaseFirestore.instance
-                                              .collection('notes')
-                                              .doc(id)
-                                              .update({
-                                                'title': newTitle,
-                                                'content': newContent,
-                                                'lastUpdated':
-                                                    FieldValue.serverTimestamp(),
-                                              });
+                                          await FirebaseFirestore.instance.collection('notes').doc(id).update({
+                                            'title': newTitle, 'content': newContent, 'lastUpdated': FieldValue.serverTimestamp(),
+                                          });
                                         }
-                                        if (context.mounted) {
-                                          Navigator.pop(ctx);
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                lang.t('note_saved'),
-                                              ),
-                                              backgroundColor: const Color(
-                                                0xFF333333,
-                                              ),
-                                              behavior:
-                                                  SnackBarBehavior.floating,
-                                            ),
-                                          );
-                                        }
-                                      } catch (e) {
-                                        setSheetState(() => isSaving = false);
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(
-                                            context,
-                                          ).showSnackBar(
-                                            SnackBar(
-                                              content: Text(
-                                                '${lang.t('error_saving')} $e',
-                                              ),
-                                              backgroundColor: const Color(
-                                                0xFF333333,
-                                              ),
-                                              behavior:
-                                                  SnackBarBehavior.floating,
-                                            ),
-                                          );
-                                        }
-                                      }
-                                    },
-                                  ),
+                                        if (context.mounted) { Navigator.pop(ctx); }
+                                      } catch (e) { setSheetState(() => isSaving = false); }
+                                    }),
+                            ],
                           ],
-                        ],
+                        ),
                       ),
 
-                      // ── AI Tools bar (only in view mode) ──
-                      if (!isEditMode) ...[
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: Colors.black.withOpacity(0.08),
-                            ),
-                          ),
+                      const SizedBox(height: 4),
+                      if (durationSeconds != null && durationSeconds > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 20, bottom: 4),
                           child: Row(
                             children: [
-                              const Icon(
-                                Icons.auto_awesome,
-                                size: 14,
-                                color: Color(0xFF7A6130),
-                              ),
-                              const SizedBox(width: 6),
-                              const Text(
-                                'AI Tools',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                  color: Color(0xFF7A6130),
-                                ),
-                              ),
-                              const Spacer(),
-                              // Summarize
-                              GestureDetector(
-                                onTap: () {
-                                  tts.stop();
-                                  Navigator.pop(ctx);
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => AiResultPage(
-                                        documentTitle: title,
-                                        documentContent: content,
-                                        mode: 'summary',
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black,
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.summarize_outlined,
-                                        color: Color(0xFFF3E5AB),
-                                        size: 12,
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'Summarize',
-                                        style: TextStyle(
-                                          color: Color(0xFFF3E5AB),
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              // Flashcards
-                              GestureDetector(
-                                onTap: () async {
-                                  tts.stop();
-                                  // Ask how many cards
-                                  final count = await _pickCardCount(context);
-                                  if (count == null || !context.mounted) return;
-                                  Navigator.pop(ctx);
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => AiResultPage(
-                                        documentTitle: title,
-                                        documentContent: content,
-                                        mode: 'flashcards',
-                                        cardCount: count,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFFD4B96A),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.style_outlined,
-                                        color: Colors.black,
-                                        size: 12,
-                                      ),
-                                      SizedBox(width: 4),
-                                      Text(
-                                        'Flashcards',
-                                        style: TextStyle(
-                                          color: Colors.black,
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
+                              Icon(Icons.access_time, size: 12, color: Colors.grey[600]),
+                              const SizedBox(width: 4),
+                              Text(_formatDuration(Duration(seconds: durationSeconds)),
+                                  style: TextStyle(fontSize: 11, color: Colors.grey[600])),
                             ],
                           ),
                         ),
+
+                      // ── AI Tools bar ──
+                      if (!isEditMode) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                            decoration: BoxDecoration(
+                              color: Colors.black,
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.auto_awesome, size: 13, color: Color(0xFFD4B96A)),
+                                const SizedBox(width: 6),
+                                const Text('AI Tools', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Color(0xFFD4B96A))),
+                                const Spacer(),
+                                _aiChip(label: 'Summarize', icon: Icons.summarize_outlined, dark: true, onTap: () {
+                                  tts.stop(); Navigator.pop(ctx);
+                                  Navigator.push(context, MaterialPageRoute(builder: (_) => AiResultPage(documentTitle: title, documentContent: content, mode: 'summary')));
+                                }),
+                                const SizedBox(width: 8),
+                                _aiChip(label: 'Flashcards', icon: Icons.style_outlined, dark: false, onTap: () async {
+                                  tts.stop();
+                                  final count = await _pickCardCount(context);
+                                  if (count == null || !context.mounted) return;
+                                  Navigator.pop(ctx);
+                                  Navigator.push(context, MaterialPageRoute(builder: (_) => AiResultPage(documentTitle: title, documentContent: content, mode: 'flashcards', cardCount: count)));
+                                }),
+                              ],
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+
+                        // ── Tabs ──
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            children: [
+                              _tabChip(label: 'Transcript', selected: activeTab == 0, onTap: () => setSheetState(() => activeTab = 0)),
+                              const SizedBox(width: 8),
+                              if (audioUrl != null)
+                                _tabChip(label: 'Audio', selected: activeTab == 1, onTap: () => setSheetState(() => activeTab = 1)),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                       ],
 
-                      const Divider(height: 20),
+                      const Divider(height: 1, thickness: 1, indent: 20, endIndent: 20),
 
-                      // Body
+                      // ── Body ──
                       Expanded(
                         child: isEditMode
-                            ? TextField(
-                                controller: popupContentController,
-                                maxLines: null,
-                                expands: true,
-                                maxLength: _kMaxContentLength,
-                                textAlignVertical: TextAlignVertical.top,
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  height: 1.6,
-                                ),
-                                decoration: InputDecoration(
-                                  hintText: lang.t('content_hint'),
-                                  border: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide.none,
+                            ? Padding(
+                                padding: const EdgeInsets.all(20),
+                                child: TextField(
+                                  controller: popupContentController,
+                                  maxLines: null,
+                                  expands: true,
+                                  maxLength: _kMaxContentLength,
+                                  textAlignVertical: TextAlignVertical.top,
+                                  style: const TextStyle(fontSize: 15, height: 1.7),
+                                  decoration: InputDecoration(
+                                    hintText: 'Transcript...',
+                                    counterText: '',
+                                    filled: true,
+                                    fillColor: Colors.black.withOpacity(0.04),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
+                                    contentPadding: const EdgeInsets.all(14),
                                   ),
-                                  enabledBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  focusedBorder: OutlineInputBorder(
-                                    borderRadius: BorderRadius.circular(12),
-                                    borderSide: BorderSide.none,
-                                  ),
-                                  counterText: '',
-                                  filled: true,
-                                  fillColor: Colors.black.withValues(
-                                    alpha: 0.05,
-                                  ),
-                                  contentPadding: const EdgeInsets.all(12),
                                 ),
                               )
-                            : ListView(
-                                controller: scrollController,
-                                children: [
-                                  Text(
-                                    content,
-                                    style: const TextStyle(
-                                      fontSize: 16,
-                                      height: 1.6,
-                                      color: Colors.black87,
-                                    ),
+                            : activeTab == 0
+                                ? ListView(
+                                    controller: scrollController,
+                                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                                    children: [
+                                      Text(content, style: const TextStyle(fontSize: 15, height: 1.75, color: Colors.black87)),
+                                    ],
+                                  )
+                                : _audioPlayerPanel(
+                                    audioUrl: audioUrl!,
+                                    isPlayingLocal: isPlayingLocal,
+                                    localPos: localPos,
+                                    localDur: localDur,
+                                    localPlayer: localPlayer,
+                                    onStateChanged: (playing, pos, dur) {
+                                      setSheetState(() {
+                                        isPlayingLocal = playing;
+                                        localPos = pos;
+                                        localDur = dur;
+                                      });
+                                    },
                                   ),
-                                ],
-                              ),
                       ),
                     ],
                   ),
@@ -990,13 +768,146 @@ class _NotesPageState extends State<NotesPage> {
           },
         );
       },
-    ).whenComplete(() {
-      // Stop TTS when note is closed
-      tts.stop();
-    });
+    ).whenComplete(() { tts.stop(); });
   }
 
-  // ── Card count picker ─────────────────────────
+  Widget _audioPlayerPanel({
+    required String audioUrl,
+    required bool isPlayingLocal,
+    required Duration localPos,
+    required Duration localDur,
+    required AudioPlayer localPlayer,
+    required void Function(bool playing, Duration pos, Duration dur) onStateChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Colors.black,
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.mic, color: const Color(0xFFD4B96A), size: 18),
+                    const SizedBox(width: 8),
+                    const Text('Voice Recording', style: TextStyle(color: Color(0xFFD4B96A), fontWeight: FontWeight.w700, fontSize: 14)),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                GestureDetector(
+                  onTap: () async {
+                    try {
+                      if (isPlayingLocal) {
+                        await localPlayer.pause();
+                        onStateChanged(false, localPos, localDur);
+                      } else {
+                        await localPlayer.setUrl(audioUrl);
+                        localPlayer.positionStream.listen((p) => onStateChanged(true, p, localDur));
+                        localPlayer.durationStream.listen((d) { if (d != null) onStateChanged(true, localPos, d); });
+                        localPlayer.playerStateStream.listen((s) {
+                          if (s.processingState == ProcessingState.completed) {
+                            onStateChanged(false, Duration.zero, localDur);
+                          }
+                        });
+                        await localPlayer.play();
+                        onStateChanged(true, localPos, localDur);
+                      }
+                    } catch (e) { debugPrint('Error: $e'); }
+                  },
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD4B96A),
+                      borderRadius: BorderRadius.circular(36),
+                    ),
+                    child: Icon(isPlayingLocal ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.black, size: 36),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (localDur > Duration.zero) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(_formatDuration(localPos), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                      Text(_formatDuration(localDur), style: const TextStyle(color: Colors.white54, fontSize: 12)),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor: const Color(0xFFD4B96A),
+                      inactiveTrackColor: Colors.white12,
+                      thumbColor: const Color(0xFFD4B96A),
+                      trackHeight: 3,
+                    ),
+                    child: Slider(
+                      value: localPos.inSeconds.toDouble().clamp(0, localDur.inSeconds.toDouble()),
+                      max: localDur.inSeconds.toDouble(),
+                      onChanged: (v) => localPlayer.seek(Duration(seconds: v.toInt())),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sheetIconBtn({required IconData icon, required Color color, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Icon(icon, color: color, size: 22),
+      ),
+    );
+  }
+
+  Widget _aiChip({required String label, required IconData icon, required bool dark, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: dark ? Colors.white.withOpacity(0.12) : const Color(0xFFD4B96A),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, color: dark ? const Color(0xFFD4B96A) : Colors.black, size: 12),
+            const SizedBox(width: 4),
+            Text(label, style: TextStyle(color: dark ? const Color(0xFFD4B96A) : Colors.black, fontSize: 11, fontWeight: FontWeight.w700)),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tabChip({required String label, required bool selected, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected ? Colors.black : Colors.black.withOpacity(0.07),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(label, style: TextStyle(color: selected ? const Color(0xFFD4B96A) : Colors.black54, fontSize: 12, fontWeight: FontWeight.w700)),
+      ),
+    );
+  }
+
   Future<int?> _pickCardCount(BuildContext context) async {
     int selected = 10;
     return showDialog<int>(
@@ -1004,65 +915,31 @@ class _NotesPageState extends State<NotesPage> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFFF3E5AB),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
-          ),
-          title: const Text(
-            'How many flashcards?',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
-          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: const Text('How many flashcards?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                '$selected cards',
-                style: const TextStyle(
-                  fontSize: 32,
-                  fontWeight: FontWeight.bold,
-                  color: Color(0xFF7A6130),
-                ),
-              ),
+              Text('$selected cards', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF7A6130))),
               Slider(
-                value: selected.toDouble(),
-                min: 5,
-                max: 20,
-                divisions: 15,
-                activeColor: Colors.black,
-                inactiveColor: Colors.grey[300],
+                value: selected.toDouble(), min: 5, max: 20, divisions: 15,
+                activeColor: Colors.black, inactiveColor: Colors.grey[300],
                 onChanged: (v) => setDialogState(() => selected = v.round()),
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '5',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
-                  Text(
-                    '20',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
+                  Text('5', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
+                  Text('20', style: TextStyle(color: Colors.grey[600], fontSize: 12)),
                 ],
               ),
             ],
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Colors.black54),
-              ),
-            ),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: Colors.black54))),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, selected),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: const Color(0xFFF3E5AB),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: const Color(0xFFD4B96A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
               child: const Text('Generate'),
             ),
           ],
@@ -1071,7 +948,286 @@ class _NotesPageState extends State<NotesPage> {
     );
   }
 
-  final ScrollController _scrollController = ScrollController();
+  // ─────────────────────────────────────────────
+  //  RECORDING AREA WIDGET
+  // ─────────────────────────────────────────────
+  Widget _buildRecordingArea(LanguageProvider lang) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ── IDLE: Show big record button ──
+        if (_recordingState == RecordingState.idle) ...[
+          GestureDetector(
+            onTap: _startRecording,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 28),
+              decoration: BoxDecoration(
+                color: Colors.black,
+                borderRadius: BorderRadius.circular(24),
+              ),
+              child: Column(
+                children: [
+                  Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFD4B96A),
+                      borderRadius: BorderRadius.circular(36),
+                      boxShadow: [BoxShadow(color: const Color(0xFFD4B96A).withOpacity(0.4), blurRadius: 20, spreadRadius: 4)],
+                    ),
+                    child: const Icon(Icons.mic, color: Colors.black, size: 36),
+                  ),
+                  const SizedBox(height: 14),
+                  const Text('Tap to Record', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16, letterSpacing: 0.5)),
+                  const SizedBox(height: 4),
+                  Text('Up to 1 hour · auto-transcribed', style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 11)),
+                ],
+              ),
+            ),
+          ),
+        ],
+
+        // ── RECORDING: Show live pulse + live transcript ──
+        if (_recordingState == RecordingState.recording) ...[
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(24)),
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                // Animated mic
+                AnimatedBuilder(
+                  animation: _pulseAnimation,
+                  builder: (_, __) => Transform.scale(
+                    scale: _pulseAnimation.value,
+                    child: Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(34),
+                        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.5), blurRadius: 24, spreadRadius: 6)],
+                      ),
+                      child: const Icon(Icons.mic, color: Colors.white, size: 34),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Timer
+                Text(_formatDuration(_recordingDuration),
+                    style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, fontFamily: 'monospace', letterSpacing: 2)),
+                const SizedBox(height: 4),
+                Text('Recording · ${_formatDuration(_kMaxRecordingDuration - _recordingDuration)} left',
+                    style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11)),
+
+                // Live transcript preview
+                if (_transcriptController.text.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.06),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    constraints: const BoxConstraints(maxHeight: 80),
+                    child: SingleChildScrollView(
+                      reverse: true,
+                      child: Text(
+                        _transcriptController.text,
+                        style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12, height: 1.5),
+                      ),
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 16),
+                // Stop button
+                GestureDetector(
+                  onTap: _stopRecording,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withOpacity(0.15),
+                      border: Border.all(color: Colors.red.withOpacity(0.5)),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.stop_circle_outlined, color: Colors.redAccent, size: 20),
+                        SizedBox(width: 8),
+                        Text('Stop Recording', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700, fontSize: 14)),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ],
+
+        // ── PROCESSING ──
+        if (_recordingState == RecordingState.processing) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 36),
+            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(24)),
+            child: const Column(
+              children: [
+                CircularProgressIndicator(color: Color(0xFFD4B96A), strokeWidth: 2),
+                SizedBox(height: 16),
+                Text('Processing audio...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
+                SizedBox(height: 4),
+                Text('Uploading & finalising transcript', style: TextStyle(color: Colors.white38, fontSize: 11)),
+              ],
+            ),
+          ),
+        ],
+
+        // ── DONE: Show playback + transcript ──
+        if (_recordingState == RecordingState.done) ...[
+          // Playback card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(24)),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.check_circle, color: Color(0xFFD4B96A), size: 18),
+                    const SizedBox(width: 8),
+                    const Text('Recording complete', style: TextStyle(color: Color(0xFFD4B96A), fontWeight: FontWeight.w700, fontSize: 13)),
+                    const Spacer(),
+                    Text(_formatDuration(_recordingDuration), style: const TextStyle(color: Colors.white38, fontSize: 12)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Audio player
+                if (_audioUrl != null) ...[
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: _playAudio,
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(color: const Color(0xFFD4B96A), borderRadius: BorderRadius.circular(24)),
+                          child: Icon(_isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.black, size: 26),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_audioDuration > Duration.zero)
+                              Text('${_formatDuration(_currentPosition)} / ${_formatDuration(_audioDuration)}',
+                                  style: const TextStyle(color: Colors.white54, fontSize: 11)),
+                            const SizedBox(height: 4),
+                            if (_audioDuration > Duration.zero)
+                              SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  activeTrackColor: const Color(0xFFD4B96A),
+                                  inactiveTrackColor: Colors.white12,
+                                  thumbColor: const Color(0xFFD4B96A),
+                                  trackHeight: 2.5,
+                                ),
+                                child: Slider(
+                                  value: _currentPosition.inSeconds.toDouble().clamp(0, _audioDuration.inSeconds.toDouble()),
+                                  max: _audioDuration.inSeconds.toDouble(),
+                                  onChanged: (v) => _audioPlayer.seek(Duration(seconds: v.toInt())),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  const Text('Audio saved locally', style: TextStyle(color: Colors.white38, fontSize: 12)),
+                ],
+                const SizedBox(height: 12),
+                // Discard button
+                GestureDetector(
+                  onTap: () => showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: const Color(0xFFF3E5AB),
+                      title: const Text('Discard recording?', style: TextStyle(fontWeight: FontWeight.bold)),
+                      content: const Text('This will delete the audio and transcript.'),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Keep', style: TextStyle(color: Colors.black54))),
+                        ElevatedButton(
+                          onPressed: () { Navigator.pop(ctx); _discardRecording(); },
+                          style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+                          child: const Text('Discard'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.delete_outline, color: Colors.white.withOpacity(0.3), size: 14),
+                      const SizedBox(width: 4),
+                      Text('Discard recording', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 11, fontWeight: FontWeight.w600)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Transcript edit box
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.7),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.article_outlined, size: 14, color: Colors.black45),
+                      const SizedBox(width: 6),
+                      const Text('Transcript', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Colors.black45)),
+                      const Spacer(),
+                      Text('${_transcriptController.text.length} chars', style: TextStyle(fontSize: 10, color: Colors.grey[400])),
+                    ],
+                  ),
+                ),
+                TextField(
+                  controller: _transcriptController,
+                  maxLines: 6,
+                  minLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                  onChanged: (_) => setState(() {}),
+                  style: const TextStyle(fontSize: 14, height: 1.6),
+                  decoration: const InputDecoration(
+                    hintText: 'Transcript appears here. Edit if needed...',
+                    counterText: '',
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.fromLTRB(16, 8, 16, 14),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 
   // ─────────────────────────────────────────────
   //  BUILD
@@ -1083,13 +1239,7 @@ class _NotesPageState extends State<NotesPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF3E5AB),
       appBar: AppBar(
-        title: Text(
-          lang.t('notes_title'),
-          style: const TextStyle(
-            color: Colors.black,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
+        title: const Text('Voice Notes', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: -0.5)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
@@ -1098,21 +1248,15 @@ class _NotesPageState extends State<NotesPage> {
             padding: const EdgeInsets.only(right: 16),
             child: Center(
               child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.grey[300],
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  lang.selectedLanguage,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.black87,
-                  ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(color: Colors.black.withOpacity(0.08), borderRadius: BorderRadius.circular(20)),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(width: 6, height: 6, decoration: BoxDecoration(color: _isAnonymousUser ? Colors.orange : Colors.green, borderRadius: BorderRadius.circular(3))),
+                    const SizedBox(width: 5),
+                    Text(lang.selectedLanguage, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black87)),
+                  ],
                 ),
               ),
             ),
@@ -1121,302 +1265,136 @@ class _NotesPageState extends State<NotesPage> {
       ),
       body: SingleChildScrollView(
         controller: _scrollController,
+        physics: const ClampingScrollPhysics(),
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Guest banner ──────────────────────────
+                  // ── Guest banner ──
                   if (_isAnonymousUser) ...[
                     Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.black.withValues(alpha: 0.06),
+                        color: Colors.orange.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: Colors.black.withValues(alpha: 0.1),
-                        ),
+                        border: Border.all(color: Colors.orange.withOpacity(0.2)),
                       ),
                       child: const Row(
                         children: [
-                          Icon(
-                            Icons.info_outline,
-                            color: Colors.black54,
-                            size: 15,
-                          ),
+                          Icon(Icons.info_outline, color: Colors.orange, size: 14),
                           SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              'Guest mode — notes are temporary. Create an account to keep them.',
-                              style: TextStyle(
-                                color: Colors.black54,
-                                fontSize: 11,
-                                height: 1.4,
-                              ),
-                            ),
-                          ),
+                          Expanded(child: Text('Guest mode — notes are temporary. Sign up to keep them.', style: TextStyle(color: Colors.black54, fontSize: 11, height: 1.4))),
                         ],
                       ),
                     ),
                   ],
 
-                  // ── Title field ───────────────────────────
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextField(
-                          controller: _titleController,
-                          maxLength: _kMaxTitleLength,
-                          textCapitalization: TextCapitalization.sentences,
-                          decoration: InputDecoration(
-                            hintText: _isListeningTitle
-                                ? lang.t('listening_title')
-                                : lang
-                                      .t('title_hint')
-                                      .replaceFirst('(optional)', '(required)'),
-                            counterText: '',
-                            filled: true,
-                            fillColor: _isListeningTitle
-                                ? Colors.grey[200]
-                                : Colors.white.withValues(alpha: 0.7),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 12,
-                            ),
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(16),
-                              borderSide: BorderSide.none,
-                            ),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      GestureDetector(
-                        onTap: _listenForTitle,
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          width: 46,
-                          height: 46,
-                          decoration: BoxDecoration(
-                            color: _isListeningTitle
-                                ? Colors.red
-                                : Colors.grey[700],
-                            borderRadius: BorderRadius.circular(14),
-                          ),
-                          child: Icon(
-                            _isListeningTitle ? Icons.stop : Icons.mic,
-                            color: Colors.white,
-                            size: 22,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-
-                  // ── Content field ─────────────────────────
-                  Stack(
-                    children: [
-                      TextField(
-                        controller: _contentController,
-                        maxLines: 6,
-                        minLines: 4,
-                        maxLength: _kMaxContentLength,
-                        textCapitalization: TextCapitalization.sentences,
-                        onChanged: (_) => setState(() {}),
-                        decoration: InputDecoration(
-                          hintText: _isListeningContent
-                              ? '${lang.t('listening_content')} ${lang.selectedLanguage}...'
-                              : lang.t('content_hint'),
-                          counterText: '',
-                          filled: true,
-                          fillColor: _isListeningContent
-                              ? Colors.grey[200]
-                              : Colors.white.withValues(alpha: 0.7),
-                          contentPadding: const EdgeInsets.fromLTRB(
-                            16,
-                            14,
-                            56,
-                            14,
-                          ),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: _isListeningContent
-                                ? BorderSide(
-                                    color: Colors.grey[600]!,
-                                    width: 1.5,
-                                  )
-                                : BorderSide.none,
-                          ),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: BorderSide.none,
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(20),
-                            borderSide: BorderSide(
-                              color: Colors.grey[400]!,
-                              width: 1,
-                            ),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        right: 8,
-                        bottom: 8,
-                        child: GestureDetector(
-                          onTap: _listenForContent,
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: _isListeningContent
-                                  ? Colors.red
-                                  : Colors.grey[700],
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Icon(
-                              _isListeningContent ? Icons.stop : Icons.mic,
-                              color: Colors.white,
-                              size: 20,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // ── Save & Clear buttons ──────────────────
-                  Row(
-                    children: [
-                      if (_contentController.text.isNotEmpty) ...[
-                        Expanded(
-                          flex: 1,
-                          child: OutlinedButton(
-                            onPressed: () =>
-                                setState(() => _contentController.clear()),
-                            style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.black,
-                              side: BorderSide(color: Colors.grey[400]!),
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(30),
-                              ),
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                            ),
-                            child: Text(lang.t('clear')),
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                      ],
-                      Expanded(
-                        flex: 2,
-                        child: ElevatedButton.icon(
-                          onPressed:
-                              (!_isSaving &&
-                                  _contentController.text.trim().isNotEmpty)
-                              ? () => _saveNote(lang)
-                              : null,
-                          icon: _isSaving
-                              ? const SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: Colors.white,
-                                  ),
-                                )
-                              : const Icon(Icons.save_alt),
-                          label: Text(lang.t('save_note')),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
-                            foregroundColor: Colors.white,
-                            disabledBackgroundColor: Colors.grey[400],
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(30),
-                            ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (_isEditing) ...[
-                    const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: TextButton.icon(
-                        onPressed: _cancelEdit,
-                        icon: const Icon(
-                          Icons.close,
-                          size: 16,
-                          color: Colors.redAccent,
-                        ),
-                        label: const Text(
-                          'Cancel Edit',
-                          style: TextStyle(
-                            color: Colors.redAccent,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 8),
-                        ),
+                  // ── Title field ──
+                  Container(
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.8),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: TextField(
+                      controller: _titleController,
+                      maxLength: _kMaxTitleLength,
+                      textCapitalization: TextCapitalization.sentences,
+                      style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 17, letterSpacing: -0.3),
+                      decoration: InputDecoration(
+                        hintText: 'Note title...',
+                        hintStyle: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w500, fontSize: 17),
+                        counterText: '',
+                        border: InputBorder.none,
+                        prefixIcon: const Icon(Icons.bookmark_border, color: Colors.black38, size: 20),
+                        contentPadding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                     ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // ── Recording area ──
+                  _buildRecordingArea(lang),
+
+                  const SizedBox(height: 16),
+
+                  // ── Save + Cancel/Clear buttons ──
+                  if (_recordingState == RecordingState.done) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: _discardRecording,
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.black54,
+                              side: BorderSide(color: Colors.grey[400]!),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: const Text('Discard', style: TextStyle(fontWeight: FontWeight.w600)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            onPressed: (!_isSaving && _transcriptController.text.trim().isNotEmpty) ? () => _saveNote(lang) : null,
+                            icon: _isSaving
+                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Icon(Icons.save_alt, size: 18),
+                            label: Text(_isEditing ? 'Update Note' : 'Save Note', style: const TextStyle(fontWeight: FontWeight.w800)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.black,
+                              foregroundColor: const Color(0xFFD4B96A),
+                              disabledBackgroundColor: Colors.grey[300],
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_isEditing) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton.icon(
+                          onPressed: _cancelEdit,
+                          icon: const Icon(Icons.close, size: 16, color: Colors.redAccent),
+                          label: const Text('Cancel Edit', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
                   ],
                 ],
               ),
             ),
 
-            // ── Divider ───────────────────────────────────
+            // ── Saved notes section ──
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 children: [
                   Expanded(child: Divider(color: Colors.grey[400])),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text(
-                          lang.t('saved_notes'),
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                        Text(lang.t('saved_notes'), style: TextStyle(color: Colors.grey[600], fontSize: 11, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
                         const SizedBox(width: 8),
-                        // DIAGNOSTIC TAG
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 6,
-                            vertical: 2,
-                          ),
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _isAnonymousUser
-                                ? Colors.orange[100]
-                                : Colors.green[100],
+                            color: _isAnonymousUser ? Colors.orange[100] : Colors.black,
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            _isAnonymousUser ? 'GUEST' : 'USER',
-                            style: TextStyle(
-                              color: _isAnonymousUser
-                                  ? Colors.orange[800]
-                                  : Colors.green[800],
-                              fontSize: 9,
-                              fontWeight: FontWeight.bold,
-                            ),
+                            _isAnonymousUser ? 'GUEST' : 'SAVED',
+                            style: TextStyle(color: _isAnonymousUser ? Colors.orange[800] : const Color(0xFFD4B96A), fontSize: 9, fontWeight: FontWeight.w800),
                           ),
                         ),
                       ],
@@ -1427,175 +1405,66 @@ class _NotesPageState extends State<NotesPage> {
               ),
             ),
 
-            // ── Notes list ────────────────────────────────
+            const SizedBox(height: 8),
+
+            // ── Notes list ──
             Consumer<TempNotesProvider>(
               builder: (context, tempNotes, _) {
-                // ── Guest: in-memory notes ───────────────
                 if (_isAnonymousUser) {
                   if (tempNotes.notes.isEmpty) {
-                    return Center(
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
                       child: Column(
-                        mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(
-                            Icons.note_outlined,
-                            color: Colors.grey[400],
-                            size: 44,
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            lang.t('no_notes'),
-                            style: TextStyle(color: Colors.grey[500]),
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Notes are temporary in guest mode.',
-                            style: TextStyle(
-                              color: Colors.grey[400],
-                              fontSize: 12,
-                            ),
-                          ),
+                          Icon(Icons.mic_none_rounded, color: Colors.grey[300], size: 52),
+                          const SizedBox(height: 10),
+                          Text(lang.t('no_notes'), style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w600)),
+                          const SizedBox(height: 4),
+                          Text('Record a note above to get started', style: TextStyle(color: Colors.grey[400], fontSize: 11)),
                         ],
                       ),
                     );
                   }
                   return ListView.builder(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 8,
-                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     itemCount: tempNotes.notes.length,
                     itemBuilder: (ctx, i) {
                       final note = tempNotes.notes[i];
-                      return Container(
-                        margin: const EdgeInsets.only(bottom: 10),
-                        decoration: BoxDecoration(
-                          color: Colors.grey[200],
-                          borderRadius: BorderRadius.circular(16),
-                        ),
-                        child: ListTile(
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 8,
-                          ),
-                          onTap: () => _showNoteDetails(
-                            note.id,
-                            note.title,
-                            note.content,
-                          ),
-                          title: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  note.title,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                              ),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 6,
-                                  vertical: 2,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: Colors.black.withValues(alpha: 0.07),
-                                  borderRadius: BorderRadius.circular(6),
-                                ),
-                                child: const Text(
-                                  'temp',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    color: Colors.black45,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          subtitle: Text(
-                            note.content,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12),
-                          ),
-                          trailing: IconButton(
-                            icon: const Icon(
-                              Icons.delete_outline,
-                              color: Colors.grey,
-                            ),
-                            onPressed: () =>
-                                _deleteTempNote(note.id, tempNotes),
-                          ),
-                        ),
+                      return _noteCard(
+                        title: note.title,
+                        content: note.content,
+                        hasAudio: false,
+                        isTemp: true,
+                        onTap: () => _showNoteDetails(note.id, note.title, note.content),
+                        onDelete: () => _deleteTempNote(note.id, tempNotes),
                       );
                     },
                   );
                 }
 
-                // ── Logged in: Firestore filtered by resolvedUid ──
-                if (_resolvedUid == null) {
-                  return const Center(child: CircularProgressIndicator());
-                }
+                if (_resolvedUid == null) return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()));
 
                 return StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('notes')
-                      .where(
-                        'userId',
-                        isEqualTo:
-                            FirebaseAuth.instance.currentUser?.uid ??
-                            _resolvedUid,
-                      )
+                  stream: FirebaseFirestore.instance.collection('notes')
+                      .where('userId', isEqualTo: FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid)
                       .snapshots(),
                   builder: (context, snapshot) {
                     if (snapshot.hasError) {
-                      final errStr = snapshot.error.toString();
-                      final isOffline = errStr.contains('unavailable');
                       return Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              isOffline ? Icons.wifi_off : Icons.error_outline,
-                              color: Colors.grey[500],
-                              size: 36,
-                            ),
-                            const SizedBox(height: 10),
-                            Padding(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 24,
-                              ),
-                              child: Text(
-                                isOffline
-                                    ? 'You\'re offline.\nShowing cached notes.'
-                                    : 'Could not load notes:\n$errStr',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: Colors.grey[500],
-                                  fontSize: 11,
-                                ),
-                              ),
-                            ),
-                          ],
+                        child: Padding(
+                          padding: const EdgeInsets.all(40),
+                          child: Text('Could not load notes', style: TextStyle(color: Colors.grey[500])),
                         ),
                       );
                     }
+                    if (!snapshot.hasData) return const Center(child: Padding(padding: EdgeInsets.all(40), child: CircularProgressIndicator()));
 
-                    if (!snapshot.hasData) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    // Sort client-side by timestamp descending (avoids composite index requirement)
                     final docs = List.of(snapshot.data!.docs)
                       ..sort((a, b) {
-                        final aTs =
-                            (a.data() as Map<String, dynamic>?)?['timestamp'];
-                        final bTs =
-                            (b.data() as Map<String, dynamic>?)?['timestamp'];
+                        final aTs = (a.data() as Map<String, dynamic>?)?['timestamp'];
+                        final bTs = (b.data() as Map<String, dynamic>?)?['timestamp'];
                         if (aTs == null && bTs == null) return 0;
                         if (aTs == null) return 1;
                         if (bTs == null) return -1;
@@ -1603,64 +1472,38 @@ class _NotesPageState extends State<NotesPage> {
                       });
 
                     if (docs.isEmpty) {
-                      return Center(
-                        child: Text(
-                          lang.t('no_notes'),
-                          style: TextStyle(color: Colors.grey[500]),
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 40),
+                        child: Column(
+                          children: [
+                            Icon(Icons.mic_none_rounded, color: Colors.grey[300], size: 52),
+                            const SizedBox(height: 10),
+                            Text(lang.t('no_notes'), style: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w600)),
+                          ],
                         ),
                       );
                     }
 
                     return ListView.builder(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 8,
-                      ),
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
                       itemCount: docs.length,
                       itemBuilder: (ctx, i) {
-                        final data =
-                            docs[i].data() as Map<String, dynamic>? ?? {};
-                        final title = (data['title'] as String? ?? 'Note')
-                            .trim();
-                        final content = (data['content'] as String? ?? '')
-                            .trim();
+                        final data = docs[i].data() as Map<String, dynamic>? ?? {};
+                        final title = (data['title'] as String? ?? 'Note').trim();
+                        final content = (data['content'] as String? ?? '').trim();
+                        final audioUrl = data['audioUrl'] as String?;
+                        final durationSecs = data['recordingDurationSeconds'] as int?;
                         final docId = docs[i].id;
-                        return Container(
-                          margin: const EdgeInsets.only(bottom: 10),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[200],
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 8,
-                            ),
-                            onTap: () =>
-                                _showNoteDetails(docId, title, content),
-                            title: Text(
-                              title,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 14,
-                              ),
-                            ),
-                            subtitle: Text(
-                              content,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 12),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(
-                                Icons.delete_outline,
-                                color: Colors.grey,
-                              ),
-                              onPressed: () => _deleteNote(docId),
-                            ),
-                          ),
+                        return _noteCard(
+                          title: title,
+                          content: content,
+                          hasAudio: audioUrl != null,
+                          durationSeconds: durationSecs,
+                          isTemp: false,
+                          onTap: () => _showNoteDetails(docId, title, content, audioUrl: audioUrl, durationSeconds: durationSecs),
+                          onDelete: () => _deleteNote(docId),
                         );
                       },
                     );
@@ -1681,31 +1524,11 @@ class _NotesPageState extends State<NotesPage> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
-              _navItem(
-                Icons.home,
-                lang.t('nav_home'),
-                Colors.grey[400]!,
-                onTap: () => Navigator.pushReplacementNamed(context, '/home'),
-              ),
-              _navItem(
-                Icons.note_alt_outlined,
-                lang.t('nav_notes'),
-                Colors.white,
-              ),
+              _navItem(Icons.home, lang.t('nav_home'), Colors.grey[400]!, onTap: () => Navigator.pushReplacementNamed(context, '/home')),
+              _navItem(Icons.note_alt_outlined, lang.t('nav_notes'), Colors.white),
               const SizedBox(width: 48),
-              _navItem(
-                Icons.book,
-                lang.t('nav_dictionary'),
-                Colors.grey[400]!,
-                onTap: () =>
-                    Navigator.pushReplacementNamed(context, '/dictionary'),
-              ),
-              _navItem(
-                Icons.menu,
-                lang.t('nav_menu'),
-                Colors.grey[400]!,
-                onTap: () => Navigator.pushReplacementNamed(context, '/menu'),
-              ),
+              _navItem(Icons.book, lang.t('nav_dictionary'), Colors.grey[400]!, onTap: () => Navigator.pushReplacementNamed(context, '/dictionary')),
+              _navItem(Icons.menu, lang.t('nav_menu'), Colors.grey[400]!, onTap: () => Navigator.pushReplacementNamed(context, '/menu')),
             ],
           ),
         ),
@@ -1719,26 +1542,96 @@ class _NotesPageState extends State<NotesPage> {
     );
   }
 
-  Widget _navItem(
-    IconData icon,
-    String label,
-    Color color, {
-    VoidCallback? onTap,
+  Widget _noteCard({
+    required String title,
+    required String content,
+    required bool hasAudio,
+    int? durationSeconds,
+    required bool isTemp,
+    required VoidCallback onTap,
+    required VoidCallback onDelete,
   }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 10),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.75),
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(color: Colors.black.withOpacity(0.05)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Left icon
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: hasAudio ? Colors.black : Colors.grey[200],
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Icon(hasAudio ? Icons.mic : Icons.article_outlined, color: hasAudio ? const Color(0xFFD4B96A) : Colors.grey[500], size: 20),
+            ),
+            const SizedBox(width: 12),
+
+            // Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(title, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 14, letterSpacing: -0.2)),
+                      ),
+                      if (isTemp)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.06), borderRadius: BorderRadius.circular(5)),
+                          child: const Text('TEMP', style: TextStyle(fontSize: 8, color: Colors.black45, fontWeight: FontWeight.w800)),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(content, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.grey[600], height: 1.4)),
+                  if (hasAudio && durationSeconds != null) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(Icons.graphic_eq, size: 11, color: Colors.grey[500]),
+                        const SizedBox(width: 4),
+                        Text(_formatDuration(Duration(seconds: durationSeconds)), style: TextStyle(fontSize: 10, color: Colors.grey[500], fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+
+            // Delete
+            GestureDetector(
+              onTap: onDelete,
+              child: Padding(
+                padding: const EdgeInsets.only(left: 8, top: 2),
+                child: Icon(Icons.delete_outline, color: Colors.grey[400], size: 20),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _navItem(IconData icon, String label, Color color, {VoidCallback? onTap}) {
     return GestureDetector(
       onTap: onTap,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, color: color, size: 24),
-          Text(
-            label,
-            style: TextStyle(
-              color: color,
-              fontSize: 9,
-              fontWeight: FontWeight.bold,
-            ),
-          ),
+          Text(label, style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold)),
         ],
       ),
     );

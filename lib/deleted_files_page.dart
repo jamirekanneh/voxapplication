@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import 'language_provider.dart';
 import 'tts_service.dart';
 import 'reader_page.dart';
+import 'analytics_service.dart';
 
 // ════════════════════════════════════════════════════════════
 //  DELETED FILES PAGE
@@ -58,6 +59,9 @@ class DeletedFilesPage extends StatelessWidget {
       final targetCollection = isNote ? 'notes' : 'library';
       await FirebaseFirestore.instance.collection(targetCollection).add(data);
       await _bin.doc(doc.id).delete();
+
+      // Track file restore operation
+      AnalyticsService.instance.recordFileOperation('restore');
 
       if (context.mounted) {
         final itemName = isNote ? data['title'] : data['fileName'];
@@ -143,7 +147,11 @@ class DeletedFilesPage extends StatelessWidget {
         ],
       ),
     );
-    if (confirmed == true) await _bin.doc(doc.id).delete();
+    if (confirmed == true) {
+      await _bin.doc(doc.id).delete();
+      // Track permanent delete operation
+      AnalyticsService.instance.recordFileOperation('delete');
+    }
   }
 
   // ── Empty entire bin ───────────────────────────────────────
@@ -183,6 +191,8 @@ class DeletedFilesPage extends StatelessWidget {
       for (final d in docs) {
         await _bin.doc(d.id).delete();
       }
+      // Track empty bin operation
+      AnalyticsService.instance.recordFileOperation('empty_bin');
     }
   }
 

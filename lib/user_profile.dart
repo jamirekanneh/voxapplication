@@ -12,7 +12,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 //  ENTRY POINT
 // ─────────────────────────────────────────────
 class UserProfilePage extends StatefulWidget {
-  const UserProfilePage({super.key});
+  final bool isEditingMode; // New parameter to distinguish between signup and edit mode
+  
+  const UserProfilePage({
+    super.key,
+    this.isEditingMode = false,
+  });
 
   @override
   State<UserProfilePage> createState() => _UserProfilePageState();
@@ -20,17 +25,68 @@ class UserProfilePage extends StatefulWidget {
 
 class _UserProfilePageState extends State<UserProfilePage> {
   String _stage = 'form';
+  bool _isEditingMode = false;
 
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
   String? _base64Image;
   bool _isLoading = false;
   bool _googleLoading = false;
+  bool _isSwitchingEmail = false;
+  bool _canSwitchEmail = false;
+  String? _currentEmail;
+  String? _currentName;
+  String? _currentPhotoBase64;
 
   @override
   void initState() {
     super.initState();
+    _isEditingMode = widget.isEditingMode;
     _ensureAuth();
+    _loadCurrentUserData();
+    _evaluateSwitchableEmail();
+  }
+
+  Future<void> _loadCurrentUserData() async {
+    if (!_isEditingMode) return;
+    
+    setState(() => _isLoading = true);
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && !user.isAnonymous) {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(user.uid)
+            .get();
+        
+        if (doc.exists) {
+          final data = doc.data();
+          setState(() {
+            _currentEmail = data?['email'] ?? user.email;
+            _currentName = data?['username'] ?? user.displayName;
+            _currentPhotoBase64 = data?['photoBase64'];
+            _nameController.text = _currentName ?? '';
+            _emailController.text = _currentEmail ?? '';
+            _base64Image = _currentPhotoBase64;
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Error loading user data: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _evaluateSwitchableEmail() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null &&
+        !user.isAnonymous &&
+        (user.email?.isNotEmpty ?? false)) {
+      setState(() {
+        _canSwitchEmail = true;
+      });
+    }
   }
 
   /// Ensure we have at least an anonymous session so we can query Firestore
@@ -41,6 +97,40 @@ class _UserProfilePageState extends State<UserProfilePage> {
       } catch (e) {
         debugPrint("Silent anon sign-in error: $e");
       }
+    }
+  }
+
+  Future<void> _requestEmailSwitch() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Switch Email Address'),
+        content: const Text(
+          'Changing your email will update your profile and all associated data will be migrated to the new email. '
+          'You will need to verify the new email address.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      if (!mounted) return;
+      setState(() {
+        _isSwitchingEmail = true;
+        _stage = 'form';
+        _emailController.clear();
+      });
+      _showSnack('Enter your new email address and tap Save to apply.');
     }
   }
 
@@ -57,7 +147,29 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Future<void> _onSaveTapped() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
+    final currentUser = FirebaseAuth.instance.currentUser;
 
+    // Handle email switching in edit mode
+    if (_isEditingMode && _isSwitchingEmail && currentUser != null && !currentUser.isAnonymous) {
+      if (email.isEmpty) {
+        _showSnack("Please enter the new email address.");
+        return;
+      }
+      if (!email.contains('@') || !email.contains('.')) {
+        _showSnack("Please enter a valid email address");
+        return;
+      }
+      await _initiateEmailSwitch(currentUser.uid, email);
+      return;
+    }
+
+    // Handle profile update in edit mode
+    if (_isEditingMode && currentUser != null && !currentUser.isAnonymous) {
+      await _updateExistingProfile(currentUser.uid, name, email);
+      return;
+    }
+
+    // Original sign-up flow
     if (name.isEmpty || email.isEmpty) {
       _showSnack("Please fill in your name and email");
       return;
@@ -80,7 +192,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
       setState(() => _isLoading = false);
 
       if (snapshot.docs.isNotEmpty) {
-        setState(() => _stage = 'returning');
+        if (currentUser != null &&
+            !currentUser.isAnonymous &&
+            _isSwitchingEmail) {
+          await _initiateEmailSwitch(currentUser.uid, email);
+        } else {
+          setState(() => _stage = 'returning');
+        }
       } else {
         await _saveNewUserAndGoHome();
       }
@@ -89,6 +207,148 @@ class _UserProfilePageState extends State<UserProfilePage> {
         setState(() => _isLoading = false);
         _showSnack("Error: $e");
       }
+    }
+  }
+
+  Future<void> _updateExistingProfile(String uid, String name, String email) async {
+    setState(() => _isLoading = true);
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'username': name,
+        'email': email,
+        'photoBase64': _base64Image ?? '',
+        'updatedAt': FieldValue.serverTimestamp(),
+      });
+      
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userEmail', email);
+      await prefs.setString('userName', name);
+      
+      _showSnack("Profile updated successfully!");
+      
+      if (!mounted) return;
+      Navigator.of(context).pop(); // Go back to previous screen
+    } catch (e) {
+      _showSnack("Failed to update profile: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _initiateEmailSwitch(String uid, String newEmail) async {
+    // Check if email already exists
+    final existingUser = await FirebaseFirestore.instance
+        .collection('users')
+        .where('email', isEqualTo: newEmail)
+        .limit(1)
+        .get();
+    
+    if (existingUser.docs.isNotEmpty && existingUser.docs.first.id != uid) {
+      _showSnack("This email is already registered to another account.");
+      return;
+    }
+    
+    final warning = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('⚠️ Important Warning'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: const [
+            Text(
+              'Switching your email will:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 8),
+            Text('• Change your login credentials'),
+            Text('• Migrate all your data to the new email'),
+            Text('• Require email verification'),
+            Text('• Sign you out after completion'),
+            SizedBox(height: 12),
+            Text(
+              'You will need to verify the new email address to continue using your account.',
+              style: TextStyle(color: Colors.red),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.red,
+            ),
+            child: const Text('I Understand, Continue'),
+          ),
+        ],
+      ),
+    );
+    
+    if (warning != true) return;
+    
+    setState(() => _isLoading = true);
+    try {
+      // Send verification email to new address
+      final acs = ActionCodeSettings(
+        url: 'https://vox-application-76ecd.firebaseapp.com/verify?email=$newEmail',
+        handleCodeInApp: true,
+        androidPackageName: 'com.example.voxapplication',
+        androidInstallApp: true,
+        androidMinimumVersion: '21',
+        iOSBundleId: 'com.example.voxapplication',
+      );
+      
+      await FirebaseAuth.instance.currentUser!.sendEmailVerification();
+      
+      // Store pending email change in Firestore
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'pendingEmail': newEmail,
+        'emailChangeRequestedAt': FieldValue.serverTimestamp(),
+      });
+      
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('pendingEmailChange', newEmail);
+      
+      _showSnack("Verification email sent to $newEmail. Please verify to complete the switch.");
+      
+      if (!mounted) return;
+      
+      // Show verification waiting screen
+      setState(() {
+        _stage = 'awaiting_link';
+        _isSwitchingEmail = false;
+      });
+      
+    } catch (e) {
+      _showSnack("Failed to initiate email switch: $e");
+      setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _updateExistingEmail(String uid, String email) async {
+    setState(() => _isLoading = true);
+    try {
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'email': email,
+      });
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userEmail', email);
+      _showSnack("Email updated successfully. Please re-verify if needed.");
+      if (!mounted) return;
+      setState(() {
+        _isSwitchingEmail = false;
+        _stage = 'form';
+      });
+      Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
+    } catch (e) {
+      _showSnack("Failed to switch email: $e");
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -123,8 +383,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       await prefs.setString('userName', name);
 
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true)
-          .pushReplacementNamed('/home');
+      Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
     } catch (e) {
       _showSnack("Error saving profile: $e");
     } finally {
@@ -176,7 +435,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Future<void> _onStartFreshTapped() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.6),
+      barrierColor: Colors.black.withValues(alpha: 0.6),
       builder: (ctx) => Dialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -233,9 +492,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   vertical: 10,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.06),
+                  color: Colors.red.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.withOpacity(0.2)),
+                  border: Border.all(color: Colors.red.withValues(alpha: 0.2)),
                 ),
                 child: const Row(
                   children: [
@@ -323,6 +582,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
       final name = prefs.getString('pendingName') ?? '';
       final photo = prefs.getString('pendingPhoto') ?? '';
 
+      // Check for pending email change
+      final pendingEmail = prefs.getString('pendingEmailChange');
+      if (pendingEmail != null && !isFreshStart) {
+        // Handle email switch completion
+        await _completeEmailSwitch(user.uid, pendingEmail);
+        await prefs.remove('pendingEmailChange');
+        if (!mounted) return;
+        Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
+        return;
+      }
+
       if (isFreshStart) {
         final oldUsers = await FirebaseFirestore.instance
             .collection('users')
@@ -397,20 +667,55 @@ class _UserProfilePageState extends State<UserProfilePage> {
       await prefs.remove('pendingIsFreshStart');
 
       if (!mounted) return;
-      Navigator.of(context, rootNavigator: true)
-          .pushReplacementNamed('/home');
+      Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
     } catch (e) {
       _showSnack("Error completing sign-in: $e");
     }
   }
 
+  Future<void> _completeEmailSwitch(String uid, String newEmail) async {
+    try {
+      // Update the user document with new email
+      await FirebaseFirestore.instance.collection('users').doc(uid).update({
+        'email': newEmail,
+        'pendingEmail': FieldValue.delete(),
+        'emailChangeRequestedAt': FieldValue.delete(),
+        'emailVerified': true,
+      });
+      
+      // Update all notes and library entries that use email as identifier
+      final notes = await FirebaseFirestore.instance
+          .collection('notes')
+          .where('userId', isEqualTo: uid)
+          .get();
+      for (final note in notes.docs) {
+        await note.reference.update({'userEmail': newEmail});
+      }
+      
+      final library = await FirebaseFirestore.instance
+          .collection('library')
+          .where('userId', isEqualTo: uid)
+          .get();
+      for (final file in library.docs) {
+        await file.reference.update({'userEmail': newEmail});
+      }
+      
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userEmail', newEmail);
+      
+      _showSnack("Email successfully changed to $newEmail!");
+    } catch (e) {
+      _showSnack("Error completing email switch: $e");
+      rethrow;
+    }
+  }
+
   // ─────────────────────────────────────────────
-  //  GOOGLE SIGN-IN — FIX: sign out anon first
+  //  GOOGLE SIGN-IN
   // ─────────────────────────────────────────────
   Future<void> _handleGoogleSignIn() async {
     setState(() => _googleLoading = true);
     try {
-      // ── Sign out anonymous session first so it doesn't block Google auth ──
       final currentUser = FirebaseAuth.instance.currentUser;
       if (currentUser != null && currentUser.isAnonymous) {
         await FirebaseAuth.instance.signOut();
@@ -438,7 +743,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
       final user = result.user!;
 
-      // Save to Firestore if first time
       final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
@@ -461,9 +765,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
       await prefs.setString('userName', user.displayName ?? '');
 
       if (!mounted) return;
-      // ── FIX: use rootNavigator to ensure navigation works after auth ──
-      Navigator.of(context, rootNavigator: true)
-          .pushReplacementNamed('/home');
+      Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
     } catch (e) {
       _showSnack("Google sign-in failed: $e");
     } finally {
@@ -506,6 +808,22 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: VoxColors.white,
+      appBar: _isEditingMode ? AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Edit Profile',
+          style: TextStyle(
+            color: Colors.black,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        centerTitle: true,
+      ) : null,
       body: AnimatedSwitcher(
         duration: const Duration(milliseconds: 400),
         transitionBuilder: (child, anim) => FadeTransition(
@@ -520,9 +838,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
             base64Image: _base64Image,
             isLoading: _isLoading,
             googleLoading: _googleLoading,
+            isSwitchingEmail: _isSwitchingEmail,
+            canSwitchEmail: _canSwitchEmail && _isEditingMode, // Only show switch in edit mode
+            isEditingMode: _isEditingMode,
+            currentEmail: _currentEmail,
             onPickImage: _pickImage,
             onSave: _onSaveTapped,
             onGoogleSignIn: _handleGoogleSignIn,
+            onSwitchEmail: _requestEmailSwitch,
           ),
           'returning' => _ReturningUserView(
             key: const ValueKey('returning'),
@@ -553,9 +876,14 @@ class _ProfileFormView extends StatelessWidget {
   final String? base64Image;
   final bool isLoading;
   final bool googleLoading;
+  final bool isSwitchingEmail;
   final VoidCallback onPickImage;
   final VoidCallback onSave;
   final VoidCallback onGoogleSignIn;
+  final bool canSwitchEmail;
+  final bool isEditingMode;
+  final String? currentEmail;
+  final VoidCallback onSwitchEmail;
 
   const _ProfileFormView({
     super.key,
@@ -564,9 +892,14 @@ class _ProfileFormView extends StatelessWidget {
     required this.base64Image,
     required this.isLoading,
     required this.googleLoading,
+    required this.isSwitchingEmail,
+    required this.canSwitchEmail,
+    required this.isEditingMode,
+    required this.currentEmail,
     required this.onPickImage,
     required this.onSave,
     required this.onGoogleSignIn,
+    required this.onSwitchEmail,
   });
 
   void _showGuestWarning(BuildContext context) {
@@ -591,7 +924,7 @@ class _ProfileFormView extends StatelessWidget {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 24),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.1),
+                  color: Colors.black.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -635,7 +968,7 @@ class _ProfileFormView extends StatelessWidget {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: VoxColors.yellow.withOpacity(0.2),
+                color: VoxColors.yellow.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Row(
@@ -687,8 +1020,10 @@ class _ProfileFormView extends StatelessWidget {
                       try {
                         await FirebaseAuth.instance.signInAnonymously();
                         if (context.mounted) {
-                          Navigator.of(context, rootNavigator: true)
-                              .pushReplacementNamed('/home');
+                          Navigator.of(
+                            context,
+                            rootNavigator: true,
+                          ).pushReplacementNamed('/home');
                         }
                       } catch (e) {
                         debugPrint("Guest sign-in error: $e");
@@ -723,11 +1058,14 @@ class _ProfileFormView extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const _VoxHeader(
-            tag: "WELCOME",
-            title: "JOIN\nTHE VOX.",
-            subtitle: "Set up your profile to get started.",
-          ),
+          if (!isEditingMode)
+            const _VoxHeader(
+              tag: "WELCOME",
+              title: "JOIN\nTHE VOX.",
+              subtitle: "Set up your profile to get started.",
+            )
+          else
+            const SizedBox(height: 20),
           const SizedBox(height: 36),
 
           // Avatar picker
@@ -743,7 +1081,7 @@ class _ProfileFormView extends StatelessWidget {
                       border: Border.all(color: VoxColors.yellow, width: 3),
                       boxShadow: [
                         BoxShadow(
-                          color: VoxColors.yellow.withOpacity(0.4),
+                          color: VoxColors.yellow.withValues(alpha: 0.4),
                           blurRadius: 20,
                           offset: const Offset(0, 6),
                         ),
@@ -751,7 +1089,7 @@ class _ProfileFormView extends StatelessWidget {
                     ),
                     child: CircleAvatar(
                       radius: 52,
-                      backgroundColor: VoxColors.yellow.withOpacity(0.1),
+                      backgroundColor: VoxColors.yellow.withValues(alpha: 0.1),
                       backgroundImage: base64Image != null
                           ? MemoryImage(base64Decode(base64Image!))
                           : null,
@@ -793,374 +1131,97 @@ class _ProfileFormView extends StatelessWidget {
           ),
           _VoxTextField(
             controller: emailController,
-            label: "Email Address",
+            label: isEditingMode && !isSwitchingEmail 
+                ? "Email Address (tap 'Switch Email' to change)" 
+                : "Email Address",
             icon: Icons.alternate_email_rounded,
             keyboardType: TextInputType.emailAddress,
+            enabled: !(isEditingMode && !isSwitchingEmail), // Disable if in edit mode without switching
           ),
           const SizedBox(height: 24),
           _VoxButton(
-            label: "SAVE PROFILE",
+            label: isEditingMode 
+                ? (isSwitchingEmail ? "SAVE NEW EMAIL" : "UPDATE PROFILE")
+                : "SAVE PROFILE",
             isLoading: isLoading,
             onTap: onSave,
           ),
-          const SizedBox(height: 24),
-          _DividerRow(),
-          const SizedBox(height: 24),
-          _GoogleButton(isLoading: googleLoading, onTap: onGoogleSignIn),
-          const SizedBox(height: 16),
-          _DividerRow(),
-          const SizedBox(height: 16),
-
-          Center(
-            child: TextButton(
-              onPressed: () => _showGuestWarning(context),
-              child: const Text(
-                "Continue without account",
-                style: TextStyle(
-                  color: Colors.black38,
-                  fontWeight: FontWeight.w600,
-                  decoration: TextDecoration.underline,
-                  decorationColor: Colors.black26,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-//  STAGE 2 — Returning user
-// ─────────────────────────────────────────────
-class _ReturningUserView extends StatelessWidget {
-  final String email;
-  final VoidCallback onConfirm;
-  final VoidCallback onStartFresh;
-  final bool isLoading;
-
-  const _ReturningUserView({
-    super.key,
-    required this.email,
-    required this.onConfirm,
-    required this.onStartFresh,
-    required this.isLoading,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return VoxScaffoldWrapper(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _VoxHeader(
-            tag: "HOLD ON",
-            title: "WE KNOW\nTHIS EMAIL.",
-            subtitle:
-                "Looks like you've used Vox before.\nWant your history back?",
-          ),
-          const SizedBox(height: 48),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-            decoration: BoxDecoration(
-              color: VoxColors.yellow.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(color: VoxColors.yellow, width: 1.5),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: Colors.black,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(
-                    Icons.mail_outline_rounded,
-                    color: VoxColors.yellow,
-                    size: 18,
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "YOUR EMAIL",
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.5,
-                          color: Colors.black38,
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        email,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
-                          color: Colors.black87,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
           const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.04),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Row(
-              children: [
-                Icon(Icons.touch_app_rounded, size: 15, color: Colors.black38),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    "We'll send a link to your email. Tap it and your profile, notes, and library all come back.",
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.black45,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
+          if (canSwitchEmail && isEditingMode && !isSwitchingEmail)
+            Center(
+              child: TextButton(
+                onPressed: onSwitchEmail,
+                style: TextButton.styleFrom(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 40),
-          _VoxButton(
-            label: "YES, RESTORE MY DATA",
-            isLoading: isLoading,
-            onTap: onConfirm,
-          ),
-          const SizedBox(height: 14),
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: OutlinedButton(
-              onPressed: isLoading ? null : onStartFresh,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.black54,
-                side: const BorderSide(color: Colors.black12),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(18),
-                ),
-              ),
-              child: const Text(
-                "NO, START FRESH",
-                style: TextStyle(
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.2,
-                  fontSize: 14,
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(height: 32),
-        ],
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-//  STAGE 3 — Awaiting magic link
-// ─────────────────────────────────────────────
-class _AwaitingLinkView extends StatefulWidget {
-  final String email;
-  final Future<void> Function() onResend;
-  final Future<void> Function() onVerified;
-
-  const _AwaitingLinkView({
-    super.key,
-    required this.email,
-    required this.onResend,
-    required this.onVerified,
-  });
-
-  @override
-  State<_AwaitingLinkView> createState() => _AwaitingLinkViewState();
-}
-
-class _AwaitingLinkViewState extends State<_AwaitingLinkView>
-    with SingleTickerProviderStateMixin {
-  bool _resendLoading = false;
-  late AnimationController _rotateController;
-
-  @override
-  void initState() {
-    super.initState();
-    _rotateController = AnimationController(
-      vsync: this,
-      duration: const Duration(seconds: 3),
-    )..repeat();
-
-    // Listen for real (non-anonymous) sign-in
-    FirebaseAuth.instance.authStateChanges().listen((user) {
-      if (user != null && !user.isAnonymous && mounted) {
-        widget.onVerified();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _rotateController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return VoxScaffoldWrapper(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const _VoxHeader(
-            tag: "CHECK YOUR EMAIL",
-            title: "LINK\nSENT.",
-            subtitle: "Tap the link in your email to verify and continue.",
-          ),
-          const SizedBox(height: 32),
-
-          // Email chip
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            decoration: BoxDecoration(
-              color: VoxColors.yellow.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: VoxColors.yellow.withOpacity(0.4)),
-            ),
-            child: Row(
-              children: [
-                const Icon(
-                  Icons.mail_outline_rounded,
-                  color: Colors.black54,
-                  size: 18,
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    widget.email,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 13,
-                      color: Colors.black87,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Icon(
+                      Icons.switch_account_rounded,
+                      size: 16,
+                      color: Colors.red,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 48),
-
-          // Spinning ring
-          Center(
-            child: SizedBox(
-              width: 100,
-              height: 100,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  AnimatedBuilder(
-                    animation: _rotateController,
-                    builder: (_, __) => Transform.rotate(
-                      angle: _rotateController.value * 2 * pi,
-                      child: CustomPaint(
-                        size: const Size(100, 100),
-                        painter: _SweepRingPainter(),
-                      ),
-                    ),
-                  ),
-                  Container(
-                    width: 62,
-                    height: 62,
-                    decoration: BoxDecoration(
-                      color: VoxColors.yellow.withOpacity(0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(
-                      Icons.mail_rounded,
-                      color: Colors.black,
-                      size: 28,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Center(
-            child: Text(
-              "Waiting for you to tap the link…",
-              style: TextStyle(
-                color: Colors.black.withOpacity(0.35),
-                fontWeight: FontWeight.w600,
-                fontSize: 13,
-              ),
-            ),
-          ),
-          const SizedBox(height: 48),
-
-          Center(
-            child: _resendLoading
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(
-                      color: Colors.black38,
-                      strokeWidth: 2,
-                    ),
-                  )
-                : TextButton(
-                    onPressed: () async {
-                      setState(() => _resendLoading = true);
-                      await widget.onResend();
-                      if (mounted) setState(() => _resendLoading = false);
-                    },
-                    child: const Text(
-                      "Resend link",
+                    const SizedBox(width: 6),
+                    Text(
+                      "Switch Email",
                       style: TextStyle(
-                        color: Colors.black45,
-                        fontWeight: FontWeight.w600,
+                        color: Colors.red.shade700,
+                        fontWeight: FontWeight.bold,
                         decoration: TextDecoration.underline,
-                        decorationColor: Colors.black26,
+                        decorationColor: Colors.red.shade700,
                       ),
                     ),
-                  ),
-          ),
-
-          if (kDebugMode) ...[
+                  ],
+                ),
+              ),
+            ),
+          if (isEditingMode && currentEmail != null && !isSwitchingEmail)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.blue.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.info_outline, size: 16, color: Colors.blue.shade700),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        "Current email: $currentEmail",
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.blue.shade700,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          const SizedBox(height: 12),
+          if (!isEditingMode) ...[
+            _DividerRow(),
+            const SizedBox(height: 24),
+            _GoogleButton(isLoading: googleLoading, onTap: onGoogleSignIn),
+            const SizedBox(height: 16),
+            _DividerRow(),
             const SizedBox(height: 16),
             Center(
               child: TextButton(
-                onPressed: () async {
-                  final prefs = await SharedPreferences.getInstance();
-                  await prefs.setBool('hasProfile', true);
-                  if (context.mounted) {
-                    Navigator.of(context, rootNavigator: true)
-                        .pushReplacementNamed('/home');
-                  }
-                },
+                onPressed: () => _showGuestWarning(context),
                 child: const Text(
-                  "⚠ Skip (debug only)",
+                  "Continue without account",
                   style: TextStyle(
-                    color: Colors.red,
-                    fontSize: 12,
+                    color: Colors.black38,
                     fontWeight: FontWeight.w600,
+                    decoration: TextDecoration.underline,
+                    decorationColor: Colors.black26,
                   ),
                 ),
               ),
@@ -1171,383 +1232,4 @@ class _AwaitingLinkViewState extends State<_AwaitingLinkView>
       ),
     );
   }
-}
-
-class _SweepRingPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromCircle(
-      center: Offset(size.width / 2, size.height / 2),
-      radius: size.width / 2 - 4,
-    );
-    final paint = Paint()
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 3
-      ..shader = SweepGradient(
-        colors: [VoxColors.yellow.withOpacity(0), VoxColors.yellow],
-      ).createShader(rect);
-    canvas.drawArc(rect, 0, pi * 1.8, false, paint);
-  }
-
-  @override
-  bool shouldRepaint(_) => false;
-}
-
-// ─────────────────────────────────────────────
-//  SHARED DESIGN SYSTEM
-// ─────────────────────────────────────────────
-class VoxColors {
-  static const yellow = Color(0xFFF3E5AB);
-  static const white = Colors.white;
-}
-
-class VoxScaffoldWrapper extends StatelessWidget {
-  final Widget child;
-  const VoxScaffoldWrapper({super.key, required this.child});
-
-  @override
-  Widget build(BuildContext context) {
-    return Stack(
-      children: [
-        Positioned(
-          top: -80,
-          right: -60,
-          child: Container(
-            width: 260,
-            height: 260,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: VoxColors.yellow.withOpacity(0.35),
-            ),
-          ),
-        ),
-        Positioned(
-          bottom: -120,
-          left: -80,
-          child: Container(
-            width: 320,
-            height: 320,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: VoxColors.yellow.withOpacity(0.15),
-            ),
-          ),
-        ),
-        Center(
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 480),
-            child: SingleChildScrollView(
-              physics: const BouncingScrollPhysics(),
-              padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 64),
-              child: child,
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _VoxHeader extends StatelessWidget {
-  final String tag;
-  final String title;
-  final String subtitle;
-  const _VoxHeader({
-    required this.tag,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-          decoration: BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.circular(6),
-          ),
-          child: Text(
-            tag,
-            style: const TextStyle(
-              color: VoxColors.yellow,
-              fontSize: 10,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 2,
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        Text(
-          title,
-          style: const TextStyle(
-            fontSize: 38,
-            fontWeight: FontWeight.w900,
-            height: 1.05,
-            letterSpacing: -1.5,
-            color: Colors.black,
-          ),
-        ),
-        const SizedBox(height: 10),
-        Text(
-          subtitle,
-          style: const TextStyle(
-            color: Colors.black45,
-            fontWeight: FontWeight.w500,
-            fontSize: 14,
-            height: 1.5,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _VoxTextField extends StatelessWidget {
-  final TextEditingController controller;
-  final String label;
-  final IconData icon;
-  final TextInputType keyboardType;
-  final bool enabled;
-
-  const _VoxTextField({
-    required this.controller,
-    required this.label,
-    required this.icon,
-    this.keyboardType = TextInputType.text,
-    this.enabled = true,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        enabled: enabled,
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 15,
-          color: Colors.black,
-        ),
-        decoration: InputDecoration(
-          prefixIcon: Icon(icon, color: Colors.black54, size: 20),
-          labelText: label,
-          labelStyle: const TextStyle(
-            color: Colors.black38,
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-          ),
-          filled: true,
-          fillColor: enabled
-              ? VoxColors.yellow.withOpacity(0.12)
-              : Colors.black.withOpacity(0.04),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: Colors.transparent),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: VoxColors.yellow, width: 2),
-          ),
-          disabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: Colors.transparent),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _VoxButton extends StatelessWidget {
-  final String label;
-  final VoidCallback onTap;
-  final bool isLoading;
-
-  const _VoxButton({
-    required this.label,
-    required this.onTap,
-    this.isLoading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: ElevatedButton(
-        onPressed: isLoading ? null : onTap,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.black,
-          foregroundColor: VoxColors.yellow,
-          disabledBackgroundColor: Colors.black54,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          elevation: 6,
-          shadowColor: Colors.black.withOpacity(0.3),
-        ),
-        child: isLoading
-            ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                  color: VoxColors.yellow,
-                  strokeWidth: 2.5,
-                ),
-              )
-            : Text(
-                label,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 1.5,
-                  fontSize: 14,
-                ),
-              ),
-      ),
-    );
-  }
-}
-
-class _DividerRow extends StatelessWidget {
-  @override
-  Widget build(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: Divider(color: Colors.black.withOpacity(0.1), thickness: 1),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          child: Text(
-            "OR",
-            style: TextStyle(
-              color: Colors.black.withOpacity(0.3),
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              letterSpacing: 1.5,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Divider(color: Colors.black.withOpacity(0.1), thickness: 1),
-        ),
-      ],
-    );
-  }
-}
-
-class _GoogleButton extends StatelessWidget {
-  final VoidCallback onTap;
-  final bool isLoading;
-  const _GoogleButton({required this.onTap, this.isLoading = false});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 56,
-      child: OutlinedButton(
-        onPressed: isLoading ? null : onTap,
-        style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.black,
-          side: BorderSide(color: Colors.black.withOpacity(0.15), width: 1.5),
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(18),
-          ),
-          backgroundColor: Colors.white,
-        ),
-        child: isLoading
-            ? const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  color: Colors.black54,
-                  strokeWidth: 2,
-                ),
-              )
-            : const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _GoogleLogo(size: 22),
-                  SizedBox(width: 12),
-                  Text(
-                    "Continue with Google",
-                    style: TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 14,
-                      color: Colors.black87,
-                    ),
-                  ),
-                ],
-              ),
-      ),
-    );
-  }
-}
-
-class _GoogleLogo extends StatelessWidget {
-  final double size;
-  const _GoogleLogo({this.size = 24});
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      width: size,
-      height: size,
-      child: CustomPaint(painter: _GoogleLogoPainter()),
-    );
-  }
-}
-
-class _GoogleLogoPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final c = Offset(size.width / 2, size.height / 2);
-    final r = size.width / 2;
-    const sw = 0.22;
-
-    void arc(Color color, double start, double sweep) {
-      canvas.drawArc(
-        Rect.fromCircle(center: c, radius: r * (1 - sw / 2)),
-        start,
-        sweep,
-        false,
-        Paint()
-          ..color = color
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = r * sw
-          ..strokeCap = StrokeCap.butt,
-      );
-    }
-
-    const pi = 3.1415926535;
-    arc(const Color(0xFF4285F4), -pi / 2, pi * 0.5);
-    arc(const Color(0xFFEA4335), 0, pi * 0.5);
-    arc(const Color(0xFFFBBC05), pi / 2, pi * 0.4);
-    arc(const Color(0xFF34A853), pi * 0.9, pi * 0.6);
-
-    final barPaint = Paint()
-      ..color = const Color(0xFF4285F4)
-      ..style = PaintingStyle.fill;
-    final barH = r * sw;
-    canvas.drawRect(
-      Rect.fromLTWH(c.dx, c.dy - barH / 2, r * 0.85, barH),
-      barPaint,
-    );
-
-    canvas.drawCircle(c, r * (1 - sw), Paint()..color = Colors.white);
-
-    canvas.drawRect(
-      Rect.fromLTWH(c.dx, c.dy - barH / 2, r * 0.72, barH),
-      barPaint,
-    );
-  }
-
-  @override
-  bool shouldRepaint(_) => false;
 }

@@ -1,164 +1,343 @@
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'custom_commands_provider.dart';
-import 'language_provider.dart';
 
-class CustomCommandsPage extends StatelessWidget {
+class CustomCommandsPage extends StatefulWidget {
   const CustomCommandsPage({super.key});
 
+  @override
+  State<CustomCommandsPage> createState() => _CustomCommandsPageState();
+}
+
+class _CustomCommandsPageState extends State<CustomCommandsPage> {
+  String? _resolvedUid;
+  bool _isAnonymousUser = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveUser();
+  }
+
+  // ─────────────────────────────────────────────
+  //  RESOLVE USER — identical logic to VoxHomePage
+  // ─────────────────────────────────────────────
+  Future<void> _resolveUser() async {
+    final user = FirebaseAuth.instance.currentUser;
+
+    if (user == null) {
+      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+      return;
+    }
+
+    if (!user.isAnonymous) {
+      if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
+      _loadCommandsForUser(user.uid);
+      return;
+    }
+
+    final prefs = await SharedPreferences.getInstance();
+    final hasProfile = prefs.getBool('hasProfile') ?? false;
+
+    if (!hasProfile) {
+      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+      return;
+    }
+
+    final uidDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (uidDoc.exists) {
+      if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
+      _loadCommandsForUser(user.uid);
+      return;
+    }
+
+    // Fallback: look up by saved email (same as VoxHomePage)
+    final savedEmail = prefs.getString('userEmail') ?? '';
+    if (savedEmail.isNotEmpty) {
+      final query = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email', isEqualTo: savedEmail)
+          .limit(1)
+          .get();
+
+      if (query.docs.isNotEmpty) {
+        final docUid = query.docs.first.id;
+        if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = docUid; });
+        _loadCommandsForUser(docUid);
+        return;
+      }
+    }
+
+    if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+  }
+
+  // ─────────────────────────────────────────────
+  //  LOAD COMMANDS — keyed by resolvedUid
+  // ─────────────────────────────────────────────
+  Future<void> _loadCommandsForUser(String uid) async {
+    if (!mounted) return;
+    final provider = context.read<CustomCommandsProvider>();
+    await provider.loadCommandsForUser(uid);
+  }
+
+  // ─────────────────────────────────────────────
+  //  GUEST LEAVE GUARD
+  // ─────────────────────────────────────────────
+  Future<bool> _confirmLeave() async {
+    if (!_isAnonymousUser) return true;
+    final leave = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(children: [
+          Icon(Icons.warning_amber_rounded, color: Colors.orange),
+          SizedBox(width: 8),
+          Text('Unsaved Data', style: TextStyle(fontWeight: FontWeight.w800)),
+        ]),
+        content: const Text(
+          'You\'re using a guest account. All voice commands will be lost when you close the app.\n\nCreate an account to save them.',
+          style: TextStyle(fontSize: 14, height: 1.5),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Stay',
+                style: TextStyle(color: Colors.black54, fontWeight: FontWeight.w700)),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10)),
+            ),
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Leave Anyway'),
+          ),
+        ],
+      ),
+    );
+    return leave ?? false;
+  }
+
+  Future<void> _guardedNav(String route) async {
+    if (await _confirmLeave() && mounted) {
+      Navigator.pushReplacementNamed(context, route);
+    }
+  }
+
+  // ─────────────────────────────────────────────
+  //  BUILD
+  // ─────────────────────────────────────────────
   @override
   Widget build(BuildContext context) {
     final provider = context.watch<CustomCommandsProvider>();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF3E5AB),
-      body: Column(
-        children: [
-          // ── Header ──────────────────────────────────
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.only(
-              top: MediaQuery.of(context).padding.top + 16,
-              bottom: 24,
-              left: 20,
-              right: 20,
-            ),
-            decoration: const BoxDecoration(
-              color: Color(0xFFD4B96A),
-              borderRadius:
-                  BorderRadius.vertical(bottom: Radius.circular(32)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Back button
-                Semantics(
-                  label: 'Go back',
-                  button: true,
-                  child: GestureDetector(
-                    onTap: () => Navigator.pop(context),
-                    child: const Icon(
-                      Icons.arrow_back_ios_new_rounded,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _confirmLeave() && mounted) Navigator.pop(context);
+      },
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF3E5AB),
+        body: Column(
+          children: [
+            // ── Header ──────────────────────────────────
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.only(
+                top: MediaQuery.of(context).padding.top + 16,
+                bottom: 24,
+                left: 20,
+                right: 20,
+              ),
+              decoration: const BoxDecoration(
+                color: Color(0xFFD4B96A),
+                borderRadius:
+                    BorderRadius.vertical(bottom: Radius.circular(32)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Semantics(
+                    label: 'Go back',
+                    button: true,
+                    child: GestureDetector(
+                      onTap: () async {
+                        if (await _confirmLeave() && mounted) {
+                          Navigator.pop(context);
+                        }
+                      },
+                      child: const Icon(
+                        Icons.arrow_back_ios_new_rounded,
+                        color: Color(0xFFF3E5AB),
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  const Text(
+                    'Voice Commands',
+                    style: TextStyle(
+                      fontSize: 28,
+                      fontWeight: FontWeight.w900,
                       color: Color(0xFFF3E5AB),
-                      size: 20,
+                      letterSpacing: -0.5,
                     ),
                   ),
-                ),
-                const SizedBox(height: 16),
-                const Text(
-                  'Voice Commands',
-                  style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.w900,
-                    color: Color(0xFFF3E5AB),
-                    letterSpacing: -0.5,
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Double-tap anywhere to activate',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFFF3E5AB),
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 4),
-                const Text(
-                  'Double-tap anywhere to activate',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Color(0xFFF3E5AB),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                // Voice feedback toggle
-                Semantics(
-                  label: 'Voice feedback ${provider.voiceFeedbackEnabled ? "enabled" : "disabled"}',
-                  toggled: provider.voiceFeedbackEnabled,
-                  child: GestureDetector(
-                    onTap: () => provider.setVoiceFeedback(
-                        !provider.voiceFeedbackEnabled),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(
-                            provider.voiceFeedbackEnabled
-                                ? Icons.volume_up_rounded
-                                : Icons.volume_off_rounded,
-                            color: const Color(0xFFF3E5AB),
-                            size: 16,
-                          ),
-                          const SizedBox(width: 8),
-                          Text(
-                            provider.voiceFeedbackEnabled
-                                ? 'Voice feedback: ON'
-                                : 'Voice feedback: OFF',
-                            style: const TextStyle(
-                              color: Color(0xFFF3E5AB),
-                              fontWeight: FontWeight.w700,
-                              fontSize: 13,
+                  const SizedBox(height: 16),
+                  // Voice feedback toggle
+                  Semantics(
+                    label:
+                        'Voice feedback ${provider.voiceFeedbackEnabled ? "enabled" : "disabled"}',
+                    toggled: provider.voiceFeedbackEnabled,
+                    child: GestureDetector(
+                      onTap: () => provider
+                          .setVoiceFeedback(!provider.voiceFeedbackEnabled),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              provider.voiceFeedbackEnabled
+                                  ? Icons.volume_up_rounded
+                                  : Icons.volume_off_rounded,
+                              color: const Color(0xFFF3E5AB),
+                              size: 16,
                             ),
-                          ),
-                        ],
+                            const SizedBox(width: 8),
+                            Text(
+                              provider.voiceFeedbackEnabled
+                                  ? 'Voice feedback: ON'
+                                  : 'Voice feedback: OFF',
+                              style: const TextStyle(
+                                color: Color(0xFFF3E5AB),
+                                fontWeight: FontWeight.w700,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
+                ],
+              ),
+            ),
+
+            // ── Guest banner — matches VoxHomePage style ─────────────────
+            if (_isAnonymousUser) ...[
+              const SizedBox(height: 8),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.06),
+                    borderRadius: BorderRadius.circular(10),
+                    border:
+                        Border.all(color: Colors.black.withOpacity(0.1)),
+                  ),
+                  child: const Row(
+                    children: [
+                      Icon(Icons.info_outline,
+                          color: Colors.black54, size: 15),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Guest mode — commands are temporary. Create an account to save them.',
+                          style: TextStyle(
+                              color: Colors.black54,
+                              fontSize: 11,
+                              height: 1.4),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
+              ),
+            ],
+
+            // ── Command list ─────────────────────────────
+            Expanded(
+              child: _resolvedUid == null && !_isAnonymousUser
+                  ? const Center(child: CircularProgressIndicator())
+                  : provider.commands.isEmpty
+                      ? _buildEmptyState(context)
+                      : ListView.builder(
+                          padding: const EdgeInsets.all(16),
+                          itemCount: provider.commands.length,
+                          itemBuilder: (_, i) =>
+                              _CommandCard(command: provider.commands[i]),
+                        ),
+            ),
+          ],
+        ),
+
+        // ── FAB ──────────────────────────────────────
+        floatingActionButton: Semantics(
+          label: 'Add new voice command',
+          button: true,
+          child: FloatingActionButton.extended(
+            backgroundColor: Colors.black,
+            foregroundColor: Colors.white,
+            onPressed: () => _showCommandSheet(context),
+            icon: const Icon(Icons.add),
+            label: const Text(
+              'Add Command',
+              style: TextStyle(fontWeight: FontWeight.w700),
+            ),
+          ),
+        ),
+
+        bottomNavigationBar: BottomAppBar(
+          color: Colors.grey[850],
+          child: SizedBox(
+            height: 65,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
+              children: [
+                _navItem(context, Icons.home, 'Home',
+                    () => _guardedNav('/home')),
+                _navItem(context, Icons.note_alt_outlined, 'Notes',
+                    () => _guardedNav('/notes')),
+                const SizedBox(width: 48),
+                _navItem(context, Icons.book, 'Dictionary',
+                    () => _guardedNav('/dictionary')),
+                _navItem(context, Icons.menu, 'Menu',
+                    () => _guardedNav('/menu')),
               ],
             ),
           ),
-
-          // ── Command list ─────────────────────────────
-          Expanded(
-            child: provider.commands.isEmpty
-                ? _buildEmptyState(context)
-                : ListView.builder(
-                    padding: const EdgeInsets.all(16),
-                    itemCount: provider.commands.length,
-                    itemBuilder: (_, i) =>
-                        _CommandCard(command: provider.commands[i]),
-                  ),
-          ),
-        ],
-      ),
-
-      // ── FAB: Add command ─────────────────────────
-      floatingActionButton: Semantics(
-        label: 'Add new voice command',
-        button: true,
-        child: FloatingActionButton.extended(
-          backgroundColor: Colors.black,
-          foregroundColor: Colors.white,
-          onPressed: () => _showCommandSheet(context),
-          icon: const Icon(Icons.add),
-          label: const Text(
-            'Add Command',
-            style: TextStyle(fontWeight: FontWeight.w700),
-          ),
         ),
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       ),
-
-      // Bottom nav consistent with app
-      bottomNavigationBar: BottomAppBar(
-        color: Colors.grey[850],
-        child: SizedBox(
-          height: 65,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _navItem(context, Icons.home, 'Home', '/home'),
-              _navItem(context, Icons.note_alt_outlined, 'Notes', '/notes'),
-              const SizedBox(width: 48),
-              _navItem(
-                  context, Icons.book, 'Dictionary', '/dictionary'),
-              _navItem(context, Icons.menu, 'Menu', '/menu'),
-            ],
-          ),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
     );
   }
 
@@ -202,13 +381,13 @@ class CustomCommandsPage extends StatelessWidget {
     );
   }
 
-  Widget _navItem(
-      BuildContext context, IconData icon, String label, String route) {
+  Widget _navItem(BuildContext context, IconData icon, String label,
+      VoidCallback onTap) {
     return Semantics(
       label: label,
       button: true,
       child: GestureDetector(
-        onTap: () => Navigator.pushReplacementNamed(context, route),
+        onTap: onTap,
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -229,7 +408,7 @@ class CustomCommandsPage extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-//  COMMAND CARD
+//  COMMAND CARD — unchanged from original
 // ─────────────────────────────────────────────
 class _CommandCard extends StatelessWidget {
   final CustomCommand command;
@@ -281,8 +460,7 @@ class _CommandCard extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 15,
-                  color:
-                      command.isEnabled ? Colors.black87 : Colors.black38,
+                  color: command.isEnabled ? Colors.black87 : Colors.black38,
                   fontStyle: FontStyle.italic,
                 ),
               ),
@@ -315,9 +493,10 @@ class _CommandCard extends StatelessWidget {
               trailing: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Enable/disable toggle
                   Semantics(
-                    label: command.isEnabled ? 'Disable command' : 'Enable command',
+                    label: command.isEnabled
+                        ? 'Disable command'
+                        : 'Enable command',
                     button: true,
                     child: GestureDetector(
                       onTap: () => provider.toggleCommand(command.id),
@@ -335,7 +514,6 @@ class _CommandCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // Edit
                   Semantics(
                     label: 'Edit command',
                     button: true,
@@ -349,7 +527,6 @@ class _CommandCard extends StatelessWidget {
                       ),
                     ),
                   ),
-                  // Delete
                   Semantics(
                     label: 'Delete command',
                     button: true,
@@ -377,12 +554,11 @@ class _CommandCard extends StatelessWidget {
       builder: (ctx) => Semantics(
         label: 'Delete command confirmation dialog',
         child: AlertDialog(
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20)),
           title: const Text('Delete Command?',
               style: TextStyle(fontWeight: FontWeight.w800)),
-          content: Text(
-              'Remove the command: "${command.phrase}"?'),
+          content: Text('Remove the command: "${command.phrase}"?'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -412,7 +588,7 @@ class _CommandCard extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-//  ADD / EDIT BOTTOM SHEET
+//  ADD / EDIT BOTTOM SHEET — unchanged from original
 // ─────────────────────────────────────────────
 void _showCommandSheet(BuildContext context, {CustomCommand? existing}) {
   showModalBottomSheet(
@@ -509,7 +685,6 @@ class _CommandSheetState extends State<_CommandSheet> {
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle
             Center(
               child: Container(
                 width: 40,
@@ -521,7 +696,6 @@ class _CommandSheetState extends State<_CommandSheet> {
               ),
             ),
             const SizedBox(height: 20),
-
             Text(
               isEditing ? 'Edit Command' : 'New Command',
               style: const TextStyle(
@@ -531,8 +705,6 @@ class _CommandSheetState extends State<_CommandSheet> {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Phrase input
             Semantics(
               label: 'Voice phrase to say',
               textField: true,
@@ -551,8 +723,6 @@ class _CommandSheetState extends State<_CommandSheet> {
               ),
             ),
             const SizedBox(height: 16),
-
-            // Action picker
             const Text(
               'ACTION',
               style: TextStyle(
@@ -626,8 +796,6 @@ class _CommandSheetState extends State<_CommandSheet> {
                 ),
               ),
             ),
-
-            // Parameter field (only for searchNotes / openNote)
             if (_selectedAction.requiresParameter) ...[
               const SizedBox(height: 16),
               Semantics(
@@ -637,9 +805,10 @@ class _CommandSheetState extends State<_CommandSheet> {
                   controller: _paramController,
                   decoration: InputDecoration(
                     labelText: _selectedAction.parameterHint,
-                    hintText: _selectedAction == CommandActionType.searchNotes
-                        ? 'e.g. chemistry'
-                        : 'e.g. Biology Chapter 3',
+                    hintText:
+                        _selectedAction == CommandActionType.searchNotes
+                            ? 'e.g. chemistry'
+                            : 'e.g. Biology Chapter 3',
                     prefixIcon: const Icon(Icons.edit_note_rounded),
                     border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(14)),
@@ -649,10 +818,7 @@ class _CommandSheetState extends State<_CommandSheet> {
                 ),
               ),
             ],
-
             const SizedBox(height: 24),
-
-            // Save button
             Semantics(
               label: isEditing ? 'Save changes' : 'Add command',
               button: true,

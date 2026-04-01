@@ -16,6 +16,7 @@ import 'temp_library_provider.dart';
 import 'language_provider.dart';
 import 'tts_service.dart';
 import 'reader_page.dart';
+import 'analytics_service.dart';
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});
@@ -126,6 +127,9 @@ class _UploadPageState extends State<UploadPage> {
         'timestamp': FieldValue.serverTimestamp(),
       });
     }
+
+    // Track file upload operation
+    AnalyticsService.instance.recordFileOperation('upload');
 
     if (!mounted) return;
     setState(() => _isUploading = false);

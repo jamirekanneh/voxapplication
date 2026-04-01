@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // ─────────────────────────────────────────────
 //  ACTION TYPES
@@ -155,6 +157,7 @@ class CustomCommandsProvider extends ChangeNotifier {
 
   List<CustomCommand> _commands = [];
   bool _voiceFeedbackEnabled = true;
+  String? _currentUserId;
 
   // FIX: track whether _load() has completed so GlobalSttWrapper
   // doesn't call match() against an empty list on first launch.
@@ -174,35 +177,18 @@ class CustomCommandsProvider extends ChangeNotifier {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     _voiceFeedbackEnabled = prefs.getBool(_feedbackKey) ?? true;
-    final raw = prefs.getString(_prefsKey);
-    if (raw != null) {
-      try {
-        final list = jsonDecode(raw) as List;
-        _commands = list
-            .map((e) => CustomCommand.fromJson(e as Map<String, dynamic>))
-            .toList();
-      } catch (_) {
-        _commands = [];
-      }
-    }
-    // FIX: mark as loaded only after SharedPreferences data is ready
+    // For initial load, don't load commands - wait for loadCommandsForUser
     _isLoaded = true;
     notifyListeners();
-  }
-
-  Future<void> _save() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-      _prefsKey,
-      jsonEncode(_commands.map((c) => c.toJson()).toList()),
-    );
   }
 
   // ── CRUD ─────────────────────────────────────
   Future<void> addCommand(CustomCommand command) async {
     _commands.add(command);
     notifyListeners();
-    await _save();
+    if (_currentUserId != null) {
+      await _saveForUser(_currentUserId!);
+    }
   }
 
   Future<void> updateCommand(CustomCommand updated) async {
@@ -210,14 +196,18 @@ class CustomCommandsProvider extends ChangeNotifier {
     if (idx != -1) {
       _commands[idx] = updated;
       notifyListeners();
-      await _save();
+      if (_currentUserId != null) {
+        await _saveForUser(_currentUserId!);
+      }
     }
   }
 
   Future<void> deleteCommand(String id) async {
     _commands.removeWhere((c) => c.id == id);
     notifyListeners();
-    await _save();
+    if (_currentUserId != null) {
+      await _saveForUser(_currentUserId!);
+    }
   }
 
   Future<void> toggleCommand(String id) async {
@@ -227,7 +217,9 @@ class CustomCommandsProvider extends ChangeNotifier {
         isEnabled: !_commands[idx].isEnabled,
       );
       notifyListeners();
-      await _save();
+      if (_currentUserId != null) {
+        await _saveForUser(_currentUserId!);
+      }
     }
   }
 
@@ -236,6 +228,85 @@ class CustomCommandsProvider extends ChangeNotifier {
     notifyListeners();
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_feedbackKey, enabled);
+  }
+
+  // ── Load commands for specific user ──────────────────
+  Future<void> loadCommandsForUser(String uid) async {
+    _currentUserId = uid;
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && !user.isAnonymous) {
+        // Load from Firestore for authenticated users
+        final snapshot = await FirebaseFirestore.instance
+            .collection('custom_commands')
+            .where('userId', isEqualTo: uid)
+            .get();
+
+        _commands = snapshot.docs
+            .map((doc) => CustomCommand.fromJson(doc.data()))
+            .toList();
+      } else {
+        // Load from SharedPreferences for anonymous users
+        final prefs = await SharedPreferences.getInstance();
+        final raw = prefs.getString('${_prefsKey}_$uid');
+        if (raw != null) {
+          try {
+            final list = jsonDecode(raw) as List;
+            _commands = list
+                .map((e) => CustomCommand.fromJson(e as Map<String, dynamic>))
+                .toList();
+          } catch (_) {
+            _commands = [];
+          }
+        } else {
+          _commands = [];
+        }
+      }
+      _isLoaded = true;
+      notifyListeners();
+    } catch (e) {
+      debugPrint('Error loading commands for user $uid: $e');
+      _commands = [];
+      _isLoaded = true;
+      notifyListeners();
+    }
+  }
+
+  // ── Save commands for specific user ──────────────────
+  Future<void> _saveForUser(String uid) async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && !user.isAnonymous) {
+      // Save to Firestore for authenticated users
+      final batch = FirebaseFirestore.instance.batch();
+      
+      // Delete existing commands
+      final existing = await FirebaseFirestore.instance
+          .collection('custom_commands')
+          .where('userId', isEqualTo: uid)
+          .get();
+      
+      for (final doc in existing.docs) {
+        batch.delete(doc.reference);
+      }
+      
+      // Add new commands
+      for (final command in _commands) {
+        final docRef = FirebaseFirestore.instance.collection('custom_commands').doc();
+        batch.set(docRef, {
+          ...command.toJson(),
+          'userId': uid,
+        });
+      }
+      
+      await batch.commit();
+    } else {
+      // Save to SharedPreferences for anonymous users
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '${_prefsKey}_$uid',
+        jsonEncode(_commands.map((c) => c.toJson()).toList()),
+      );
+    }
   }
 
   // ── Matching ──────────────────────────────────

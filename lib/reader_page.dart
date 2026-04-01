@@ -5,6 +5,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'tts_service.dart';
 import 'language_provider.dart';
 import 'ai_result_page.dart';
+import 'analytics_service.dart';
 
 class ReaderPage extends StatefulWidget {
   final String title;
@@ -74,6 +75,10 @@ class _ReaderPageState extends State<ReaderPage> {
     if (!tts.isPlaying || tts.title != widget.title) {
       tts.play(widget.title, widget.content, widget.locale);
     }
+
+    // Track file read operation
+    AnalyticsService.instance.recordFileOperation('read');
+
     _initSpeech();
   }
 
