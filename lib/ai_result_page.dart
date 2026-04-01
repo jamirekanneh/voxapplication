@@ -6,12 +6,14 @@ class AiResultPage extends StatefulWidget {
   final String documentTitle;
   final String documentContent;
   final String mode; // 'summary' | 'flashcards'
+  final int cardCount; // how many flashcards to generate
 
   const AiResultPage({
     super.key,
     required this.documentTitle,
     required this.documentContent,
     required this.mode,
+    this.cardCount = 10,
   });
 
   @override
@@ -32,7 +34,7 @@ class _AiResultPageState extends State<AiResultPage> {
   // ── TTS State ──────────────────────────────────
   final FlutterTts _tts = FlutterTts();
   bool _isSpeaking = false;
-  bool _isPaused = false;
+  bool _autoReadEnabled = true; // auto-read toggle
 
   @override
   void initState() {
@@ -52,78 +54,42 @@ class _AiResultPageState extends State<AiResultPage> {
     await _tts.setLanguage('en-US');
     await _tts.setSpeechRate(0.5);
     await _tts.setPitch(1.0);
-
     _tts.setCompletionHandler(() {
-      if (mounted)
-        setState(() {
-          _isSpeaking = false;
-          _isPaused = false;
-        });
+      if (mounted) setState(() => _isSpeaking = false);
     });
-
     _tts.setErrorHandler((_) {
-      if (mounted)
-        setState(() {
-          _isSpeaking = false;
-          _isPaused = false;
-        });
+      if (mounted) setState(() => _isSpeaking = false);
     });
   }
 
-  // ── TTS Controls ───────────────────────────────
+  // ── TTS helpers ────────────────────────────────
   Future<void> _speak(String text) async {
     await _tts.stop();
-    setState(() {
-      _isSpeaking = true;
-      _isPaused = false;
-    });
+    if (text.isEmpty) return;
+    setState(() => _isSpeaking = true);
     await _tts.speak(text);
-  }
-
-  Future<void> _togglePause() async {
-    if (_isPaused) {
-      await _tts.continueHandler;
-      await _tts.speak(_currentSpeakText());
-      setState(() {
-        _isPaused = false;
-        _isSpeaking = true;
-      });
-    } else {
-      await _tts.pause();
-      setState(() {
-        _isPaused = true;
-      });
-    }
   }
 
   Future<void> _stopSpeaking() async {
     await _tts.stop();
-    setState(() {
-      _isSpeaking = false;
-      _isPaused = false;
-    });
+    if (mounted) setState(() => _isSpeaking = false);
   }
 
-  /// Returns the text that should be read aloud right now
-  String _currentSpeakText() {
-    if (widget.mode == 'summary') {
-      return _summary ?? '';
-    } else {
-      // Read current flashcard
-      final card = _flashcards![_currentCard];
-      final side = _flipped[_currentCard]
-          ? 'Answer: ${card.answer}'
-          : 'Question: ${card.question}';
-      return side;
-    }
-  }
-
-  void _onSpeakerTap() {
-    if (_isSpeaking && !_isPaused) {
+  void _toggleSpeaker() {
+    if (_isSpeaking) {
       _stopSpeaking();
     } else {
       _speak(_currentSpeakText());
     }
+  }
+
+  String _currentSpeakText() {
+    if (widget.mode == 'summary') return _summary ?? '';
+    if (_flashcards == null || _flashcards!.isEmpty) return '';
+    final card = _flashcards![_currentCard];
+    return _flipped[_currentCard]
+        ? 'Answer: ${card.answer}'
+        : 'Question: ${card.question}';
   }
 
   // ── Fetch AI content ───────────────────────────
@@ -136,14 +102,21 @@ class _AiResultPageState extends State<AiResultPage> {
     try {
       if (widget.mode == 'summary') {
         final s = await AiService.summarize(widget.documentContent);
-        if (mounted)
+        if (mounted) {
           setState(() {
             _summary = s;
             _loading = false;
           });
+          // Auto-read summary
+          if (_autoReadEnabled) {
+            await Future.delayed(const Duration(milliseconds: 400));
+            _speak(s);
+          }
+        }
       } else {
         final cards = await AiService.generateFlashcards(
           widget.documentContent,
+          count: widget.cardCount,
         );
         if (mounted) {
           setState(() {
@@ -151,6 +124,11 @@ class _AiResultPageState extends State<AiResultPage> {
             _flipped = List.filled(cards.length, false);
             _loading = false;
           });
+          // Auto-read first question
+          if (_autoReadEnabled && cards.isNotEmpty) {
+            await Future.delayed(const Duration(milliseconds: 400));
+            _speak('Question 1: ${cards.first.question}');
+          }
         }
       }
     } catch (e) {
@@ -162,43 +140,80 @@ class _AiResultPageState extends State<AiResultPage> {
     }
   }
 
-  // ── Speaker button widget ──────────────────────
-  Widget _buildSpeakerButton() {
+  // ── Speaker button ─────────────────────────────
+  Widget _buildSpeakerButton({bool compact = false}) {
     return GestureDetector(
-      onTap: _onSpeakerTap,
+      onTap: _toggleSpeaker,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+        padding: EdgeInsets.symmetric(
+          horizontal: compact ? 10 : 14,
+          vertical: compact ? 6 : 8,
+        ),
         decoration: BoxDecoration(
-          color: _isSpeaking && !_isPaused
+          color: _isSpeaking
               ? const Color(0xFFD4B96A)
               : Colors.black.withOpacity(0.08),
           borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              _isSpeaking ? Icons.stop_rounded : Icons.volume_up_rounded,
+              size: 15,
+              color: _isSpeaking ? Colors.black : Colors.black54,
+            ),
+            if (!compact) ...[
+              const SizedBox(width: 5),
+              Text(
+                _isSpeaking ? 'Stop' : 'Read Aloud',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: _isSpeaking ? Colors.black : Colors.black54,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ── Auto-read toggle ───────────────────────────
+  Widget _buildAutoReadToggle() {
+    return GestureDetector(
+      onTap: () {
+        setState(() => _autoReadEnabled = !_autoReadEnabled);
+        if (!_autoReadEnabled) _stopSpeaking();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: _autoReadEnabled
+              ? Colors.green.withOpacity(0.15)
+              : Colors.grey[200],
+          borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: _isSpeaking && !_isPaused
-                ? const Color(0xFFD4B96A)
-                : Colors.transparent,
+            color: _autoReadEnabled ? Colors.green : Colors.transparent,
           ),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(
-              _isSpeaking && !_isPaused
-                  ? Icons.stop_rounded
-                  : Icons.volume_up_rounded,
-              size: 16,
-              color: _isSpeaking && !_isPaused ? Colors.black : Colors.black54,
+              _autoReadEnabled ? Icons.autorenew : Icons.autorenew,
+              size: 13,
+              color: _autoReadEnabled ? Colors.green : Colors.grey[500],
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: 4),
             Text(
-              _isSpeaking && !_isPaused ? 'Stop' : 'Read Aloud',
+              _autoReadEnabled ? 'Auto ON' : 'Auto OFF',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: _isSpeaking && !_isPaused
-                    ? Colors.black
-                    : Colors.black54,
+                color: _autoReadEnabled ? Colors.green : Colors.grey[500],
               ),
             ),
           ],
@@ -267,7 +282,7 @@ class _AiResultPageState extends State<AiResultPage> {
 
     return Column(
       children: [
-        // Progress
+        // Progress + speaker
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 12, 20, 4),
           child: Row(
@@ -281,8 +296,10 @@ class _AiResultPageState extends State<AiResultPage> {
                 ),
               ),
               const Spacer(),
+              _buildSpeakerButton(compact: true),
+              const SizedBox(width: 8),
               Text(
-                'Tap card to flip',
+                'Tap to flip',
                 style: TextStyle(color: Colors.grey[500], fontSize: 11),
               ),
             ],
@@ -305,25 +322,17 @@ class _AiResultPageState extends State<AiResultPage> {
           ),
         ),
 
-        const SizedBox(height: 16),
-
-        // Speaker button for current card
-        _buildSpeakerButton(),
-
         const SizedBox(height: 12),
 
-        // Flashcard
+        // Flashcard — tap flips and reads
         Expanded(
           child: GestureDetector(
             onTap: () {
-              setState(() {
-                _flipped[_currentCard] = !_flipped[_currentCard];
-              });
-              // Auto-read the flipped side
-              final newSide = _flipped[_currentCard]
+              setState(() => _flipped[_currentCard] = !_flipped[_currentCard]);
+              final newText = _flipped[_currentCard]
                   ? 'Answer: ${card.answer}'
                   : 'Question: ${card.question}';
-              _speak(newSide);
+              if (_autoReadEnabled) _speak(newText);
             },
             child: AnimatedSwitcher(
               duration: const Duration(milliseconds: 300),
@@ -387,14 +396,13 @@ class _AiResultPageState extends State<AiResultPage> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    // Small speaker icon inside card
                     Icon(
                       Icons.touch_app_outlined,
                       size: 14,
                       color: isFlipped ? Colors.grey[600] : Colors.grey[400],
                     ),
                     Text(
-                      'Tap to flip & hear answer',
+                      'Tap to flip',
                       style: TextStyle(
                         fontSize: 10,
                         color: isFlipped ? Colors.grey[600] : Colors.grey[400],
@@ -421,6 +429,13 @@ class _AiResultPageState extends State<AiResultPage> {
                             _currentCard--;
                             _flipped[_currentCard] = false;
                           });
+                          if (_autoReadEnabled) {
+                            Future.delayed(const Duration(milliseconds: 200), () {
+                              _speak(
+                                'Question ${_currentCard + 1}: ${_flashcards![_currentCard].question}',
+                              );
+                            });
+                          }
                         }
                       : null,
                   style: OutlinedButton.styleFrom(
@@ -451,13 +466,13 @@ class _AiResultPageState extends State<AiResultPage> {
                             _currentCard++;
                             _flipped[_currentCard] = false;
                           });
-                          // Auto-read question of next card
-                          Future.delayed(
-                            const Duration(milliseconds: 300),
-                            () => _speak(
-                              'Question: ${_flashcards![_currentCard].question}',
-                            ),
-                          );
+                          if (_autoReadEnabled) {
+                            Future.delayed(const Duration(milliseconds: 200), () {
+                              _speak(
+                                'Question ${_currentCard + 1}: ${_flashcards![_currentCard].question}',
+                              );
+                            });
+                          }
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
@@ -528,11 +543,14 @@ class _AiResultPageState extends State<AiResultPage> {
                       ],
                     ),
                   ),
-                  // Speaker button in top bar (for summary)
+                  // Auto-read toggle
+                  if (!_loading && _error == null) _buildAutoReadToggle(),
+                  const SizedBox(width: 6),
+                  // Speaker button (summary only — flashcard has its own)
                   if (!_loading && _error == null && isSummary)
                     _buildSpeakerButton(),
-                  const SizedBox(width: 8),
-                  // Retry button
+                  const SizedBox(width: 6),
+                  // Retry
                   if (!_loading)
                     GestureDetector(
                       onTap: _fetch,
@@ -563,7 +581,7 @@ class _AiResultPageState extends State<AiResultPage> {
                           Text(
                             isSummary
                                 ? 'Generating summary...'
-                                : 'Creating flashcards...',
+                                : 'Creating ${widget.cardCount} flashcards...',
                             style: const TextStyle(color: Colors.black54),
                           ),
                         ],

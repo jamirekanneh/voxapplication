@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
@@ -8,8 +9,7 @@ import 'config/secrets.dart';
 class AiService {
   static const String _baseUrl =
       'https://api.groq.com/openai/v1/chat/completions';
-  static const String _model =
-      'llama-3.3-70b-versatile'; // current active free model
+  static const String _model = 'llama-3.3-70b-versatile';
   static const int _maxChars = 12000;
 
   static Future<String> _callGroq(
@@ -38,7 +38,7 @@ class AiService {
                 {'role': 'user', 'content': content},
               ],
               'max_tokens': 2048,
-              'temperature': 0.4,
+              'temperature': 0.9, // Higher = more varied responses each time
             }),
           )
           .timeout(const Duration(seconds: 30));
@@ -84,17 +84,25 @@ class AiService {
     return _callGroq(system, 'Summarize this document:\n\n$documentText');
   }
 
-  /// Generates flashcards and returns them parsed.
-  static Future<List<Flashcard>> generateFlashcards(String documentText) async {
-    const system =
-        'You are a study flashcard generator. '
-        'Generate 10–15 flashcards covering the most important concepts. '
+  /// Generates [count] flashcards — different every time due to random seed in prompt.
+  static Future<List<Flashcard>> generateFlashcards(
+    String documentText, {
+    int count = 10,
+  }) async {
+    // Random seed in prompt ensures different questions every call
+    final seed = Random().nextInt(99999);
+
+    final system =
+        'You are a creative study flashcard generator. '
+        'Generate exactly $count unique flashcards covering important concepts. '
+        'Every time you are called, generate DIFFERENT questions — vary the focus, angle, and phrasing. '
+        'Seed for variation: $seed. '
         'Respond ONLY with a valid JSON array — no markdown fences, no explanation, nothing else. '
         'Format: [{"question":"...","answer":"..."}, ...]';
 
     final raw = await _callGroq(
       system,
-      'Generate flashcards from this document:\n\n$documentText',
+      'Generate $count flashcards from this document:\n\n$documentText',
     );
 
     final cleaned = raw.replaceAll(RegExp(r'```json|```'), '').trim();

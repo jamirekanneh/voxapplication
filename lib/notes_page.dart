@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'language_provider.dart';
 import 'temp_notes_provider.dart';
 import 'tts_service.dart';
+import 'ai_result_page.dart';
 
 const int _kMaxTitleLength = 100;
 const int _kMaxContentLength = 5000;
@@ -542,11 +543,17 @@ class _NotesPageState extends State<NotesPage> {
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) {
-        // Local controllers so editing stays inside the popup
         final popupTitleController = TextEditingController(text: title);
         final popupContentController = TextEditingController(text: content);
         bool isEditMode = false;
         bool isSaving = false;
+        bool isSpeaking = false;
+
+        // Auto-start reading when note opens
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          tts.play(title, content, lang.ttsLocale);
+          isSpeaking = true;
+        });
 
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
@@ -555,7 +562,7 @@ class _NotesPageState extends State<NotesPage> {
                 bottom: MediaQuery.of(ctx).viewInsets.bottom,
               ),
               child: DraggableScrollableSheet(
-                initialChildSize: 0.6,
+                initialChildSize: 0.75,
                 minChildSize: 0.4,
                 maxChildSize: 0.95,
                 expand: false,
@@ -576,6 +583,7 @@ class _NotesPageState extends State<NotesPage> {
                         ),
                       ),
                       const SizedBox(height: 16),
+
                       // Header row
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -625,26 +633,45 @@ class _NotesPageState extends State<NotesPage> {
                                   ),
                           ),
                           const SizedBox(width: 4),
-                          // Action buttons
+
                           if (!isEditMode) ...[
+                            // Speaker toggle button
                             IconButton(
-                              icon: const Icon(
-                                Icons.volume_up_rounded,
-                                color: Colors.black87,
+                              icon: Icon(
+                                isSpeaking
+                                    ? Icons.stop_circle_outlined
+                                    : Icons.volume_up_rounded,
+                                color: isSpeaking
+                                    ? const Color(0xFFD4B96A)
+                                    : Colors.black87,
                               ),
-                              onPressed: () =>
-                                  tts.play(title, content, lang.ttsLocale),
+                              tooltip: isSpeaking
+                                  ? 'Stop reading'
+                                  : 'Read aloud',
+                              onPressed: () {
+                                if (isSpeaking) {
+                                  tts.stop();
+                                  setSheetState(() => isSpeaking = false);
+                                } else {
+                                  tts.play(title, content, lang.ttsLocale);
+                                  setSheetState(() => isSpeaking = true);
+                                }
+                              },
                             ),
                             IconButton(
                               icon: const Icon(
                                 Icons.edit_note_rounded,
                                 color: Colors.black87,
                               ),
-                              onPressed: () =>
-                                  setSheetState(() => isEditMode = true),
+                              onPressed: () {
+                                tts.stop();
+                                setSheetState(() {
+                                  isEditMode = true;
+                                  isSpeaking = false;
+                                });
+                              },
                             ),
                           ] else ...[
-                            // Cancel edit
                             IconButton(
                               icon: const Icon(
                                 Icons.close,
@@ -657,7 +684,6 @@ class _NotesPageState extends State<NotesPage> {
                                 setSheetState(() => isEditMode = false);
                               },
                             ),
-                            // Save edit
                             isSaving
                                 ? const Padding(
                                     padding: EdgeInsets.all(12),
@@ -682,7 +708,6 @@ class _NotesPageState extends State<NotesPage> {
                                       final newContent = popupContentController
                                           .text
                                           .trim();
-
                                       if (newTitle.isEmpty) {
                                         ScaffoldMessenger.of(
                                           context,
@@ -713,7 +738,6 @@ class _NotesPageState extends State<NotesPage> {
                                         );
                                         return;
                                       }
-
                                       setSheetState(() => isSaving = true);
                                       try {
                                         if (_isAnonymousUser) {
@@ -772,7 +796,143 @@ class _NotesPageState extends State<NotesPage> {
                           ],
                         ],
                       ),
-                      const Divider(height: 24),
+
+                      // ── AI Tools bar (only in view mode) ──
+                      if (!isEditMode) ...[
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: Colors.black.withOpacity(0.08),
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(
+                                Icons.auto_awesome,
+                                size: 14,
+                                color: Color(0xFF7A6130),
+                              ),
+                              const SizedBox(width: 6),
+                              const Text(
+                                'AI Tools',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                  color: Color(0xFF7A6130),
+                                ),
+                              ),
+                              const Spacer(),
+                              // Summarize
+                              GestureDetector(
+                                onTap: () {
+                                  tts.stop();
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => AiResultPage(
+                                        documentTitle: title,
+                                        documentContent: content,
+                                        mode: 'summary',
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.summarize_outlined,
+                                        color: Color(0xFFF3E5AB),
+                                        size: 12,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Summarize',
+                                        style: TextStyle(
+                                          color: Color(0xFFF3E5AB),
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              // Flashcards
+                              GestureDetector(
+                                onTap: () async {
+                                  tts.stop();
+                                  // Ask how many cards
+                                  final count = await _pickCardCount(context);
+                                  if (count == null || !context.mounted) return;
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => AiResultPage(
+                                        documentTitle: title,
+                                        documentContent: content,
+                                        mode: 'flashcards',
+                                        cardCount: count,
+                                      ),
+                                    ),
+                                  );
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFFD4B96A),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: const Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.style_outlined,
+                                        color: Colors.black,
+                                        size: 12,
+                                      ),
+                                      SizedBox(width: 4),
+                                      Text(
+                                        'Flashcards',
+                                        style: TextStyle(
+                                          color: Colors.black,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+
+                      const Divider(height: 20),
+
                       // Body
                       Expanded(
                         child: isEditMode
@@ -830,6 +990,84 @@ class _NotesPageState extends State<NotesPage> {
           },
         );
       },
+    ).whenComplete(() {
+      // Stop TTS when note is closed
+      tts.stop();
+    });
+  }
+
+  // ── Card count picker ─────────────────────────
+  Future<int?> _pickCardCount(BuildContext context) async {
+    int selected = 10;
+    return showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFFF3E5AB),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            'How many flashcards?',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$selected cards',
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF7A6130),
+                ),
+              ),
+              Slider(
+                value: selected.toDouble(),
+                min: 5,
+                max: 20,
+                divisions: 15,
+                activeColor: Colors.black,
+                inactiveColor: Colors.grey[300],
+                onChanged: (v) => setDialogState(() => selected = v.round()),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '5',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  Text(
+                    '20',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, selected),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                foregroundColor: const Color(0xFFF3E5AB),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Generate'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

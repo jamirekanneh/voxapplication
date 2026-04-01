@@ -319,12 +319,19 @@ class _ReaderPageState extends State<ReaderPage> {
       keywords.any((k) => words.contains(k));
 
   // ── Open AI page ──────────────────────────────
-  void _openAiPage(String mode) {
-    // Pause TTS while using AI features
+  void _openAiPage(String mode) async {
     final tts = context.read<TtsService>();
     final locale = context.read<LanguageProvider>().ttsLocale;
     if (tts.isPlaying) tts.togglePause(locale);
 
+    int cardCount = 10;
+    if (mode == 'flashcards') {
+      final picked = await _pickCardCount();
+      if (picked == null || !mounted) return;
+      cardCount = picked;
+    }
+
+    if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -332,6 +339,81 @@ class _ReaderPageState extends State<ReaderPage> {
           documentTitle: widget.title,
           documentContent: widget.content,
           mode: mode,
+          cardCount: cardCount,
+        ),
+      ),
+    );
+  }
+
+  Future<int?> _pickCardCount() async {
+    int selected = 10;
+    return showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFFF3E5AB),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            'How many flashcards?',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$selected cards',
+                style: const TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF7A6130),
+                ),
+              ),
+              Slider(
+                value: selected.toDouble(),
+                min: 5,
+                max: 20,
+                divisions: 15,
+                activeColor: Colors.black,
+                inactiveColor: Colors.grey[300],
+                onChanged: (v) => setDialogState(() => selected = v.round()),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '5',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  Text(
+                    '20',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Colors.black54),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, selected),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.black,
+                foregroundColor: const Color(0xFFF3E5AB),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Generate'),
+            ),
+          ],
         ),
       ),
     );
