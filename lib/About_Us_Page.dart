@@ -27,51 +27,50 @@ class AboutUsPage extends StatelessWidget {
                   // ── Developers Section ──────────────────
                   _sectionLabel('Developers'),
                   const SizedBox(height: 12),
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    clipBehavior: Clip.none,
-                    child: Row(
-                      children: [
-                        _memberCard(
-                          'assets/images/Abdurahman.jpeg',
-                          'Abdurrahman Masduki',
-                          '20212609',
-                          'masdukisaleh12@gmail.com',
-                          'Technical Lead / Group Leader',
-                          'Flutter Project Lead & Final Decision Maker',
-                          isLeader: true,
-                        ),
-                        const SizedBox(width: 14),
-                        _memberCard(
-                          'assets/images/shaheer.jpeg',
-                          'Shaheer Ahmed Farooqi',
-                          '20224848',
-                          'Shaheerahmed748@gmail.com',
-                          'Voice & NLP Specialist',
-                          'AI Integration & Speech Logic',
-                        ),
-                        const SizedBox(width: 14),
-                        _memberCard(
-                          'assets/images/Jamire.jpeg',
-                          'Jamire M. Kanneh',
-                          '20213799',
-                          'jamiremkanneh@gmail.com',
-                          'Backend Infrastructure Lead',
-                          'Firebase Cloud Specialist',
-                        ),
-                        const SizedBox(width: 14),
-                        _memberCard(
-                          'assets/images/Abubakir.jpeg',
-                          'Abdubakr Idris',
-                          '20223372',
-                          'abubakarelshafie@gmail.com',
-                          'UX/UI Interaction Designer',
-                          'Visual Feedback & Animations',
-                        ),
-                      ],
-                    ),
+
+                  // ── تم التعديل هنا لعرض البطاقات عموديًا واحد تلو الآخر ──
+                  Column(
+                    children: [
+                      _memberCard(
+                        'assets/images/Abdurahman.jpeg',
+                        'Abdurrahman Masduki',
+                        '20212609',
+                        'masdukisaleh12@gmail.com',
+                        'Technical Lead / Group Leader',
+                        'Flutter Project Lead & Final Decision Maker',
+                        isLeader: true,
+                      ),
+                      const SizedBox(height: 14), // مسافة بين البطاقات
+                      _memberCard(
+                        'assets/images/shaheer.jpeg',
+                        'Shaheer Ahmed Farooqi',
+                        '20224848',
+                        'Shaheerahmed748@gmail.com',
+                        'Voice & NLP Specialist',
+                        'AI Integration & Speech Logic',
+                      ),
+                      const SizedBox(height: 14),
+                      _memberCard(
+                        'assets/images/Jamire.jpeg',
+                        'Jamire M. Kanneh',
+                        '20213799',
+                        'jamiremkanneh@gmail.com',
+                        'Backend Infrastructure Lead',
+                        'Firebase Cloud Specialist',
+                      ),
+                      const SizedBox(height: 14),
+                      _memberCard(
+                        'assets/images/Abubakir.jpeg',
+                        'Abdubakr Idris',
+                        '20223372',
+                        'abubakarelshafie@gmail.com',
+                        'UX/UI Interaction Designer',
+                        'Visual Feedback & Animations',
+                      ),
+                    ],
                   ),
 
+                  // ────────────────────────────────────────────────────────
                   const SizedBox(height: 28),
 
                   // ── Supervisor Section ──────────────────
@@ -177,7 +176,8 @@ class AboutUsPage extends StatelessWidget {
     bool isLeader = false,
   }) {
     return Container(
-      width: 330,
+      // تم تغيير العرض ليأخذ المساحة المتاحة بالكامل مع مراعاة الحواف
+      width: double.infinity,
       decoration: BoxDecoration(
         color: cardGrey,
         borderRadius: BorderRadius.circular(14),
@@ -414,7 +414,6 @@ class AboutUsPage extends StatelessWidget {
           ),
         ),
 
-        // ── تم دمج الأكواد الجديدة هنا ────────────────────────
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
           child: Text(
@@ -432,7 +431,6 @@ class AboutUsPage extends StatelessWidget {
         _featureRow('Text-to-speech reading'),
         const SizedBox(height: 8),
         _featureRow('Voice commands for controlling playback'),
-        // ───────────────────────────────────────────────────
       ],
     );
   }
