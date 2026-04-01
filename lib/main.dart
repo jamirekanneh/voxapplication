@@ -18,6 +18,10 @@ import 'temp_notes_provider.dart';
 import 'global_stt_wrapper.dart';
 import 'custom_commands_provider.dart';
 import 'analytics_service.dart';
+import 'floating_chat_bot.dart';
+
+final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
+final ValueNotifier<bool> showChatBotNotifier = ValueNotifier<bool>(false);
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -91,6 +95,10 @@ class _TheVoxAppState extends State<TheVoxApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      navigatorKey: globalNavigatorKey,
+      builder: (context, child) {
+        return FloatingBotWrapper(child: child ?? const SizedBox.shrink());
+      },
       // Wrap the SplashScreen with the GlobalSttWrapper
       home: const GlobalSttWrapper(child: SplashScreen()),
       routes: {

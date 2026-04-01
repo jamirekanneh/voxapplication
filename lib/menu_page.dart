@@ -756,9 +756,20 @@ class _MenuPageState extends State<MenuPage> {
                       MaterialPageRoute(builder: (_) => const ContactUsPage()),
                     ),
                   ),
-                  if (_hasProfile) ...[
+                  if (!_loadingProfile && FirebaseAuth.instance.currentUser != null) ...[
                     _buildMenuItem(
                       icon: Icons.delete_outline_rounded,
+                      title: 'Deleted Files',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              DeletedFilesPage(resolvedUid: _resolvedUid),
+                        ),
+                      ),
+                    ),
+                    _buildMenuItem(
+                      icon: Icons.restore_from_trash_outlined,
                       title: 'Recycle Files',
                       onTap: () => Navigator.push(
                         context,

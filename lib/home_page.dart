@@ -11,6 +11,7 @@ import 'reader_page.dart';
 import 'mini_player_bar.dart';
 import 'temp_library_provider.dart';
 import 'ai_result_page.dart';
+import 'main.dart';
 
 class VoxHomePage extends StatefulWidget {
   const VoxHomePage({super.key});
@@ -32,6 +33,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
   void initState() {
     super.initState();
     _resolveUser();
+    // Show the chatbot exactly when the HomePage is presented
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      showChatBotNotifier.value = true;
+    });
   }
 
   @override

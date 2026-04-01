@@ -84,6 +84,19 @@ class AiService {
     return _callGroq(system, 'Summarize this document:\n\n$documentText');
   }
 
+  /// Assistant for generic questions.
+  static Future<String> askAssistant(String userMessage) {
+    const system =
+        'You are Vox Assistant, an AI helper for the Vox app. '
+        'You MUST give accurate answers based on these facts about the app: '
+        '1) Sign In: The app uses passwordless Magic Link via email. Users do NOT create an account with a password. They just enter their email to get a sign-in link sent to their inbox. '
+        '2) Dictionary: Allows searching terms with General, Medical, and Technical dictionaries. '
+        '3) Notes/Library: Users can upload notes (PDFs/text) to summarize them or generate AI flashcards. TTS (Text-to-Speech) can read notes aloud. '
+        '4) Voice Commands (STT): The app has global speech-to-text allowing users to say things like "go to dictionary". Custom commands can be defined in Profile > Custom Commands. '
+        'Please keep answers very friendly, concise, and do not invent new features not mentioned here. If asked how to sign in without an account, clearly explain the Magic Link process.';
+    return _callGroq(system, userMessage);
+  }
+
   /// Generates [count] flashcards — different every time due to random seed in prompt.
   static Future<List<Flashcard>> generateFlashcards(
     String documentText, {
