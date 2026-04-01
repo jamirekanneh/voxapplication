@@ -27,6 +27,9 @@ void main() async {
   await AnalyticsService.instance.load();
   await AnalyticsService.instance.recordAppOpen();
 
+  // Auto-sync analytics to Firebase if needed (daily for authenticated users)
+  AnalyticsService.instance.autoSyncIfNeeded();
+
   runApp(
     MultiProvider(
       providers: [

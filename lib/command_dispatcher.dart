@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'custom_commands_provider.dart';
 import 'tts_service.dart';
 import 'language_provider.dart';
+import 'analytics_service.dart';
 
 // ─────────────────────────────────────────────
 //  VOICE FEEDBACK STRINGS (all app languages)
@@ -123,6 +124,9 @@ class CommandDispatcher {
       }
       return false;
     }
+
+    // Track voice command usage
+    AnalyticsService.instance.recordVoiceCommand(matched.action.displayName);
 
     if (commandsProvider.voiceFeedbackEnabled) {
       String feedbackText = _getFeedback(language, matched.action.name);

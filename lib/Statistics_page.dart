@@ -38,6 +38,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
 
   bool _loading = true;
   String _period = 'week'; // 'week' | 'month'
+  bool _syncing = false;
 
   // ── Lifecycle ─────────────────────────────────────────────
   @override
@@ -56,6 +57,34 @@ class _StatisticsPageState extends State<StatisticsPage> {
   Future<void> _load() async {
     await AnalyticsService.instance.load();
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _syncData() async {
+    setState(() => _syncing = true);
+    try {
+      await AnalyticsService.instance.syncToFirebase();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Analytics synced to cloud'),
+            backgroundColor: Color(0xFF333333),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Sync failed: $e'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
   }
 
   // ── Formatting helpers ────────────────────────────────────
@@ -79,6 +108,21 @@ class _StatisticsPageState extends State<StatisticsPage> {
   String _dayKey(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
+
+  String _formatLastSync(DateTime dt) {
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+
+    if (diff.inDays == 0) {
+      return 'Today ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } else if (diff.inDays == 1) {
+      return 'Yesterday ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
+    } else if (diff.inDays < 7) {
+      return '${diff.inDays} days ago';
+    } else {
+      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
+    }
+  }
 
   // ─────────────────────────────────────────────────────────
   //  BUILD
@@ -162,19 +206,52 @@ class _StatisticsPageState extends State<StatisticsPage> {
               ],
             ),
           ),
-          // Decorative icon pill
-          Container(
-            width: 38,
-            height: 38,
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.2),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: const Icon(
-              Icons.bar_chart_rounded,
-              color: Colors.white,
-              size: 22,
-            ),
+          // Sync button and decorative icon
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Sync button
+              GestureDetector(
+                onTap: _syncing ? null : _syncData,
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withOpacity(0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: _syncing
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                          ),
+                        )
+                      : const Icon(
+                          Icons.sync_rounded,
+                          color: Colors.white,
+                          size: 18,
+                        ),
+                ),
+              ),
+              // Decorative icon pill
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.2),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(
+                  Icons.bar_chart_rounded,
+                  color: Colors.white,
+                  size: 22,
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -220,6 +297,28 @@ class _StatisticsPageState extends State<StatisticsPage> {
             children: [
               Expanded(
                 child: _overviewCard(
+                  icon: Icons.book_outlined,
+                  label: 'Words Looked Up',
+                  value: svc.totalDictLookups.toString(),
+                  sub: '${svc.uniqueWordsLookedUp} unique',
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _overviewCard(
+                  icon: Icons.mic_outlined,
+                  label: 'Voice Commands',
+                  value: svc.totalVoiceCmds.toString(),
+                  sub: '${svc.uniqueVoiceCmds} types',
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _overviewCard(
                   icon: Icons.star_outline_rounded,
                   label: 'Most Used',
                   value: svc.mostUsedFeature ?? '—',
@@ -237,6 +336,81 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 ),
               ),
             ],
+          ),
+
+          const SizedBox(height: 12),
+          // Sync status card
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _card,
+              borderRadius: BorderRadius.circular(16),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 6,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: _gold.withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(
+                    svc.needsSync ? Icons.cloud_upload_outlined : Icons.cloud_done_outlined,
+                    color: _gold,
+                    size: 16,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        svc.needsSync ? 'Ready to sync' : 'Synced to cloud',
+                        style: const TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w600,
+                          color: _dark,
+                        ),
+                      ),
+                      Text(
+                        svc.lastSync != null
+                            ? 'Last sync: ${_formatLastSync(svc.lastSync!)}'
+                            : 'Never synced',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Colors.grey[500],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                if (svc.needsSync)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _gold.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: const Text(
+                      'Tap sync button',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: _gold,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
           ),
 
           const SizedBox(height: 28),
@@ -261,6 +435,34 @@ class _StatisticsPageState extends State<StatisticsPage> {
           _sectionLabel('Daily Activity  ·  last 4 weeks'),
           const SizedBox(height: 12),
           _heatmapCard(svc),
+
+          const SizedBox(height: 28),
+
+          // ─── 5. DICTIONARY USAGE ─────────────────────────
+          _sectionLabel('Dictionary Usage'),
+          const SizedBox(height: 12),
+          _dictionaryCard(svc),
+
+          const SizedBox(height: 28),
+
+          // ─── 6. VOICE COMMANDS ───────────────────────────
+          _sectionLabel('Voice Commands'),
+          const SizedBox(height: 12),
+          _voiceCommandsCard(svc),
+
+          const SizedBox(height: 28),
+
+          // ─── 7. FILE OPERATIONS ──────────────────────────
+          _sectionLabel('File Operations'),
+          const SizedBox(height: 12),
+          _fileOperationsCard(svc),
+
+          const SizedBox(height: 28),
+
+          // ─── 8. USER ENGAGEMENT ──────────────────────────
+          _sectionLabel('User Engagement'),
+          const SizedBox(height: 12),
+          _engagementCard(svc),
         ],
       ),
     );
@@ -780,6 +982,453 @@ class _StatisticsPageState extends State<StatisticsPage> {
         border: isToday ? Border.all(color: _gold, width: 1.5) : null,
       ),
     );
+  }
+
+  // ─────────────────────────────────────────────────────────
+  //  DICTIONARY USAGE CARD
+  // ─────────────────────────────────────────────────────────
+  Widget _dictionaryCard(AnalyticsService svc) {
+    final words = svc.sortedDictWords.take(10).toList();
+    if (words.isEmpty) {
+      return _emptyState(Icons.book_outlined, 'No dictionary lookups yet');
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.book_outlined, color: _gold, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Top Words Looked Up',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: _dark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...words.asMap().entries.map((entry) {
+            final index = entry.key;
+            final word = entry.value.key;
+            final count = entry.value.value;
+            final color = _barColors[index % _barColors.length];
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: 60,
+                    child: Text(
+                      word,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _dark,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Text(
+                              count.toString(),
+                              style: const TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: _dark,
+                              ),
+                            ),
+                            Text(
+                              ' lookups',
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: Colors.grey[500],
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(99),
+                          child: LinearProgressIndicator(
+                            value: count / words.first.value,
+                            backgroundColor: Colors.grey[300],
+                            valueColor: AlwaysStoppedAnimation<Color>(color),
+                            minHeight: 6,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────
+  //  VOICE COMMANDS CARD
+  // ─────────────────────────────────────────────────────────
+  Widget _voiceCommandsCard(AnalyticsService svc) {
+    final commands = svc.sortedVoiceCmds.take(8).toList();
+    if (commands.isEmpty) {
+      return _emptyState(Icons.mic_outlined, 'No voice commands used yet');
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.mic_outlined, color: _gold, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Voice Command Usage',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: _dark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: commands.map((entry) {
+              final command = entry.key;
+              final count = entry.value;
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: _gold.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _gold.withOpacity(0.2)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      command,
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: _dark,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: _gold,
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        count.toString(),
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────
+  //  FILE OPERATIONS CARD
+  // ─────────────────────────────────────────────────────────
+  Widget _fileOperationsCard(AnalyticsService svc) {
+    final operations = svc.sortedFileOps.take(6).toList();
+    if (operations.isEmpty) {
+      return _emptyState(Icons.file_present_outlined, 'No file operations yet');
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.file_present_outlined, color: _gold, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'File Operations',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: _dark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          ...operations.map((entry) {
+            final operation = entry.key;
+            final count = entry.value;
+            final icon = _getOperationIcon(operation);
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 32,
+                    height: 32,
+                    decoration: BoxDecoration(
+                      color: _gold.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Icon(icon, color: _gold, size: 16),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _formatOperationName(operation),
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w600,
+                        color: _dark,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: _gold.withOpacity(0.1),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      count.toString(),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w900,
+                        color: _gold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────
+  //  USER ENGAGEMENT CARD
+  // ─────────────────────────────────────────────────────────
+  Widget _engagementCard(AnalyticsService svc) {
+    final totalOpens = svc.opens.length;
+    final totalTime = svc.dailyMs.values.fold(0, (a, b) => a + b);
+    final avgSession = totalOpens > 0 ? totalTime ~/ totalOpens : 0;
+    final activeDays = svc.dailyDataFor(30).where((d) => d.ms > 0).length;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.trending_up_outlined, color: _gold, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Engagement Metrics',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: _dark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _engagementMetric(
+                  'Total Opens',
+                  totalOpens.toString(),
+                  Icons.touch_app_rounded,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _engagementMetric(
+                  'Active Days',
+                  '$activeDays/30',
+                  Icons.calendar_today_outlined,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _engagementMetric(
+                  'Total Time',
+                  _fmt(totalTime),
+                  Icons.timer_outlined,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _engagementMetric(
+                  'Avg Session',
+                  _fmt(avgSession),
+                  Icons.access_time_outlined,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _engagementMetric(String label, String value, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _gold.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: _gold, size: 20),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: _dark,
+            ),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  IconData _getOperationIcon(String operation) {
+    switch (operation.toLowerCase()) {
+      case 'upload':
+        return Icons.upload_file_outlined;
+      case 'read':
+        return Icons.visibility_outlined;
+      case 'delete':
+        return Icons.delete_outline;
+      case 'restore':
+        return Icons.restore_outlined;
+      case 'edit':
+        return Icons.edit_outlined;
+      case 'share':
+        return Icons.share_outlined;
+      default:
+        return Icons.file_present_outlined;
+    }
+  }
+
+  String _formatOperationName(String operation) {
+    switch (operation.toLowerCase()) {
+      case 'upload':
+        return 'Files Uploaded';
+      case 'read':
+        return 'Files Read';
+      case 'delete':
+        return 'Files Deleted';
+      case 'restore':
+        return 'Files Restored';
+      case 'edit':
+        return 'Files Edited';
+      case 'share':
+        return 'Files Shared';
+      default:
+        return operation.replaceAll('_', ' ').toUpperCase();
+    }
   }
 
   // ─────────────────────────────────────────────────────────

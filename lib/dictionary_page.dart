@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'language_provider.dart';
+import 'analytics_service.dart';
 
 // ── API language codes for dictionaryapi.dev ──────────
 const Map<String, String?> _apiLangCode = {
@@ -316,6 +317,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
             'meanings': aggregatedMeanings,
           };
         });
+
+        // Track dictionary lookup
+        AnalyticsService.instance.recordDictionaryLookup(word);
 
         if (generalResult != null)
           _extractAudio(generalResult);

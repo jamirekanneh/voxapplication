@@ -421,6 +421,28 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             .collection('library')
                             .doc(docId);
 
+                        // Get the document data before deleting
+                        final snapshot = await libRef.get();
+                        if (snapshot.exists) {
+                          final data = snapshot.data()!;
+                          // Move to deleted_library collection
+                          await FirebaseFirestore.instance
+                              .collection('users')
+                              .doc(uid)
+                              .collection('deleted_library')
+                              .add({
+                                'fileName': data['fileName'] ?? 'File',
+                                'content': data['content'],
+                                'fileType': data['fileType'] ?? 'file',
+                                'sourceCollection': 'library',
+                                'deletedAt': FieldValue.serverTimestamp(),
+                                'originalTimestamp':
+                                    data['timestamp'] ?? FieldValue.serverTimestamp(),
+                                'userId': data['userId'] ?? uid,
+                              });
+                        }
+
+                        // Delete from library
                         await libRef.delete();
 
                         if (mounted) {
