@@ -18,6 +18,9 @@ import 'temp_notes_provider.dart';
 import 'global_stt_wrapper.dart';
 import 'custom_commands_provider.dart';
 import 'analytics_service.dart';
+import 'user_profile.dart';
+import 'draggable_ai_assistant.dart';
+
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -91,6 +94,15 @@ class _TheVoxAppState extends State<TheVoxApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
+      navigatorObservers: [GlobalNavigationObserver()],
+      builder: (context, child) {
+        return Stack(
+          children: [
+            if (child != null) child,
+            _AiAssistantOverlay(),
+          ],
+        );
+      },
       // Wrap the SplashScreen with the GlobalSttWrapper
       home: const GlobalSttWrapper(child: SplashScreen()),
       routes: {
@@ -99,7 +111,69 @@ class _TheVoxAppState extends State<TheVoxApp> {
         '/menu': (context) => const MenuPage(),
         '/dictionary': (context) => const DictionaryPage(),
         '/notes': (context) => const NotesPage(),
+        '/profile_setup': (context) => const UserProfilePage(),
       },
     );
+  }
+}
+
+final ValueNotifier<String?> currentRouteNotifier = ValueNotifier<String?>(null);
+
+class GlobalNavigationObserver extends NavigatorObserver {
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _updateRoute(route);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    _updateRoute(previousRoute);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    _updateRoute(newRoute);
+  }
+
+  void _updateRoute(Route<dynamic>? route) {
+    currentRouteNotifier.value = route?.settings.name;
+  }
+}
+
+class _AiAssistantOverlay extends StatefulWidget {
+  @override
+  State<_AiAssistantOverlay> createState() => _AiAssistantOverlayState();
+}
+
+class _AiAssistantOverlayState extends State<_AiAssistantOverlay> {
+  bool _visible = false;
+
+  @override
+  void initState() {
+    super.initState();
+    currentRouteNotifier.addListener(_updateVisibility);
+    _updateVisibility();
+  }
+
+  @override
+  void dispose() {
+    currentRouteNotifier.removeListener(_updateVisibility);
+    super.dispose();
+  }
+
+  void _updateVisibility() {
+    final name = currentRouteNotifier.value;
+    // Hide on Splash (null or /) and Profile Setup (/profile_setup)
+    final isHidden = name == null || name == '/' || name == '/profile_setup';
+    if (_visible != !isHidden) {
+      if (mounted) {
+        setState(() => _visible = !isHidden);
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return DraggableAiAssistant(visible: _visible);
   }
 }

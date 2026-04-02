@@ -208,11 +208,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
   void initState() {
     super.initState();
     _initSpeech();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      Future.delayed(const Duration(milliseconds: 800), () {
-        if (mounted) _speakGuide();
-      });
-    });
   }
 
   Future<void> _initSpeech() async {
@@ -222,66 +217,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
     if (mounted) setState(() => _speechAvailable = ok);
   }
 
-  static const _kGuideText =
-      'Welcome to Contact Us. '
-      'At the top, choose Email or WhatsApp to receive our reply. '
-      'First Name — tap the mic on the right to record. '
-      'Last Name — tap the mic on the right to record. '
-      'Email Address — tap the mic on the right to record. '
-      'Phone Number — tap the flag to pick your country, then tap the mic to record. '
-      'Subject — tap the mic on the right to record. '
-      'Message — tap the mic in the top right corner of the box to record. '
-      'When done, tap the Send button at the bottom.';
-
-  Future<void> _speakGuide() async {
-    if (_bannerSpeaking) {
-      await _flutterTts.stop();
-      if (mounted) setState(() => _bannerSpeaking = false);
-      return;
-    }
-    setState(() => _bannerSpeaking = true);
-    await _flutterTts.setLanguage('en-US');
-    await _flutterTts.setSpeechRate(0.85);
-    await _flutterTts.setPitch(1.0);
-    await _flutterTts.setVolume(1.0);
-    final voices = await _flutterTts.getVoices as List?;
-    if (voices != null) {
-      const preferred = [
-        'en-us-x-sfg#male_2-local',
-        'en-us-x-sfg#female_2-local',
-        'en-us-x-iom#male_2-local',
-        'en-us-x-iom#female_2-local',
-        'en-US-language',
-      ];
-      for (final pref in preferred) {
-        final match = voices.firstWhere(
-          (v) =>
-              (v is Map &&
-              (v['name'] as String?)?.toLowerCase().contains(
-                    pref.toLowerCase(),
-                  ) ==
-                  true),
-          orElse: () => null,
-        );
-        if (match != null) {
-          await _flutterTts.setVoice({
-            'name': match['name'],
-            'locale': 'en-US',
-          });
-          break;
-        }
-      }
-    }
-    _flutterTts.setCompletionHandler(() {
-      if (mounted) setState(() => _bannerSpeaking = false);
-    });
-    _flutterTts.setCancelHandler(() {
-      if (mounted) setState(() => _bannerSpeaking = false);
-    });
-    await _flutterTts.speak(_kGuideText);
-  }
-
-  Future<void> _speakBanner() => _speakGuide();
+  Future<void> _speakBanner() async {}
 
   Future<void> _toggleVoice(String key, TextEditingController ctrl) async {
     if (!_speechAvailable) {
@@ -950,89 +886,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          if (_speechAvailable)
-                            GestureDetector(
-                              onTap: _speakGuide,
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                margin: const EdgeInsets.only(bottom: 16),
-                                padding: const EdgeInsets.symmetric(
-                                  horizontal: 14,
-                                  vertical: 12,
-                                ),
-                                decoration: BoxDecoration(
-                                  color: _bannerSpeaking
-                                      ? const Color(0xFF555555)
-                                      : _kDarkBtn,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Row(
-                                  children: [
-                                    AnimatedContainer(
-                                      duration: const Duration(
-                                        milliseconds: 180,
-                                      ),
-                                      width: 34,
-                                      height: 34,
-                                      decoration: BoxDecoration(
-                                        color: _bannerSpeaking
-                                            ? _kWaGreen
-                                            : Colors.white.withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(9),
-                                      ),
-                                      child: Icon(
-                                        _bannerSpeaking
-                                            ? Icons.volume_up_rounded
-                                            : Icons.volume_up_outlined,
-                                        size: 17,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 12),
-                                    Expanded(
-                                      child: Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
-                                        children: [
-                                          Text(
-                                            _bannerSpeaking
-                                                ? 'Reading form guide…'
-                                                : 'Tap to hear the form guide',
-                                            style: const TextStyle(
-                                              fontSize: 13,
-                                              color: Colors.white,
-                                              fontWeight: FontWeight.w700,
-                                              height: 1.3,
-                                            ),
-                                          ),
-                                          const SizedBox(height: 2),
-                                          Text(
-                                            _bannerSpeaking
-                                                ? 'Explains each field and mic button location'
-                                                : 'Reads out all fields & where to tap to record',
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: Colors.white.withOpacity(
-                                                0.65,
-                                              ),
-                                              height: 1.3,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    Icon(
-                                      _bannerSpeaking
-                                          ? Icons.stop_rounded
-                                          : Icons.play_arrow_rounded,
-                                      color: Colors.white.withOpacity(0.8),
-                                      size: 20,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
+                          const SizedBox(height: 8),
 
                           _buildPreference(),
                           const SizedBox(height: 18),

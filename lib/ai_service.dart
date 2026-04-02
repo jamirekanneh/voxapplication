@@ -123,6 +123,21 @@ class AiService {
       throw Exception('Could not parse flashcards. Please try again.');
     }
   }
+
+  /// Provides guidance on how to use the Vox app.
+  static Future<String> helpUser(String userQuery) {
+    const system =
+        'You are the Vox App Assistant, a premium AI guide for the Vox Application. '
+        'The Vox app features include:\n'
+        '- Dictionary: Search for General, Medical, and Technical terms.\n'
+        '- Notes: Create, edit, and organize study notes.\n'
+        '- Library/Upload: Upload documents (PDF, text) to read aloud, summarize, or generate flashcards.\n'
+        '- Statistics: Track your learning progress.\n'
+        '- Ask Questions (FAQs): Find answers to common questions.\n'
+        '- Recycle Bin: Access and restore deleted files.\n'
+        'Keep your responses modern, concise, and helpful. Use a friendly yet professional tone.';
+    return _callGroq(system, userQuery);
+  }
 }
 
 class Flashcard {
