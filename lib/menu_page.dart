@@ -8,7 +8,7 @@ import 'language_provider.dart';
 import 'profile_page.dart';
 import 'contact_us_page.dart';
 import 'About_Us_Page.dart';
-import 'deleted_files_page.dart';
+import 'recycle_bin_page.dart';
 import 'custom_commands_page.dart';
 import 'Statistics_page.dart';
 import 'ask_questions_page.dart';
@@ -756,26 +756,15 @@ class _MenuPageState extends State<MenuPage> {
                       MaterialPageRoute(builder: (_) => const ContactUsPage()),
                     ),
                   ),
-                  if (!_loadingProfile && FirebaseAuth.instance.currentUser != null) ...[
+                  if (_hasProfile) ...[
                     _buildMenuItem(
-                      icon: Icons.delete_outline_rounded,
-                      title: 'Deleted Files',
+                      icon: Icons.delete_sweep_rounded,
+                      title: 'Recycle Bin',
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) =>
-                              DeletedFilesPage(resolvedUid: _resolvedUid),
-                        ),
-                      ),
-                    ),
-                    _buildMenuItem(
-                      icon: Icons.restore_from_trash_outlined,
-                      title: 'Recycle Files',
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) =>
-                              DeletedFilesPage(resolvedUid: _resolvedUid),
+                              RecycleBinPage(resolvedUid: _resolvedUid),
                         ),
                       ),
                     ),
