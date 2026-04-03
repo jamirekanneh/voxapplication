@@ -115,7 +115,7 @@ class AboutUsPage extends StatelessWidget {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.25),
+                color: Colors.white.withValues(alpha: 0.25),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -183,7 +183,7 @@ class AboutUsPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.08),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -312,7 +312,7 @@ class AboutUsPage extends StatelessWidget {
       decoration: BoxDecoration(
         color: cardGrey,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: primaryGold.withOpacity(0.5), width: 1.5),
+        border: Border.all(color: primaryGold.withValues(alpha: 0.5), width: 1.5),
       ),
       child: Column(
         children: [
@@ -444,7 +444,7 @@ class AboutUsPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),

@@ -597,7 +597,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                         hintText: 'Title',
                                         counterText: '',
                                         filled: true,
-                                        fillColor: Colors.black.withOpacity(0.05),
+                                        fillColor: Colors.black.withValues(alpha: 0.05),
                                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                       ),
@@ -731,7 +731,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                     hintText: 'Transcript...',
                                     counterText: '',
                                     filled: true,
-                                    fillColor: Colors.black.withOpacity(0.04),
+                                    fillColor: Colors.black.withValues(alpha: 0.04),
                                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
                                     contentPadding: const EdgeInsets.all(14),
                                   ),
@@ -878,7 +878,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: dark ? Colors.white.withOpacity(0.12) : const Color(0xFFD4B96A),
+          color: dark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFFD4B96A),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -900,7 +900,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? Colors.black : Colors.black.withOpacity(0.07),
+          color: selected ? Colors.black : Colors.black.withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(label, style: TextStyle(color: selected ? const Color(0xFFD4B96A) : Colors.black54, fontSize: 12, fontWeight: FontWeight.w700)),
@@ -974,14 +974,14 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     decoration: BoxDecoration(
                       color: const Color(0xFFD4B96A),
                       borderRadius: BorderRadius.circular(36),
-                      boxShadow: [BoxShadow(color: const Color(0xFFD4B96A).withOpacity(0.4), blurRadius: 20, spreadRadius: 4)],
+                      boxShadow: [BoxShadow(color: const Color(0xFFD4B96A).withValues(alpha: 0.4), blurRadius: 20, spreadRadius: 4)],
                     ),
                     child: const Icon(Icons.mic, color: Colors.black, size: 36),
                   ),
                   const SizedBox(height: 14),
                   const Text('Tap to Record', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16, letterSpacing: 0.5)),
                   const SizedBox(height: 4),
-                  Text('Up to 1 hour · auto-transcribed', style: TextStyle(color: Colors.white.withOpacity(0.45), fontSize: 11)),
+                  Text('Up to 1 hour · auto-transcribed', style: TextStyle(color: Colors.white.withValues(alpha: 0.45), fontSize: 11)),
                 ],
               ),
             ),
@@ -1007,7 +1007,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       decoration: BoxDecoration(
                         color: Colors.red,
                         borderRadius: BorderRadius.circular(34),
-                        boxShadow: [BoxShadow(color: Colors.red.withOpacity(0.5), blurRadius: 24, spreadRadius: 6)],
+                        boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.5), blurRadius: 24, spreadRadius: 6)],
                       ),
                       child: const Icon(Icons.mic, color: Colors.white, size: 34),
                     ),
@@ -1019,7 +1019,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     style: const TextStyle(color: Colors.white, fontSize: 28, fontWeight: FontWeight.w800, fontFamily: 'monospace', letterSpacing: 2)),
                 const SizedBox(height: 4),
                 Text('Recording · ${_formatDuration(_kMaxRecordingDuration - _recordingDuration)} left',
-                    style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 11)),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 11)),
 
                 // Live transcript preview
                 if (_transcriptController.text.isNotEmpty) ...[
@@ -1028,7 +1028,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     margin: const EdgeInsets.symmetric(horizontal: 16),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.06),
+                      color: Colors.white.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     constraints: const BoxConstraints(maxHeight: 80),
@@ -1036,7 +1036,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       reverse: true,
                       child: Text(
                         _transcriptController.text,
-                        style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12, height: 1.5),
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.7), fontSize: 12, height: 1.5),
                       ),
                     ),
                   ),
@@ -1050,8 +1050,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     margin: const EdgeInsets.symmetric(horizontal: 20),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.15),
-                      border: Border.all(color: Colors.red.withOpacity(0.5)),
+                      color: Colors.red.withValues(alpha: 0.15),
+                      border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: const Row(
@@ -1174,9 +1174,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Icon(Icons.delete_outline, color: Colors.white.withOpacity(0.3), size: 14),
+                      Icon(Icons.delete_outline, color: Colors.white.withValues(alpha: 0.3), size: 14),
                       const SizedBox(width: 4),
-                      Text('Discard recording', style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 11, fontWeight: FontWeight.w600)),
+                      Text('Discard recording', style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 11, fontWeight: FontWeight.w600)),
                     ],
                   ),
                 ),
@@ -1188,7 +1188,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           const SizedBox(height: 12),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.grey[300]!),
             ),
@@ -1249,7 +1249,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
             child: Center(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Colors.black.withOpacity(0.08), borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(20)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
@@ -1279,9 +1279,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       margin: const EdgeInsets.only(bottom: 14),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
-                        color: Colors.orange.withOpacity(0.08),
+                        color: Colors.orange.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: Colors.orange.withOpacity(0.2)),
+                        border: Border.all(color: Colors.orange.withValues(alpha: 0.2)),
                       ),
                       child: const Row(
                         children: [
@@ -1296,7 +1296,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   // ── Title field ──
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.8),
+                      color: Colors.white.withValues(alpha: 0.8),
                       borderRadius: BorderRadius.circular(18),
                     ),
                     child: TextField(
@@ -1557,9 +1557,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white.withOpacity(0.75),
+          color: Colors.white.withValues(alpha: 0.75),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.black.withOpacity(0.05)),
+          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1589,7 +1589,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       if (isTemp)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.06), borderRadius: BorderRadius.circular(5)),
+                          decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(5)),
                           child: const Text('TEMP', style: TextStyle(fontSize: 8, color: Colors.black45, fontWeight: FontWeight.w800)),
                         ),
                     ],

@@ -1,11 +1,17 @@
 // lib/config/secrets.dart
 //
-// ⚠️  DO NOT COMMIT THIS FILE  ⚠️
-// Make sure this line is in your .gitignore:
-//   lib/config/secrets.dart
+// Environment-based configuration
+// Values loaded from .env file (not committed to version control)
 //
 // Get your FREE Groq key from: https://console.groq.com
 // Sign up → API Keys → Create API Key
 
-const String kGroqKey =
-    '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';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+
+String get kGroqKey {
+  final key = dotenv.env['GROQ_API_KEY'];
+  if (key == null || key.isEmpty) {
+    throw Exception('GROQ_API_KEY not found in .env file');
+  }
+  return key;
+}

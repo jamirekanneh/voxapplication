@@ -109,21 +109,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
       '${d.year}-${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
 
-  String _formatLastSync(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-
-    if (diff.inDays == 0) {
-      return 'Today ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } else if (diff.inDays == 1) {
-      return 'Yesterday ${dt.hour.toString().padLeft(2, '0')}:${dt.minute.toString().padLeft(2, '0')}';
-    } else if (diff.inDays < 7) {
-      return '${diff.inDays} days ago';
-    } else {
-      return '${dt.day.toString().padLeft(2, '0')}/${dt.month.toString().padLeft(2, '0')}/${dt.year}';
-    }
-  }
-
   // ─────────────────────────────────────────────────────────
   //  BUILD
   // ─────────────────────────────────────────────────────────
@@ -171,7 +156,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.25),
+                color: Colors.white.withValues(alpha: 0.25),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -218,7 +203,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   height: 38,
                   margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.2),
+                    color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: _syncing
@@ -242,7 +227,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 width: 38,
                 height: 38,
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
+                  color: Colors.white.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Icon(
@@ -259,7 +244,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
   }
 
   // ─────────────────────────────────────────────────────────
-  //  BODY
+  //  BODY - SIMPLIFIED FOR DEVELOPER INSIGHTS
   // ─────────────────────────────────────────────────────────
   Widget _buildBody() {
     final svc = AnalyticsService.instance;
@@ -268,26 +253,54 @@ class _StatisticsPageState extends State<StatisticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ─── 1. OVERVIEW CARDS ──────────────────────────
-          _sectionLabel('Overview'),
+          // ─── 0. SYNC STATUS / CONFIG ─────────────────────
+          _sectionLabel('Sync status'),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _overviewCard(
+                  icon: Icons.sync_rounded,
+                  label: 'Needs Sync',
+                  value: svc.needsSync ? 'Yes' : 'No',
+                  sub: svc.lastSync != null ? 'Last ${svc.lastSync}' : 'Never synced',
+                  smallValue: true,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _overviewCard(
+                  icon: Icons.privacy_tip_outlined,
+                  label: 'Analytics Opt-In',
+                  value: svc.analyticsEnabled ? 'On' : 'Off',
+                  sub: 'User preference',
+                  smallValue: true,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+
+          // ─── 1. KEY METRICS ─────────────────────────────
+          _sectionLabel('Key Metrics'),
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: _overviewCard(
                   icon: Icons.touch_app_rounded,
-                  label: 'App Opens',
-                  value: svc.opensThisWeek.toString(),
-                  sub: 'this week',
+                  label: 'Daily Active Users',
+                  value: svc.opensToday.toString(),
+                  sub: 'opens today',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _overviewCard(
                   icon: Icons.timer_outlined,
-                  label: 'Time Today',
-                  value: _fmt(svc.todayTotalMs),
-                  sub: 'screen time',
+                  label: 'Avg Session Time',
+                  value: _fmt(svc.todayTotalMs ~/ (svc.opensToday == 0 ? 1 : svc.opensToday)),
+                  sub: 'per session',
                 ),
               ),
             ],
@@ -298,9 +311,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
               Expanded(
                 child: _overviewCard(
                   icon: Icons.book_outlined,
-                  label: 'Words Looked Up',
+                  label: 'Dictionary Usage',
                   value: svc.totalDictLookups.toString(),
-                  sub: '${svc.uniqueWordsLookedUp} unique',
+                  sub: 'total lookups',
                 ),
               ),
               const SizedBox(width: 12),
@@ -309,160 +322,32 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   icon: Icons.mic_outlined,
                   label: 'Voice Commands',
                   value: svc.totalVoiceCmds.toString(),
-                  sub: '${svc.uniqueVoiceCmds} types',
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _overviewCard(
-                  icon: Icons.star_outline_rounded,
-                  label: 'Most Used',
-                  value: svc.mostUsedFeature ?? '—',
-                  sub: 'favourite feature',
-                  smallValue: true,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _overviewCard(
-                  icon: Icons.today_outlined,
-                  label: 'Opens Today',
-                  value: svc.opensToday.toString(),
-                  sub: 'today',
+                  sub: 'total commands',
                 ),
               ),
             ],
           ),
 
+          const SizedBox(height: 28),
+
+          // ─── 2. FEATURE ADOPTION ─────────────────────────
+          _sectionLabel('Feature Adoption'),
           const SizedBox(height: 12),
-          // Sync status card
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: _card,
-              borderRadius: BorderRadius.circular(16),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.05),
-                  blurRadius: 6,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 32,
-                  height: 32,
-                  decoration: BoxDecoration(
-                    color: _gold.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Icon(
-                    svc.needsSync ? Icons.cloud_upload_outlined : Icons.cloud_done_outlined,
-                    color: _gold,
-                    size: 16,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        svc.needsSync ? 'Ready to sync' : 'Synced to cloud',
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w600,
-                          color: _dark,
-                        ),
-                      ),
-                      Text(
-                        svc.lastSync != null
-                            ? 'Last sync: ${_formatLastSync(svc.lastSync!)}'
-                            : 'Never synced',
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.grey[500],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                if (svc.needsSync)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _gold.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'Tap sync button',
-                      style: TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w600,
-                        color: _gold,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          ),
+          _featureAdoptionCard(svc),
 
           const SizedBox(height: 28),
 
-          // ─── 2. USAGE TREND ─────────────────────────────
-          _sectionLabel('Usage Trend'),
-          const SizedBox(height: 10),
-          _periodToggle(),
+          // ─── 3. USER RETENTION ───────────────────────────
+          _sectionLabel('User Retention'),
           const SizedBox(height: 12),
-          _trendCard(svc),
+          _retentionCard(svc),
 
           const SizedBox(height: 28),
 
-          // ─── 3. TIME PER FEATURE ────────────────────────
-          _sectionLabel('Time Per Feature'),
+          // ─── 4. PERFORMANCE METRICS ─────────────────────
+          _sectionLabel('Performance Metrics'),
           const SizedBox(height: 12),
-          _featureCard(svc),
-
-          const SizedBox(height: 28),
-
-          // ─── 4. ACTIVITY HEATMAP ────────────────────────
-          _sectionLabel('Daily Activity  ·  last 4 weeks'),
-          const SizedBox(height: 12),
-          _heatmapCard(svc),
-
-          const SizedBox(height: 28),
-
-          // ─── 5. DICTIONARY USAGE ─────────────────────────
-          _sectionLabel('Dictionary Usage'),
-          const SizedBox(height: 12),
-          _dictionaryCard(svc),
-
-          const SizedBox(height: 28),
-
-          // ─── 6. VOICE COMMANDS ───────────────────────────
-          _sectionLabel('Voice Commands'),
-          const SizedBox(height: 12),
-          _voiceCommandsCard(svc),
-
-          const SizedBox(height: 28),
-
-          // ─── 7. FILE OPERATIONS ──────────────────────────
-          _sectionLabel('File Operations'),
-          const SizedBox(height: 12),
-          _fileOperationsCard(svc),
-
-          const SizedBox(height: 28),
-
-          // ─── 8. USER ENGAGEMENT ──────────────────────────
-          _sectionLabel('User Engagement'),
-          const SizedBox(height: 12),
-          _engagementCard(svc),
+          _performanceCard(svc),
         ],
       ),
     );
@@ -498,7 +383,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -512,7 +397,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: _gold.withOpacity(0.18),
+              color: _gold.withValues(alpha: 0.18),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: _gold, size: 18),
@@ -550,731 +435,12 @@ class _StatisticsPageState extends State<StatisticsPage> {
   // ─────────────────────────────────────────────────────────
   //  PERIOD TOGGLE  (This Week / This Month)
   // ─────────────────────────────────────────────────────────
-  Widget _periodToggle() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: ['week', 'month'].map((p) {
-          final active = _period == p;
-          return GestureDetector(
-            onTap: () => setState(() => _period = p),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 180),
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              decoration: BoxDecoration(
-                color: active ? _gold : Colors.transparent,
-                borderRadius: BorderRadius.circular(9),
-              ),
-              child: Text(
-                p == 'week' ? 'This Week' : 'This Month',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: active ? Colors.white : Colors.black54,
-                ),
-              ),
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
   // ─────────────────────────────────────────────────────────
   //  TREND CARD  — custom bar chart, zero extra packages
   // ─────────────────────────────────────────────────────────
-  Widget _trendCard(AnalyticsService svc) {
-    final days = _period == 'week' ? 7 : 30;
-    final data = svc.dailyDataFor(days);
-    final maxMs = data.map((d) => d.ms).fold(0, (a, b) => a > b ? a : b);
-    final todKey = _dayKey(DateTime.now());
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Top row: max-time label + period count
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                maxMs > 0 ? _fmt(maxMs) : '—',
-                style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-              ),
-              Text(
-                '${days}d',
-                style: TextStyle(fontSize: 10, color: Colors.grey[500]),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-
-          // ── BAR CHART ─────────────────────────────────
-          SizedBox(
-            height: 110,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: data.asMap().entries.map((e) {
-                final idx = e.key;
-                final d = e.value;
-                final frac = maxMs == 0 ? 0.0 : d.ms / maxMs;
-                final isToday = _dayKey(d.date) == todKey;
-
-                // Week: show all labels; Month: every 5th + last
-                final showLabel =
-                    _period == 'week' || idx % 5 == 0 || idx == data.length - 1;
-                final lbl = _period == 'week'
-                    ? _shortDay(d.date.weekday)
-                    : '${d.date.day}';
-
-                return Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 1.5),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.end,
-                      children: [
-                        Expanded(
-                          child: Align(
-                            alignment: Alignment.bottomCenter,
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 380),
-                              curve: Curves.easeOutCubic,
-                              height: frac == 0
-                                  ? 4.0
-                                  : (frac * 84).clamp(6.0, 84.0),
-                              decoration: BoxDecoration(
-                                color: isToday
-                                    ? _gold
-                                    : _gold.withOpacity(0.28),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 4),
-                        if (showLabel)
-                          Text(
-                            lbl,
-                            style: TextStyle(
-                              fontSize: 9,
-                              color: isToday ? _gold : Colors.grey[500],
-                              fontWeight: isToday
-                                  ? FontWeight.w800
-                                  : FontWeight.w500,
-                            ),
-                          )
-                        else
-                          const SizedBox(height: 11),
-                      ],
-                    ),
-                  ),
-                );
-              }).toList(),
-            ),
-          ),
-
-          const SizedBox(height: 12),
-          Divider(color: Colors.black.withOpacity(0.07), height: 1),
-          const SizedBox(height: 12),
-
-          // ── SUMMARY ROW ───────────────────────────────
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceAround,
-            children: [
-              _trendStat('Total', _fmt(data.fold(0, (s, d) => s + d.ms))),
-              _trendStat(
-                'Active days',
-                '${data.where((d) => d.ms > 0).length}/$days',
-              ),
-              _trendStat('Daily avg', () {
-                final active = data.where((d) => d.ms > 0).toList();
-                if (active.isEmpty) return '—';
-                final avg = active.fold(0, (s, d) => s + d.ms) ~/ active.length;
-                return _fmt(avg);
-              }()),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _trendStat(String label, String value) => Column(
-    children: [
-      Text(
-        value,
-        style: const TextStyle(
-          fontSize: 14,
-          fontWeight: FontWeight.w900,
-          color: _dark,
-        ),
-      ),
-      const SizedBox(height: 2),
-      Text(label, style: TextStyle(fontSize: 10, color: Colors.grey[500])),
-    ],
-  );
-
   // ─────────────────────────────────────────────────────────
   //  FEATURE BREAKDOWN CARD
   // ─────────────────────────────────────────────────────────
-  Widget _featureCard(AnalyticsService svc) {
-    final features = svc.sortedFeatures;
-    final totalMs = features.fold(0, (s, e) => s + e.value);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: features.isEmpty
-          ? _emptyState(
-              Icons.bar_chart_outlined,
-              'No feature data yet.\nStart using the app!',
-            )
-          : Column(
-              children: features.asMap().entries.map((e) {
-                final rank = e.key;
-                final name = e.value.key;
-                final ms = e.value.value;
-                final color = _barColors[rank.clamp(0, _barColors.length - 1)];
-                final frac = _pct(ms, totalMs);
-                final isTop = rank == 0;
-
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 14),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          // Colour dot
-                          Container(
-                            width: 8,
-                            height: 8,
-                            margin: const EdgeInsets.only(right: 8),
-                            decoration: BoxDecoration(
-                              color: color,
-                              shape: BoxShape.circle,
-                            ),
-                          ),
-                          Expanded(
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                // Name + optional TOP badge
-                                Row(
-                                  children: [
-                                    Text(
-                                      name,
-                                      style: const TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.w700,
-                                        color: _dark,
-                                      ),
-                                    ),
-                                    if (isTop) ...[
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 7,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: _gold.withOpacity(0.15),
-                                          borderRadius: BorderRadius.circular(
-                                            6,
-                                          ),
-                                        ),
-                                        child: const Text(
-                                          'TOP',
-                                          style: TextStyle(
-                                            fontSize: 9,
-                                            fontWeight: FontWeight.w900,
-                                            color: _gold,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                // Duration + percentage
-                                Row(
-                                  children: [
-                                    Text(
-                                      _fmt(ms),
-                                      style: const TextStyle(
-                                        fontSize: 12,
-                                        fontWeight: FontWeight.w700,
-                                        color: _dark,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 5),
-                                    Text(
-                                      '${(frac * 100).round()}%',
-                                      style: TextStyle(
-                                        fontSize: 11,
-                                        color: Colors.grey[500],
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      // Progress bar
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(99),
-                        child: Stack(
-                          children: [
-                            Container(height: 7, color: Colors.grey[300]),
-                            FractionallySizedBox(
-                              widthFactor: frac,
-                              child: Container(height: 7, color: color),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
-            ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────
-  //  ACTIVITY HEATMAP  — 4 weeks × 7 days
-  // ─────────────────────────────────────────────────────────
-  Widget _heatmapCard(AnalyticsService svc) {
-    final data = svc.dailyDataFor(28);
-    final maxMs = data.map((d) => d.ms).fold(0, (a, b) => a > b ? a : b);
-    final todKey = _dayKey(DateTime.now());
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Day-of-week headers
-          Row(
-            children: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-                .map(
-                  (l) => Expanded(
-                    child: Center(
-                      child: Text(
-                        l,
-                        style: TextStyle(
-                          fontSize: 9,
-                          color: Colors.grey[500],
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ),
-                )
-                .toList(),
-          ),
-          const SizedBox(height: 6),
-
-          // 4 rows of 7 cells
-          ...List.generate(4, (row) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 5),
-              child: Row(
-                children: List.generate(7, (col) {
-                  final idx = row * 7 + col;
-                  if (idx >= data.length) {
-                    return Expanded(child: _heatCell(0, 0, false));
-                  }
-                  final d = data[idx];
-                  return Expanded(
-                    child: _heatCell(d.ms, maxMs, _dayKey(d.date) == todKey),
-                  );
-                }),
-              ),
-            );
-          }),
-
-          const SizedBox(height: 10),
-
-          // Legend
-          Row(
-            children: [
-              Text(
-                'Less',
-                style: TextStyle(fontSize: 9, color: Colors.grey[400]),
-              ),
-              const SizedBox(width: 4),
-              ...List.generate(
-                5,
-                (i) => Container(
-                  margin: const EdgeInsets.only(right: 3),
-                  width: 12,
-                  height: 12,
-                  decoration: BoxDecoration(
-                    color: _gold.withOpacity(0.1 + i * 0.18),
-                    borderRadius: BorderRadius.circular(3),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 4),
-              Text(
-                'More',
-                style: TextStyle(fontSize: 9, color: Colors.grey[400]),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _heatCell(int ms, int maxMs, bool isToday) {
-    final frac = maxMs == 0 ? 0.0 : (ms / maxMs).clamp(0.0, 1.0);
-    return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 2),
-      height: 26,
-      decoration: BoxDecoration(
-        color: ms == 0
-            ? Colors.grey.withOpacity(0.15)
-            : _gold.withOpacity(0.12 + frac * 0.82),
-        borderRadius: BorderRadius.circular(5),
-        border: isToday ? Border.all(color: _gold, width: 1.5) : null,
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────
-  //  DICTIONARY USAGE CARD
-  // ─────────────────────────────────────────────────────────
-  Widget _dictionaryCard(AnalyticsService svc) {
-    final words = svc.sortedDictWords.take(10).toList();
-    if (words.isEmpty) {
-      return _emptyState(Icons.book_outlined, 'No dictionary lookups yet');
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.book_outlined, color: _gold, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Top Words Looked Up',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  color: _dark,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ...words.asMap().entries.map((entry) {
-            final index = entry.key;
-            final word = entry.value.key;
-            final count = entry.value.value;
-            final color = _barColors[index % _barColors.length];
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  SizedBox(
-                    width: 60,
-                    child: Text(
-                      word,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _dark,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Text(
-                              count.toString(),
-                              style: const TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                                color: _dark,
-                              ),
-                            ),
-                            Text(
-                              ' lookups',
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: Colors.grey[500],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(99),
-                          child: LinearProgressIndicator(
-                            value: count / words.first.value,
-                            backgroundColor: Colors.grey[300],
-                            valueColor: AlwaysStoppedAnimation<Color>(color),
-                            minHeight: 6,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ],
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────
-  //  VOICE COMMANDS CARD
-  // ─────────────────────────────────────────────────────────
-  Widget _voiceCommandsCard(AnalyticsService svc) {
-    final commands = svc.sortedVoiceCmds.take(8).toList();
-    if (commands.isEmpty) {
-      return _emptyState(Icons.mic_outlined, 'No voice commands used yet');
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.mic_outlined, color: _gold, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Voice Command Usage',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  color: _dark,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: commands.map((entry) {
-              final command = entry.key;
-              final count = entry.value;
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: _gold.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: _gold.withOpacity(0.2)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      command,
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: _dark,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: _gold,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        count.toString(),
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w900,
-                          color: Colors.white,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────
-  //  FILE OPERATIONS CARD
-  // ─────────────────────────────────────────────────────────
-  Widget _fileOperationsCard(AnalyticsService svc) {
-    final operations = svc.sortedFileOps.take(6).toList();
-    if (operations.isEmpty) {
-      return _emptyState(Icons.file_present_outlined, 'No file operations yet');
-    }
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.file_present_outlined, color: _gold, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'File Operations',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  color: _dark,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ...operations.map((entry) {
-            final operation = entry.key;
-            final count = entry.value;
-            final icon = _getOperationIcon(operation);
-
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: Row(
-                children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: _gold.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Icon(icon, color: _gold, size: 16),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      _formatOperationName(operation),
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w600,
-                        color: _dark,
-                      ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: _gold.withOpacity(0.1),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      count.toString(),
-                      style: const TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w900,
-                        color: _gold,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }).toList(),
-        ],
-      ),
-    );
-  }
-
   // ─────────────────────────────────────────────────────────
   //  USER ENGAGEMENT CARD
   // ─────────────────────────────────────────────────────────
@@ -1291,7 +457,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -1363,7 +529,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: _gold.withOpacity(0.08),
+        color: _gold.withValues(alpha: 0.08),
         borderRadius: BorderRadius.circular(12),
       ),
       child: Column(
@@ -1454,4 +620,342 @@ class _StatisticsPageState extends State<StatisticsPage> {
       ),
     ),
   );
+
+  // ─────────────────────────────────────────────────────────
+  //  FEATURE ADOPTION CARD - SIMPLIFIED
+  // ─────────────────────────────────────────────────────────
+  Widget _featureAdoptionCard(AnalyticsService svc) {
+    final features = svc.sortedFeatures.take(5).toList();
+    final totalTime = features.fold(0, (sum, entry) => sum + entry.value);
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: features.isEmpty
+          ? _emptyState(Icons.bar_chart_outlined, 'No feature usage data yet')
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.analytics_outlined, color: _gold, size: 18),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Top Features by Time',
+                      style: const TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w900,
+                        color: _dark,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                ...features.asMap().entries.map((e) {
+                  final rank = e.key;
+                  final name = e.value.key;
+                  final timeMs = e.value.value;
+                  final percentage = totalTime > 0 ? (timeMs / totalTime * 100).round() : 0;
+
+                  return Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 24,
+                          height: 24,
+                          decoration: BoxDecoration(
+                            color: _barColors[rank.clamp(0, _barColors.length - 1)].withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${rank + 1}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w900,
+                                color: _barColors[rank.clamp(0, _barColors.length - 1)],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                name,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.w600,
+                                  color: _dark,
+                                ),
+                              ),
+                              Text(
+                                '${_fmt(timeMs)} ($percentage%)',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }),
+              ],
+            ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────
+  //  RETENTION CARD - SIMPLIFIED
+  // ─────────────────────────────────────────────────────────
+  Widget _retentionCard(AnalyticsService svc) {
+    final today = DateTime.now();
+    final weekAgo = today.subtract(const Duration(days: 7));
+    final monthAgo = today.subtract(const Duration(days: 30));
+
+    final recentOpens = svc.opens.where((date) => date.isAfter(weekAgo)).length;
+    final monthlyOpens = svc.opens.where((date) => date.isAfter(monthAgo)).length;
+    final totalOpens = svc.opens.length;
+
+    final weeklyRetention = totalOpens > 0 ? (recentOpens / totalOpens * 100).round() : 0;
+    final monthlyRetention = totalOpens > 0 ? (monthlyOpens / totalOpens * 100).round() : 0;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.refresh_rounded, color: _gold, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'User Retention',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: _dark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _retentionMetric(
+                  '7-Day',
+                  '$weeklyRetention%',
+                  recentOpens,
+                  Icons.calendar_view_week,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _retentionMetric(
+                  '30-Day',
+                  '$monthlyRetention%',
+                  monthlyOpens,
+                  Icons.calendar_view_month,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _retentionMetric(String period, String percentage, int count, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _gold.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: _gold, size: 20),
+          const SizedBox(height: 6),
+          Text(
+            percentage,
+            style: const TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w900,
+              color: _dark,
+            ),
+          ),
+          Text(
+            period,
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          Text(
+            '$count opens',
+            style: TextStyle(
+              fontSize: 9,
+              color: Colors.grey[500],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─────────────────────────────────────────────────────────
+  //  PERFORMANCE CARD - SIMPLIFIED
+  // ─────────────────────────────────────────────────────────
+  Widget _performanceCard(AnalyticsService svc) {
+    final avgSessionTime = svc.opensToday > 0 ? svc.todayTotalMs ~/ svc.opensToday : 0;
+    final totalFeatures = svc.sortedFeatures.length;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _card,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              const Icon(Icons.speed_rounded, color: _gold, size: 18),
+              const SizedBox(width: 8),
+              Text(
+                'Performance Metrics',
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w900,
+                  color: _dark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _performanceMetric(
+                  'Avg Session',
+                  _fmt(avgSessionTime),
+                  'Duration',
+                  Icons.timer_outlined,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _performanceMetric(
+                  'Features Used',
+                  totalFeatures.toString(),
+                  'Total types',
+                  Icons.category_rounded,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: _performanceMetric(
+                  'Total Time',
+                  _fmt(svc.dailyMs.values.fold(0, (a, b) => a + b)),
+                  'All sessions',
+                  Icons.access_time_rounded,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _performanceMetric(
+                  'Active Days',
+                  svc.dailyDataFor(30).where((d) => d.ms > 0).length.toString(),
+                  'Last 30 days',
+                  Icons.calendar_today_rounded,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _performanceMetric(String title, String value, String subtitle, IconData icon) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _gold.withValues(alpha: 0.05),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, color: _gold, size: 20),
+          const SizedBox(height: 6),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w900,
+              color: _dark,
+            ),
+          ),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 10,
+              color: Colors.grey[600],
+              fontWeight: FontWeight.w500,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          Text(
+            subtitle,
+            style: TextStyle(
+              fontSize: 8,
+              color: Colors.grey[500],
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
 }

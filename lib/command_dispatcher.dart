@@ -137,6 +137,28 @@ class CommandDispatcher {
     }
 
     if (!context.mounted) return true;
+
+    if (matched.action == CommandActionType.macroSequence &&
+        matched.parameter != null &&
+        matched.parameter!.trim().isNotEmpty) {
+      final steps = matched.parameter!
+          .split(RegExp(r'[\r\n;]+'))
+          .map((s) => s.trim())
+          .where((s) => s.isNotEmpty)
+          .toList();
+
+      for (final step in steps) {
+        final subCommand = commandsProvider.match(step);
+        if (subCommand != null) {
+          await _execute(context, subCommand, ttsService, locale);
+        } else if (commandsProvider.voiceFeedbackEnabled) {
+          await ttsService.play('',
+              'Macro step not found: $step', locale); // spoken fallback
+        }
+      }
+      return true;
+    }
+
     await _execute(context, matched, ttsService, locale);
     return true;
   }
@@ -194,6 +216,9 @@ class CommandDispatcher {
           '/notes',
           arguments: {'openNote': command.parameter ?? ''},
         );
+        break;
+      case CommandActionType.macroSequence:
+        // Macro logic is handled in dispatch; no direct action here.
         break;
     }
   }

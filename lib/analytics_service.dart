@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -47,6 +48,8 @@ class AnalyticsService extends ChangeNotifier {
   Map<String, int>   _voiceCmds = {}; // command -> usage count
   Map<String, dynamic> _userPrefs = {}; // user preferences tracking
   DateTime?          _lastSync;
+  Timer?             _syncTimer;
+  static const int   _analyticsSchemaVersion = 1;
 
   List<DateTime>     get opens     => List.unmodifiable(_opens);
   Map<String, int>   get featureMs => Map.unmodifiable(_featureMs);
@@ -108,6 +111,24 @@ class AnalyticsService extends ChangeNotifier {
       _lastSync = DateTime.tryParse(ls);
     }
 
+    if (_syncTimer == null) {
+      _syncTimer = Timer.periodic(const Duration(hours: 4), (_) {
+        autoSyncIfNeeded();
+      });
+    }
+
+    // run one immediate sync if there is outstanding data
+    await autoSyncIfNeeded();
+
+    notifyListeners();
+  }
+
+  bool get analyticsEnabled => _userPrefs['analyticsEnabled'] as bool? ?? true;
+
+  Future<void> setAnalyticsEnabled(bool enabled) async {
+    _userPrefs['analyticsEnabled'] = enabled;
+    final p = await SharedPreferences.getInstance();
+    await p.setString(_kUserPrefs, jsonEncode(_userPrefs));
     notifyListeners();
   }
 
@@ -143,9 +164,19 @@ class AnalyticsService extends ChangeNotifier {
   }
 
   // ── Firebase sync methods ──────────────────────────────────
-  Future<void> syncToFirebase() async {
+  Future<void> syncToFirebase({int attempt = 0}) async {
+    if (!analyticsEnabled) {
+      debugPrint('Analytics sync skipped (opt-out)');
+      return;
+    }
+
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) return; // Only sync for authenticated users
+
+    if (attempt > 3) {
+      debugPrint('Analytics sync aborted after $attempt attempts');
+      return;
+    }
 
     try {
       final userDoc = FirebaseFirestore.instance.collection('users').doc(user.uid);
@@ -156,6 +187,7 @@ class AnalyticsService extends ChangeNotifier {
 
       // Prepare data to sync
       final syncData = {
+        'schemaVersion': _analyticsSchemaVersion,
         'lastSync': FieldValue.serverTimestamp(),
         'totalOpens': _opens.length,
         'totalTimeMs': _dailyMs.values.fold(0, (a, b) => a + b),
@@ -178,6 +210,16 @@ class AnalyticsService extends ChangeNotifier {
 
       await analyticsDoc.set(syncData, SetOptions(merge: true));
 
+      // Developer-level metric summary (for cross-reference and reporting)
+      final devDoc = FirebaseFirestore.instance.collection('analytics').doc('dev_metrics');
+      await devDoc.set(
+        {
+          'lastSync': FieldValue.serverTimestamp(),
+          'dailyStats.${todayKey}': syncData,
+        },
+        SetOptions(merge: true),
+      );
+
       // Update last sync time
       _lastSync = DateTime.now();
       final p = await SharedPreferences.getInstance();
@@ -186,6 +228,9 @@ class AnalyticsService extends ChangeNotifier {
       notifyListeners();
     } catch (e) {
       debugPrint('Analytics sync failed: $e');
+      final delay = Duration(seconds: 2 * (attempt + 1));
+      await Future.delayed(delay);
+      await syncToFirebase(attempt: attempt + 1);
     }
   }
 

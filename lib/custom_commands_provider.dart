@@ -19,6 +19,7 @@ enum CommandActionType {
   ttsSlowDown,
   searchNotes,
   openNote,
+  macroSequence,
 }
 
 extension CommandActionTypeLabel on CommandActionType {
@@ -46,6 +47,8 @@ extension CommandActionTypeLabel on CommandActionType {
         return 'Search Notes';
       case CommandActionType.openNote:
         return 'Open Specific Note';
+      case CommandActionType.macroSequence:
+        return 'Run Macro Sequence';
     }
   }
 
@@ -73,12 +76,15 @@ extension CommandActionTypeLabel on CommandActionType {
         return Icons.search_outlined;
       case CommandActionType.openNote:
         return Icons.file_open_outlined;
+      case CommandActionType.macroSequence:
+        return Icons.timeline_rounded;
     }
   }
 
   bool get requiresParameter {
     return this == CommandActionType.searchNotes ||
-        this == CommandActionType.openNote;
+        this == CommandActionType.openNote ||
+        this == CommandActionType.macroSequence;
   }
 
   String get parameterHint {
@@ -87,6 +93,8 @@ extension CommandActionTypeLabel on CommandActionType {
         return 'Keyword to search for';
       case CommandActionType.openNote:
         return 'Note name to open';
+      case CommandActionType.macroSequence:
+        return 'Macro steps (one per line, e.g. open notes)';
       default:
         return '';
     }
@@ -328,6 +336,14 @@ class CustomCommandsProvider extends ChangeNotifier {
 
   String _normalize(String text) =>
       text.toLowerCase().trim().replaceAll(RegExp(r'[^\w\s]'), '');
+
+  CustomCommand? findByPhrase(String phrase) {
+    final normalized = _normalize(phrase);
+    for (final cmd in enabledCommands) {
+      if (_normalize(cmd.phrase) == normalized) return cmd;
+    }
+    return null;
+  }
 
   double _score(String input, String phrase) {
     if (input == phrase) return 1.0;

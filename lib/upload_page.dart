@@ -178,6 +178,84 @@ class _UploadPageState extends State<UploadPage> {
   }
 
   // ─────────────────────────────────────────────
+  //  FILE VALIDATION
+  // ─────────────────────────────────────────────
+  bool _isValidFile(PlatformFile file, String extension) {
+    // Define allowed file types and their size limits
+    const allowedTypes = {
+      // Text documents
+      'txt': 10 * 1024 * 1024,    // 10MB
+      'md': 10 * 1024 * 1024,     // 10MB
+      'rtf': 10 * 1024 * 1024,    // 10MB
+      'csv': 10 * 1024 * 1024,    // 10MB
+
+      // Documents
+      'pdf': 50 * 1024 * 1024,    // 50MB
+      'doc': 25 * 1024 * 1024,    // 25MB
+      'docx': 25 * 1024 * 1024,   // 25MB
+
+      // Presentations
+      'ppt': 50 * 1024 * 1024,    // 50MB
+      'pptx': 50 * 1024 * 1024,   // 50MB
+
+      // Spreadsheets
+      'xls': 25 * 1024 * 1024,    // 25MB
+      'xlsx': 25 * 1024 * 1024,   // 25MB
+
+      // Other
+      'epub': 25 * 1024 * 1024,   // 25MB
+      'odt': 25 * 1024 * 1024,    // 25MB
+      'odp': 25 * 1024 * 1024,    // 25MB
+    };
+
+    // Check if file type is allowed
+    if (!allowedTypes.containsKey(extension)) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('File type .$extension is not supported. Supported types: ${allowedTypes.keys.join(', ')}'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return false;
+    }
+
+    // Check file size against type-specific limit
+    final maxSize = allowedTypes[extension]!;
+    if (file.size > maxSize) {
+      final maxSizeMB = (maxSize / (1024 * 1024)).round();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('File is too large. Maximum size for .$extension files is ${maxSizeMB}MB.'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return false;
+    }
+
+    // Check for empty files
+    if (file.size == 0) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Cannot upload empty files.'),
+            backgroundColor: Colors.redAccent,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return false;
+    }
+
+    return true;
+  }
+
+  // ─────────────────────────────────────────────
   //  PICK & UPLOAD FILE
   // ─────────────────────────────────────────────
   Future<void> _pickAnyFile() async {
@@ -199,12 +277,18 @@ class _UploadPageState extends State<UploadPage> {
     final String fileName = file.name;
     final String extension = (file.extension ?? 'file').toLowerCase();
 
-    if (file.size > 200 * 1024 * 1024) {
+    // Enhanced file validation
+    if (!_isValidFile(file, extension)) {
+      setState(() => _isUploading = false);
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) { // Reduced to 50MB for better security
       setState(() => _isUploading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('File is too large. Maximum size is 200MB.'),
+            content: Text('File is too large. Maximum size is 50MB.'),
             backgroundColor: Color(0xFF333333),
             behavior: SnackBarBehavior.floating,
           ),

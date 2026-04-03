@@ -47,6 +47,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
   String? _currentName;
   String? _currentPhotoBase64;
 
+  // Google Sign-In instance
+  final GoogleSignIn _googleSignIn = GoogleSignIn(
+    scopes: ['email'],
+  );
+
   @override
   void initState() {
     super.initState();
@@ -709,7 +714,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         googleProvider.setCustomParameters({'prompt': 'select_account'});
         result = await FirebaseAuth.instance.signInWithPopup(googleProvider);
       } else {
-        final googleUser = await GoogleSignIn().signIn();
+        final googleUser = await _googleSignIn.signIn();
         if (googleUser == null) {
           setState(() => _googleLoading = false);
           return;
@@ -1649,10 +1654,11 @@ class _GoogleButton extends StatelessWidget {
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Image.network(
-                    'https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg',
-                    height: 20,
-                    width: 20,
+                  Image.asset(
+                    'assets/images/btn_google_signin.png',
+                    height: 40,
+                    width: 120,
+                    fit: BoxFit.contain,
                   ),
                   const SizedBox(width: 12),
                   const Text(

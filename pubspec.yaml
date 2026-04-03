@@ -51,6 +51,9 @@ dependencies:
   archive: ^3.4.9
   uuid: ^4.3.3
 
+  # ── Environment Variables ────────────────────────────
+  flutter_dotenv: ^5.1.0
+
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -68,3 +71,5 @@ flutter:
     - assets/images/Abubakir.jpeg
     - assets/images/Abdurahman.jpeg
     - assets/images/IMG_3331.jpg
+    - assets/images/btn_google_signin.png
+    - assets/project.env

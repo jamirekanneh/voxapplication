@@ -34,6 +34,91 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
       'a':
           'Absolutely! Visit the Commands section in the Menu to view our rich library of voice commands. You can also customize them manually to better fit your workflow.',
     },
+    {
+      'q': 'How do voice commands work?',
+      'a':
+          'Voice commands use speech recognition to let you control the app hands-free. Double-tap anywhere on the screen to activate voice mode, then speak your command. The app recognizes phrases like "open notes", "play reading", or your custom commands.',
+    },
+    {
+      'q': 'What are custom voice commands?',
+      'a':
+          'Custom commands let you create your own voice phrases that trigger specific actions. For example, you could create a command called "morning routine" that opens your notes, reads the latest entry, and starts text-to-speech playback - all with one voice command.',
+    },
+    {
+      'q': 'How do macro sequences work?',
+      'a':
+          'Macro sequences allow you to chain multiple commands together. Create a custom command with the "Run Macro Sequence" action, then list your desired commands line by line (e.g., "open notes", "search notes for meeting", "play reading").',
+    },
+    {
+      'q': 'How does file upload and OCR work?',
+      'a':
+          'Upload documents, images, or PDFs through the Upload page. The app uses Google ML Kit to extract text from images and documents via OCR (Optical Character Recognition). You can then read the extracted text or save it as notes.',
+    },
+    {
+      'q': 'What file types can I upload?',
+      'a':
+          'You can upload images (JPG, PNG), PDFs, Word documents (DOCX), and other common document formats. The app validates file size (max 10MB) and type for security. OCR works best with clear, well-lit images.',
+    },
+    {
+      'q': 'How does the AI assistant work?',
+      'a':
+          'The AI assistant uses Groq API to provide intelligent responses to your questions. You can ask about document content, get summaries, or request explanations. The AI analyzes your uploaded documents and notes to give contextual answers.',
+    },
+    {
+      'q': 'What is text-to-speech (TTS)?',
+      'a':
+          'TTS converts written text into spoken audio. Use voice commands like "play reading" or "pause" to control playback. You can adjust speech rate with "speed up" or "slow down" commands. TTS works with notes, documents, and AI responses.',
+    },
+    {
+      'q': 'How do I manage my notes and library?',
+      'a':
+          'Your notes are organized in the Library section. You can create new notes, edit existing ones, search by keywords, and categorize them. All notes sync to the cloud if you have an authenticated account.',
+    },
+    {
+      'q': 'What languages does the app support?',
+      'a':
+          'The app supports multiple languages for voice commands and TTS: English, Spanish, French, Arabic, Turkish, and Chinese. Language preferences are saved per user account.',
+    },
+    {
+      'q': 'How does the dictionary feature work?',
+      'a':
+          'The dictionary helps you look up word definitions and pronunciations. You can search for words using voice commands or text input. It\'s particularly useful when reading documents in foreign languages.',
+    },
+    {
+      'q': 'What is the Statistics page?',
+      'a':
+          'The Statistics page shows usage analytics including reading time, voice commands used, files uploaded, and AI interactions. This data helps you track your productivity and app usage patterns.',
+    },
+    {
+      'q': 'How does guest mode work?',
+      'a':
+          'Guest mode lets you try the app without creating an account. Your data is stored locally and temporarily. Create an account to save your notes, custom commands, and access cloud backup.',
+    },
+    {
+      'q': 'Is my data private and secure?',
+      'a':
+          'Yes! We use Firebase security rules to ensure only you can access your own data. Files are validated for security, and sensitive information like API keys is properly protected. Guest mode data stays on your device only.',
+    },
+    {
+      'q': 'How does speech-to-text work?',
+      'a':
+          'Speech-to-text converts your voice into written text. Use it to dictate notes, search queries, or voice commands. The app supports continuous listening and provides real-time transcription feedback.',
+    },
+    {
+      'q': 'Can I use the app hands-free?',
+      'a':
+          'Yes! The app is designed for accessibility. Use voice commands for navigation, create macro sequences for complex tasks, and rely on TTS for reading content. Double-tap gestures activate voice mode throughout the app.',
+    },
+    {
+      'q': 'How do I create custom commands?',
+      'a':
+          'Go to Menu → Voice Commands → Add Command. Choose a phrase to say, select an action (like opening notes or running a macro), and optionally add parameters. Your custom commands sync across devices with your account.',
+    },
+    {
+      'q': 'What is the difference between guest and authenticated accounts?',
+      'a':
+          'Guest accounts store data locally and temporarily. Authenticated accounts provide cloud backup, cross-device sync, custom command persistence, and access to advanced features like detailed analytics.',
+    },
   ];
 
   void _showChatBox(BuildContext context) {
@@ -177,17 +262,8 @@ class _SupportChatBotState extends State<_SupportChatBot> {
     });
     _controller.clear();
 
-    // Simple Logic: Scan FAQ keys for matches
-    String response = "I'm sorry, I don't quite understand that. You can try asking about 'backup', 'deleted files', or 'voice commands'!";
-    
-    final queryLower = userQuery.toLowerCase();
-    for (var faq in widget.faqs) {
-      if (queryLower.contains(faq['q']!.toLowerCase().split(' ').last) || 
-          faq['q']!.toLowerCase().contains(queryLower)) {
-        response = faq['a']!;
-        break;
-      }
-    }
+    // Enhanced Logic: Smart FAQ matching with keywords and synonyms
+    String response = _findBestResponse(userQuery);
 
     // Add delay to simulate "thinking"
     Future.delayed(const Duration(milliseconds: 600), () {
@@ -197,6 +273,127 @@ class _SupportChatBotState extends State<_SupportChatBot> {
         });
       }
     });
+  }
+
+  String _findBestResponse(String query) {
+    final queryLower = query.toLowerCase().trim();
+
+    // Define keyword mappings for better matching
+    final keywordMappings = {
+      // Voice commands
+      'voice': ['voice', 'speak', 'talk', 'command', 'say', 'tell'],
+      'custom': ['custom', 'personal', 'my own', 'create', 'make'],
+      'macro': ['macro', 'sequence', 'chain', 'multiple', 'routine', 'workflow'],
+
+      // File operations
+      'upload': ['upload', 'file', 'document', 'pdf', 'image', 'scan'],
+      'ocr': ['ocr', 'text recognition', 'extract', 'scan', 'read text'],
+      'delete': ['delete', 'remove', 'trash', 'recycle', 'recover'],
+
+      // AI features
+      'ai': ['ai', 'assistant', 'groq', 'intelligent', 'smart', 'answer'],
+      'tts': ['tts', 'speech', 'read aloud', 'speak', 'voice', 'audio'],
+
+      // Account & data
+      'account': ['account', 'login', 'user', 'profile', 'auth'],
+      'guest': ['guest', 'temporary', 'local', 'no account'],
+      'backup': ['backup', 'cloud', 'sync', 'save', 'store'],
+      'security': ['security', 'private', 'safe', 'protect', 'secure'],
+
+      // App features
+      'note': ['note', 'notes', 'library', 'write', 'text'],
+      'dictionary': ['dictionary', 'word', 'definition', 'meaning'],
+      'statistics': ['statistics', 'analytics', 'stats', 'usage', 'track'],
+      'language': ['language', 'lang', 'translate', 'multi'],
+
+      // Accessibility
+      'blind': ['blind', 'vision', 'sight', 'see', 'visual'],
+      'hands': ['hands', 'free', 'touch', 'gesture', 'accessibility'],
+      'speech': ['speech', 'talk', 'voice', 'speak', 'say'],
+    };
+
+    // Score each FAQ based on keyword matches
+    Map<String, double> scores = {};
+
+    for (var faq in widget.faqs) {
+      double score = 0.0;
+      final question = faq['q']!.toLowerCase();
+
+      // Direct substring match (high weight)
+      if (question.contains(queryLower) || queryLower.contains(question)) {
+        score += 3.0;
+      }
+
+      // Keyword matching
+      for (var keyword in keywordMappings.keys) {
+        if (queryLower.contains(keyword)) {
+          for (var synonym in keywordMappings[keyword]!) {
+            if (question.contains(synonym)) {
+              score += 1.0;
+              break; // Only count once per keyword group
+            }
+          }
+        }
+      }
+
+      // Word overlap scoring
+      final queryWords = queryLower.split(RegExp(r'\s+'));
+      final questionWords = question.split(RegExp(r'\s+'));
+
+      int overlapCount = 0;
+      for (var qWord in queryWords) {
+        if (qWord.length > 2) { // Ignore very short words
+          for (var aWord in questionWords) {
+            if (aWord.contains(qWord) || qWord.contains(aWord)) {
+              overlapCount++;
+              break;
+            }
+          }
+        }
+      }
+
+      if (queryWords.isNotEmpty) {
+        score += (overlapCount / queryWords.length) * 2.0;
+      }
+
+      scores[faq['q']!] = score;
+    }
+
+    // Find the best match
+    String? bestQuestion;
+    double bestScore = 0.5; // Minimum threshold
+
+    scores.forEach((question, score) {
+      if (score > bestScore) {
+        bestScore = score;
+        bestQuestion = question;
+      }
+    });
+
+    if (bestQuestion != null) {
+      // Return the answer for the best matching question
+      for (var faq in widget.faqs) {
+        if (faq['q'] == bestQuestion) {
+          return faq['a']!;
+        }
+      }
+    }
+
+    // Fallback responses based on query content
+    if (queryLower.contains('help') || queryLower.contains('support')) {
+      return 'I\'m here to help! You can ask me about voice commands, file uploads, AI features, security, or any other app functionality. Try questions like "How do voice commands work?" or "What files can I upload?"';
+    }
+
+    if (queryLower.contains('thank')) {
+      return 'You\'re welcome! Feel free to ask me anything else about the app.';
+    }
+
+    if (queryLower.contains('hi') || queryLower.contains('hello')) {
+      return 'Hello! I\'m your app assistant. I can help you understand how features work, answer questions about the app, or guide you through common tasks. What would you like to know?';
+    }
+
+    // Default fallback
+    return "I'm sorry, I don't have a specific answer for that. You can try asking about voice commands, file uploads, AI features, security, or accessibility. For detailed support, visit the Contact Us page!";
   }
 
   @override

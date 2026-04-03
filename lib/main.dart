@@ -4,6 +4,7 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'firebase_options.dart';
 import 'splash_screen.dart';
 import 'home_page.dart';
@@ -23,8 +24,44 @@ import 'floating_chat_bot.dart';
 final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
 final ValueNotifier<bool> showChatBotNotifier = ValueNotifier<bool>(false);
 
+// ─────────────────────────────────────────────
+//  AUTH WRAPPER - Listens to Firebase auth state
+// ─────────────────────────────────────────────
+class AuthWrapper extends StatefulWidget {
+  const AuthWrapper({super.key});
+
+  @override
+  State<AuthWrapper> createState() => _AuthWrapperState();
+}
+
+class _AuthWrapperState extends State<AuthWrapper> {
+  @override
+  void initState() {
+    super.initState();
+    // Listen to auth state changes and load commands for current user
+    FirebaseAuth.instance.authStateChanges().listen((User? user) {
+      final commandsProvider = context.read<CustomCommandsProvider>();
+      if (user != null) {
+        commandsProvider.loadCommandsForUser(user.uid);
+      } else {
+        // For anonymous users, use a default UID or handle differently
+        commandsProvider.loadCommandsForUser('anonymous');
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return const TheVoxApp();
+  }
+}
+
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  // Load environment variables
+  await dotenv.load(fileName: 'project.env');
+
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   // Load saved analytics data and record this app launch
@@ -43,7 +80,7 @@ void main() async {
         ChangeNotifierProvider(create: (_) => TempNotesProvider()),
         ChangeNotifierProvider(create: (_) => CustomCommandsProvider()),
       ],
-      child: const TheVoxApp(),
+      child: const AuthWrapper(),
     ),
   );
 }

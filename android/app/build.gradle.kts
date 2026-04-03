@@ -29,13 +29,32 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file('debug.keystore')
+            storePassword = 'android'
+            keyAlias = 'androiddebugkey'
+            keyPassword = 'android'
+        }
+
+        create("release") {
+            // Use environment variables for keystore credentials
+            // Set these in your CI/CD or local environment
+            storeFile = file(System.getenv('KEYSTORE_PATH') ?: 'upload-keystore.jks')
+            storePassword = System.getenv('KEYSTORE_PASSWORD') ?: 'default_password'
+            keyAlias = System.getenv('KEY_ALIAS') ?: 'upload'
+            keyPassword = System.getenv('KEY_PASSWORD') ?: 'default_password'
+        }
+    }
+
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = false
-            isShrinkResources = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
 
-            // For now use debug signing (remove in production)
-            signingConfig = signingConfigs.getByName("debug")
+            // Use proper release signing configuration
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 }
