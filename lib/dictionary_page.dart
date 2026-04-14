@@ -285,8 +285,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
           'api',
           'computer',
           'structure',
-        ].contains(w))
+        ].contains(w)) {
           techScore += 10;
+        }
         if ([
           'heart',
           'brain',
@@ -297,12 +298,14 @@ class _DictionaryPageState extends State<DictionaryPage> {
           'ill',
           'sick',
           'pain',
-        ].contains(w))
+        ].contains(w)) {
           medicalScore += 10;
+        }
 
         if (techScore > 0 && techScore > medicalScore) return _ResultSource.cs;
-        if (medicalScore > 0 && medicalScore > techScore)
+        if (medicalScore > 0 && medicalScore > techScore) {
           return _ResultSource.medical;
+        }
         return _ResultSource.general;
       }
 
@@ -321,9 +324,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
         // Track dictionary lookup
         AnalyticsService.instance.recordDictionaryLookup(word);
 
-        if (generalResult != null)
+        if (generalResult != null) {
           _extractAudio(generalResult);
-        else if (medicalResult != null)
+        } else if (medicalResult != null)
           _extractAudio(medicalResult);
         else if (csResult != null)
           _extractAudio(csResult);
@@ -598,7 +601,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
     final unsupported = langCode == null;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3E5AB),
+      backgroundColor: const Color(0xFFF0F4FF),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -610,7 +613,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w900,
-                color: Colors.black87,
+                color: Color(0xDD0A0E1A),
                 letterSpacing: 5,
               ),
             ),
@@ -618,13 +621,13 @@ class _DictionaryPageState extends State<DictionaryPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.black,
+                color: Color(0xFF0A0E1A),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
                 lang.t('nav_dictionary').toUpperCase(),
                 style: const TextStyle(
-                  color: Color(0xFFF3E5AB),
+                  color: Color(0xFFF0F4FF),
                   fontSize: 9,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 2,
@@ -643,7 +646,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.08),
+                  color: Color(0xFF0A0E1A).withOpacity(0.08),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -651,7 +654,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: Colors.black87,
+                    color: Color(0xDD0A0E1A),
                   ),
                 ),
               ),
@@ -709,14 +712,14 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       decoration: BoxDecoration(
                         color: _isListening
                             ? Colors.red
-                            : Colors.black.withOpacity(0.08),
+                            : Color(0xFF0A0E1A).withOpacity(0.08),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Icon(
                         _isListening
                             ? Icons.stop_rounded
                             : Icons.mic_none_rounded,
-                        color: _isListening ? Colors.white : Colors.black87,
+                        color: _isListening ? Colors.white : Color(0xDD0A0E1A),
                         size: 22,
                       ),
                     ),
@@ -732,7 +735,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: unsupported ? Colors.grey[400] : Colors.black,
+                      color: unsupported ? Colors.grey[400] : Color(0xFF0A0E1A),
                       borderRadius: BorderRadius.circular(14),
                     ),
                     child: _loading
@@ -801,7 +804,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                         style: TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
-                          color: Colors.black87,
+                          color: Color(0xDD0A0E1A),
                           height: 1.4,
                         ),
                       ),
@@ -857,7 +860,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
-                        color: Colors.black87,
+                        color: Color(0xDD0A0E1A),
                       ),
                     ),
                     const SizedBox(height: 6),
@@ -879,7 +882,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                           vertical: 12,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.black,
+                          color: Color(0xFF0A0E1A),
                           borderRadius: BorderRadius.circular(30),
                         ),
                         child: const Row(
@@ -919,7 +922,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       width: double.infinity,
                       padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
-                        color: Colors.black,
+                        color: Color(0xFF0A0E1A),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Column(
@@ -935,7 +938,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                     Text(
                                       _result!['word'] as String? ?? '',
                                       style: const TextStyle(
-                                        color: Color(0xFFF3E5AB),
+                                        color: Color(0xFFF0F4FF),
                                         fontSize: 28,
                                         fontWeight: FontWeight.w900,
                                         letterSpacing: -0.5,
@@ -949,14 +952,14 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                       ),
                                       decoration: BoxDecoration(
                                         color: const Color(
-                                          0xFFD4B96A,
+                                          0xFF4B9EFF,
                                         ).withOpacity(0.2),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Text(
                                         '${_resultSource.emoji} ${_resultSource.label} Dictionary',
                                         style: const TextStyle(
-                                          color: Color(0xFFD4B96A),
+                                          color: Color(0xFF4B9EFF),
                                           fontSize: 10,
                                           fontWeight: FontWeight.w700,
                                         ),
@@ -972,14 +975,14 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                   child: Container(
                                     padding: const EdgeInsets.all(10),
                                     decoration: BoxDecoration(
-                                      color: const Color(0xFFD4B96A),
+                                      color: const Color(0xFF4B9EFF),
                                       borderRadius: BorderRadius.circular(12),
                                     ),
                                     child: Icon(
                                       _isPlaying
                                           ? Icons.volume_up_rounded
                                           : Icons.play_arrow_rounded,
-                                      color: Colors.black,
+                                      color: Color(0xFF0A0E1A),
                                       size: 22,
                                     ),
                                   ),
@@ -991,7 +994,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                             Text(
                               _phonetic,
                               style: const TextStyle(
-                                color: Color(0xFFD4B96A),
+                                color: Color(0xFF4B9EFF),
                                 fontSize: 15,
                                 fontWeight: FontWeight.w400,
                               ),
@@ -1010,7 +1013,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                         child: Text(
                           _origin,
                           style: TextStyle(
-                            color: Colors.grey[800],
+                            color: Color(0xFF1c2333),
                             fontSize: 13,
                             height: 1.6,
                           ),
@@ -1053,7 +1056,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                       width: 20,
                                       height: 20,
                                       decoration: const BoxDecoration(
-                                        color: Color(0xFFD4B96A),
+                                        color: Color(0xFF4B9EFF),
                                         shape: BoxShape.circle,
                                       ),
                                       child: Center(
@@ -1062,7 +1065,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                           style: const TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.w800,
-                                            color: Colors.black,
+                                            color: Color(0xFF0A0E1A),
                                           ),
                                         ),
                                       ),
@@ -1071,7 +1074,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                       child: Text(
                                         definition,
                                         style: TextStyle(
-                                          color: Colors.grey[800],
+                                          color: Color(0xFF1c2333),
                                           fontSize: 13,
                                           height: 1.5,
                                         ),
@@ -1108,11 +1111,11 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                     ),
                                     decoration: BoxDecoration(
                                       color: const Color(
-                                        0xFFD4B96A,
+                                        0xFF4B9EFF,
                                       ).withOpacity(0.3),
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(
-                                        color: const Color(0xFFD4B96A),
+                                        color: const Color(0xFF4B9EFF),
                                         width: 1,
                                       ),
                                     ),
@@ -1121,7 +1124,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                       style: const TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
-                                        color: Colors.black87,
+                                        color: Color(0xDD0A0E1A),
                                       ),
                                     ),
                                   ),
@@ -1183,7 +1186,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
       ),
 
       bottomNavigationBar: BottomAppBar(
-        color: Colors.grey[850],
+        color: Color(0xFF141A29),
         shape: const CircularNotchedRectangle(),
         child: SizedBox(
           height: 65,
@@ -1216,7 +1219,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.black,
+        backgroundColor: Color(0xFF0A0E1A),
         onPressed: () => Navigator.pushNamed(context, '/upload'),
         child: const Icon(Icons.file_upload_outlined, color: Colors.white),
       ),
@@ -1240,14 +1243,14 @@ class _DictionaryPageState extends State<DictionaryPage> {
         children: [
           Row(
             children: [
-              Icon(icon, size: 13, color: Colors.black54),
+              Icon(icon, size: 13, color: Color(0x8A0A0E1A)),
               const SizedBox(width: 6),
               Text(
                 label,
                 style: const TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
-                  color: Colors.black45,
+                  color: Color(0x730A0E1A),
                   letterSpacing: 2,
                 ),
               ),

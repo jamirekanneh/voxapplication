@@ -385,7 +385,7 @@ class _UploadPageState extends State<UploadPage> {
             behavior: SnackBarBehavior.floating,
             action: SnackBarAction(
               label: 'OPEN SETTINGS',
-              textColor: const Color(0xFFF3E5AB),
+              textColor: const Color(0xFFF0F4FF),
               onPressed: openAppSettings,
             ),
           ),
@@ -410,7 +410,7 @@ class _UploadPageState extends State<UploadPage> {
     // Ask: single or multi-page
     final choice = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.grey[900],
+      backgroundColor: Color(0xFF141A29),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -508,20 +508,20 @@ class _UploadPageState extends State<UploadPage> {
                     ),
                     child: const Text(
                       'Done',
-                      style: TextStyle(color: Colors.black54),
+                      style: TextStyle(color: Color(0x8A0A0E1A)),
                     ),
                   ),
                   ElevatedButton(
                     onPressed: () => Navigator.pop(ctx, true),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
+                      backgroundColor: Color(0xFF0A0E1A),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
                     child: const Text(
                       'Add Page',
-                      style: TextStyle(color: Color(0xFFF3E5AB)),
+                      style: TextStyle(color: Color(0xFFF0F4FF)),
                     ),
                   ),
                 ],
@@ -627,7 +627,7 @@ class _UploadPageState extends State<UploadPage> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.grey[800],
+          color: Color(0xFF1c2333),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -636,10 +636,10 @@ class _UploadPageState extends State<UploadPage> {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: const Color(0xFFD4B96A).withOpacity(0.15),
+                color: const Color(0xFF4B9EFF).withOpacity(0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: const Color(0xFFD4B96A), size: 24),
+              child: Icon(icon, color: const Color(0xFF4B9EFF), size: 24),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -816,26 +816,26 @@ class _UploadPageState extends State<UploadPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF3E5AB),
+      backgroundColor: const Color(0xFFF0F4FF),
       appBar: AppBar(
         title: const Text(
           'Upload Files',
-          style: TextStyle(color: Colors.black),
+          style: TextStyle(color: Color(0xFF0A0E1A)),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
+        iconTheme: const IconThemeData(color: Color(0xFF0A0E1A)),
       ),
       body: Center(
         child: _isUploading
             ? Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const CircularProgressIndicator(color: Colors.black),
+                  const CircularProgressIndicator(color: Color(0xFF0A0E1A)),
                   const SizedBox(height: 16),
                   Text(
                     _statusMessage,
-                    style: const TextStyle(color: Colors.black54),
+                    style: const TextStyle(color: Color(0x8A0A0E1A)),
                   ),
                 ],
               )
@@ -850,13 +850,13 @@ class _UploadPageState extends State<UploadPage> {
                     const Icon(
                       Icons.drive_folder_upload,
                       size: 72,
-                      color: Colors.black38,
+                      color: Color(0x610A0E1A),
                     ),
                     const SizedBox(height: 18),
                     const Text(
                       'Upload a file or scan a\nphysical document with your camera',
                       style: TextStyle(
-                        color: Colors.black54,
+                        color: Color(0x8A0A0E1A),
                         fontSize: 15,
                         height: 1.5,
                       ),
@@ -878,17 +878,17 @@ class _UploadPageState extends State<UploadPage> {
                           margin: const EdgeInsets.only(top: 20),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: Colors.black.withOpacity(0.06),
+                            color: Color(0xFF0A0E1A).withOpacity(0.06),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: Colors.black.withOpacity(0.1),
+                              color: Color(0xFF0A0E1A).withOpacity(0.1),
                             ),
                           ),
                           child: const Row(
                             children: [
                               Icon(
                                 Icons.info_outline,
-                                color: Colors.black54,
+                                color: Color(0x8A0A0E1A),
                                 size: 18,
                               ),
                               SizedBox(width: 10),
@@ -896,7 +896,7 @@ class _UploadPageState extends State<UploadPage> {
                                 child: Text(
                                   "You're browsing as a guest. Files will only be available until you close the app.",
                                   style: TextStyle(
-                                    color: Colors.black54,
+                                    color: Color(0x8A0A0E1A),
                                     fontSize: 12,
                                     height: 1.5,
                                   ),
@@ -927,8 +927,8 @@ class _UploadPageState extends State<UploadPage> {
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.black,
-                            foregroundColor: const Color(0xFFF3E5AB),
+                            backgroundColor: Color(0xFF0A0E1A),
+                            foregroundColor: const Color(0xFFF0F4FF),
                             padding: const EdgeInsets.symmetric(vertical: 17),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(18),
@@ -946,7 +946,7 @@ class _UploadPageState extends State<UploadPage> {
                       children: [
                         Expanded(
                           child: Divider(
-                            color: Colors.black.withOpacity(0.15),
+                            color: Color(0xFF0A0E1A).withOpacity(0.15),
                             thickness: 1,
                           ),
                         ),
@@ -955,7 +955,7 @@ class _UploadPageState extends State<UploadPage> {
                           child: Text(
                             'OR',
                             style: TextStyle(
-                              color: Colors.black.withOpacity(0.35),
+                              color: Color(0xFF0A0E1A).withOpacity(0.35),
                               fontWeight: FontWeight.w700,
                               fontSize: 12,
                               letterSpacing: 1.5,
@@ -964,7 +964,7 @@ class _UploadPageState extends State<UploadPage> {
                         ),
                         Expanded(
                           child: Divider(
-                            color: Colors.black.withOpacity(0.15),
+                            color: Color(0xFF0A0E1A).withOpacity(0.15),
                             thickness: 1,
                           ),
                         ),
@@ -994,9 +994,9 @@ class _UploadPageState extends State<UploadPage> {
                             ),
                           ),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.black,
+                            foregroundColor: Color(0xFF0A0E1A),
                             side: const BorderSide(
-                              color: Colors.black,
+                              color: Color(0xFF0A0E1A),
                               width: 1.5,
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 17),
@@ -1014,7 +1014,7 @@ class _UploadPageState extends State<UploadPage> {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.05),
+                        color: Color(0xFF0A0E1A).withOpacity(0.05),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Column(
@@ -1048,13 +1048,13 @@ class _UploadPageState extends State<UploadPage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 15, color: Colors.black38),
+        Icon(icon, size: 15, color: Color(0x610A0E1A)),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             text,
             style: const TextStyle(
-              color: Colors.black45,
+              color: Color(0x730A0E1A),
               fontSize: 12,
               height: 1.4,
             ),

@@ -26,6 +26,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
   String _searchQuery = '';
   bool _isListening = false;
 
+  String _selectedFolder = 'All Files';
+  final List<String> _folders = ['All Files', 'PDFs', 'Documents', 'Notes', 'Scans'];
+
   String? _resolvedUid;
   bool _isAnonymousUser = true;
 
@@ -33,10 +36,6 @@ class _VoxHomePageState extends State<VoxHomePage> {
   void initState() {
     super.initState();
     _resolveUser();
-    // Show the chatbot exactly when the HomePage is presented
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      showChatBotNotifier.value = true;
-    });
   }
 
   @override
@@ -134,7 +133,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
   Future<void> _showDocumentOptions(String fileName, String content) async {
     final choice = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Colors.grey[900],
+      backgroundColor: Color(0xFF141A29),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -171,7 +170,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
             _docOptionTile(
               ctx,
               icon: Icons.headphones_rounded,
-              iconColor: const Color(0xFFD4B96A),
+              iconColor: const Color(0xFF4B9EFF),
               title: 'Read Document',
               subtitle: 'Listen to the document read aloud',
               value: 'read',
@@ -190,8 +189,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
               ctx,
               icon: Icons.style_outlined,
               iconColor: Colors.green[300]!,
-              title: 'Generate Flashcards',
-              subtitle: 'Create study flashcards from the document',
+              title: 'Generate Assessment',
+              subtitle: 'Create a study assessment from the document',
               value: 'flashcards',
             ),
           ],
@@ -255,7 +254,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Colors.grey[800],
+          color: Color(0xFF1c2333),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -360,7 +359,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey[900],
+      backgroundColor: Color(0xFF141A29),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -391,8 +390,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
             ),
             const SizedBox(height: 6),
             Text(
-              lang.t('remove_library'),
+              'This item will be stored in the Recycle Bin and permanently deleted after 30 days.',
               style: TextStyle(color: Colors.grey[400], fontSize: 13),
+              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
             Row(
@@ -517,7 +517,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
     showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey[900],
+      backgroundColor: Color(0xFF141A29),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
@@ -607,6 +607,81 @@ class _VoxHomePageState extends State<VoxHomePage> {
   }
 
   // ─────────────────────────────────────────────
+  //  DELETE ALL
+  // ─────────────────────────────────────────────
+  Future<void> _deleteAllLibrary() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_sweep, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Empty Library?'),
+          ],
+        ),
+        content: const Text('All files will be moved to the Recycle Bin and permanently deleted after 30 days. Are you sure?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Color(0x8A0A0E1A)))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: const Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      if (_isAnonymousUser) {
+        final provider = context.read<TempLibraryProvider>();
+        final ids = provider.items.map((e) => e.id).toList();
+        for (var id in ids) {
+          provider.remove(id);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All files deleted.'), backgroundColor: Color(0xFF333333)));
+        }
+      } else {
+        final uid = _resolvedUid ?? FirebaseAuth.instance.currentUser?.uid;
+        if (uid == null) return;
+
+        final query = await FirebaseFirestore.instance.collection('library').where('userId', isEqualTo: uid).get();
+        if (query.docs.isEmpty) return;
+
+        final batch = FirebaseFirestore.instance.batch();
+        final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
+
+        for (var doc in query.docs) {
+          final data = doc.data();
+          final newDocRef = userDoc.collection('deleted_library').doc();
+          batch.set(newDocRef, {
+            'fileName': data['fileName'] ?? 'File',
+            'content': data['content'],
+            'fileType': data['fileType'] ?? 'file',
+            'sourceCollection': 'library',
+            'deletedAt': FieldValue.serverTimestamp(),
+            'originalTimestamp': data['timestamp'] ?? FieldValue.serverTimestamp(),
+            'userId': uid,
+          });
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All files moved to Recycle Bin.'), backgroundColor: Color(0xFF333333)));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete all: $e'), backgroundColor: Colors.redAccent));
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────
   //  BUILD
   // ─────────────────────────────────────────────
   @override
@@ -614,7 +689,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
     final lang = context.watch<LanguageProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3E5AB),
+      backgroundColor: const Color(0xFFF0F4FF),
       resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Padding(
@@ -626,9 +701,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text(
-                    "Vox",
-                    style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold),
+                  Row(
+                    children: [
+                      const Text("Vox", style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
+                      IconButton(icon: const Icon(Icons.delete_sweep, color: Colors.redAccent), onPressed: _deleteAllLibrary, tooltip: 'Delete All'),
+                    ],
                   ),
                   SizedBox(
                     width: 180,
@@ -649,7 +726,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             size: 18,
                             color: _isListening
                                 ? Colors.redAccent
-                                : Colors.black54,
+                                : Color(0x8A0A0E1A),
                           ),
                         ),
                         filled: true,
@@ -687,19 +764,19 @@ class _VoxHomePageState extends State<VoxHomePage> {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.06),
+                    color: Color(0xFF0A0E1A).withOpacity(0.06),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.black.withOpacity(0.1)),
+                    border: Border.all(color: Color(0xFF0A0E1A).withOpacity(0.1)),
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.info_outline, color: Colors.black54, size: 15),
+                      Icon(Icons.info_outline, color: Color(0x8A0A0E1A), size: 15),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Guest mode — files are temporary. Create an account to save them.',
                           style: TextStyle(
-                            color: Colors.black54,
+                            color: Color(0x8A0A0E1A),
                             fontSize: 11,
                             height: 1.4,
                           ),
@@ -710,7 +787,45 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 ),
               ],
 
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
+
+              // ── Folders/Tags ───────────────────────────
+              SizedBox(
+                height: 32,
+                child: ListView.builder(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: _folders.length,
+                  itemBuilder: (context, index) {
+                    final folder = _folders[index];
+                    final isSelected = folder == _selectedFolder;
+                    return GestureDetector(
+                      onTap: () => setState(() => _selectedFolder = folder),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        margin: const EdgeInsets.only(right: 8),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: isSelected ? Color(0xFF0A0E1A) : Colors.white.withOpacity(0.5),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(color: isSelected ? Colors.transparent : Color(0x1F0A0E1A)),
+                        ),
+                        child: Center(
+                          child: Text(
+                            folder,
+                            style: TextStyle(
+                              color: isSelected ? const Color(0xFFF0F4FF) : Color(0xDD0A0E1A),
+                              fontSize: 12,
+                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+
+              const SizedBox(height: 12),
 
               // ── Library content ──────────────────────────
               Expanded(
@@ -719,11 +834,18 @@ class _VoxHomePageState extends State<VoxHomePage> {
                     // ── Guest: in-memory items ───────────────
                     if (_isAnonymousUser) {
                       final items = tempLibrary.items
-                          .where(
-                            (item) => item.fileName.toLowerCase().contains(
-                              _searchQuery,
-                            ),
-                          )
+                          .where((item) {
+                            final matchesSearch = item.fileName.toLowerCase().contains(_searchQuery);
+                            if (!matchesSearch) return false;
+                            
+                            final t = item.fileType.toLowerCase();
+                            if (_selectedFolder == 'All Files') return true;
+                            if (_selectedFolder == 'PDFs') return t == 'pdf';
+                            if (_selectedFolder == 'Notes') return t == 'note';
+                            if (_selectedFolder == 'Scans') return t == 'scan';
+                            if (_selectedFolder == 'Documents') return ['doc', 'docx', 'txt', 'ppt', 'pptx', 'csv', 'xls', 'rtf'].contains(t);
+                            return true;
+                          })
                           .toList();
 
                       if (items.isEmpty) {
@@ -836,13 +958,22 @@ class _VoxHomePageState extends State<VoxHomePage> {
                           );
                         }
 
-                        // Filter by search query
+                        // Filter by search query AND folder
                         final docs = snapshot.data!.docs.where((doc) {
-                          final data =
-                              doc.data() as Map<String, dynamic>? ?? {};
-                          final name = (data['fileName'] as String? ?? '')
-                              .toLowerCase();
-                          return name.contains(_searchQuery);
+                          final data = doc.data() as Map<String, dynamic>? ?? {};
+                          final name = (data['fileName'] as String? ?? '').toLowerCase();
+                          final type = (data['fileType'] as String? ?? '').toLowerCase();
+                          
+                          if (!name.contains(_searchQuery)) return false;
+                          
+                          if (_selectedFolder == 'All Files') return true;
+                          if (_selectedFolder == 'PDFs') return type == 'pdf';
+                          if (_selectedFolder == 'Notes') return type == 'note';
+                          if (_selectedFolder == 'Scans') return type == 'scan';
+                          if (_selectedFolder == 'Documents') {
+                            return ['doc', 'docx', 'txt', 'ppt', 'pptx', 'csv', 'xls', 'rtf'].contains(type);
+                          }
+                          return true;
                         }).toList();
 
                         // FIX: sort client-side by timestamp descending
@@ -913,7 +1044,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
       ),
 
       bottomNavigationBar: BottomAppBar(
-        color: Colors.grey[850],
+        color: Color(0xFF141A29),
         shape: const CircularNotchedRectangle(),
         notchMargin: 8,
         child: SizedBox(
@@ -947,7 +1078,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.black,
+        backgroundColor: Color(0xFF0A0E1A),
         onPressed: () => Navigator.pushNamed(context, '/upload'),
         child: const Icon(Icons.file_upload_outlined, color: Colors.white),
       ),
@@ -961,12 +1092,12 @@ class _VoxHomePageState extends State<VoxHomePage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFFF3E5AB),
+          backgroundColor: const Color(0xFFF0F4FF),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
           title: const Text(
-            'How many flashcards?',
+            'How many questions?',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
           ),
           content: Column(
@@ -977,7 +1108,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 style: const TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF7A6130),
+                  color: Color(0xFF4B9EFF),
                 ),
               ),
               Slider(
@@ -985,7 +1116,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 min: 5,
                 max: 20,
                 divisions: 15,
-                activeColor: Colors.black,
+                activeColor: Color(0xFF0A0E1A),
                 inactiveColor: Colors.grey[300],
                 onChanged: (v) => setDialogState(() => selected = v.round()),
               ),
@@ -1009,14 +1140,14 @@ class _VoxHomePageState extends State<VoxHomePage> {
               onPressed: () => Navigator.pop(ctx),
               child: const Text(
                 'Cancel',
-                style: TextStyle(color: Colors.black54),
+                style: TextStyle(color: Color(0x8A0A0E1A)),
               ),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, selected),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: const Color(0xFFF3E5AB),
+                backgroundColor: Color(0xFF0A0E1A),
+                foregroundColor: const Color(0xFFF0F4FF),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -1061,7 +1192,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.07),
+            color: Color(0xFF0A0E1A).withOpacity(0.07),
             blurRadius: 5,
             offset: const Offset(0, 3),
           ),
@@ -1075,7 +1206,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
           Text(
             title,
             style: const TextStyle(
-              color: Colors.black87,
+              color: Color(0xDD0A0E1A),
               fontSize: 10,
               fontWeight: FontWeight.w700,
               height: 1.2,

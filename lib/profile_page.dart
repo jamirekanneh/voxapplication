@@ -241,7 +241,7 @@ class _ProfilePageState extends State<ProfilePage>
         style: TextStyle(
           fontSize: radius * 0.85,
           fontWeight: FontWeight.w900,
-          color: const Color(0xFFF3E5AB),
+          color: const Color(0xFFF0F4FF),
         ),
       ),
     );
@@ -275,7 +275,7 @@ class _ProfilePageState extends State<ProfilePage>
             height: 220,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFFF3E5AB).withValues(alpha: 0.5),
+              color: const Color(0xFFF0F4FF).withValues(alpha: 0.5),
             ),
           ),
         ),
@@ -288,7 +288,7 @@ class _ProfilePageState extends State<ProfilePage>
             height: 260,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFFF3E5AB).withValues(alpha: 0.25),
+              color: const Color(0xFFF0F4FF).withValues(alpha: 0.25),
             ),
           ),
         ),
@@ -307,11 +307,11 @@ class _ProfilePageState extends State<ProfilePage>
                       child: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.black,
+                          color: Color(0xFF0A0E1A),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(Icons.arrow_back_ios_new,
-                            color: Color(0xFFF3E5AB), size: 16),
+                            color: Color(0xFFF0F4FF), size: 16),
                       ),
                     ),
                     const SizedBox(width: 16),
@@ -322,7 +322,7 @@ class _ProfilePageState extends State<ProfilePage>
                           fontSize: 13,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 3,
-                          color: Colors.black,
+                          color: Color(0xFF0A0E1A),
                         ),
                       ),
                     ),
@@ -333,17 +333,17 @@ class _ProfilePageState extends State<ProfilePage>
                           padding: const EdgeInsets.symmetric(
                               horizontal: 16, vertical: 10),
                           decoration: BoxDecoration(
-                            color: Colors.black,
+                            color: Color(0xFF0A0E1A),
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: const Row(
                             children: [
-                              Icon(Icons.edit, color: Color(0xFFF3E5AB), size: 14),
+                              Icon(Icons.edit, color: Color(0xFFF0F4FF), size: 14),
                               SizedBox(width: 6),
                               Text(
                                 "EDIT",
                                 style: TextStyle(
-                                  color: Color(0xFFF3E5AB),
+                                  color: Color(0xFFF0F4FF),
                                   fontSize: 12,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: 1.5,
@@ -366,7 +366,7 @@ class _ProfilePageState extends State<ProfilePage>
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
-                                color: Colors.black.withValues(alpha: 0.08),
+                                color: Color(0xFF0A0E1A).withValues(alpha: 0.08),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: const Text(
@@ -375,7 +375,7 @@ class _ProfilePageState extends State<ProfilePage>
                                   fontSize: 12,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: 1.5,
-                                  color: Colors.black54,
+                                  color: Color(0x8A0A0E1A),
                                 ),
                               ),
                             ),
@@ -387,7 +387,7 @@ class _ProfilePageState extends State<ProfilePage>
                               padding: const EdgeInsets.symmetric(
                                   horizontal: 16, vertical: 10),
                               decoration: BoxDecoration(
-                                color: Colors.black,
+                                color: Color(0xFF0A0E1A),
                                 borderRadius: BorderRadius.circular(12),
                               ),
                               child: _isSaving
@@ -395,13 +395,13 @@ class _ProfilePageState extends State<ProfilePage>
                                       width: 14,
                                       height: 14,
                                       child: CircularProgressIndicator(
-                                          color: Color(0xFFF3E5AB),
+                                          color: Color(0xFFF0F4FF),
                                           strokeWidth: 2),
                                     )
                                   : const Text(
                                       "SAVE",
                                       style: TextStyle(
-                                        color: Color(0xFFF3E5AB),
+                                        color: Color(0xFFF0F4FF),
                                         fontSize: 12,
                                         fontWeight: FontWeight.w800,
                                         letterSpacing: 1.5,
@@ -432,11 +432,11 @@ class _ProfilePageState extends State<ProfilePage>
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                    color: const Color(0xFFF3E5AB),
+                                    color: const Color(0xFFF0F4FF),
                                     width: 3),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0xFFF3E5AB)
+                                    color: const Color(0xFFF0F4FF)
                                         .withValues(alpha: 0.5),
                                     blurRadius: 20,
                                     offset: const Offset(0, 6),
@@ -452,11 +452,11 @@ class _ProfilePageState extends State<ProfilePage>
                                 child: Container(
                                   padding: const EdgeInsets.all(7),
                                   decoration: const BoxDecoration(
-                                    color: Colors.black,
+                                    color: Color(0xFF0A0E1A),
                                     shape: BoxShape.circle,
                                   ),
                                   child: const Icon(Icons.camera_alt,
-                                      color: Color(0xFFF3E5AB), size: 14),
+                                      color: Color(0xFFF0F4FF), size: 14),
                                 ),
                               ),
                           ],
@@ -499,7 +499,7 @@ class _ProfilePageState extends State<ProfilePage>
                         width: double.infinity,
                         padding: const EdgeInsets.all(18),
                         decoration: BoxDecoration(
-                          color: Colors.black,
+                          color: Color(0xFF0A0E1A),
                           borderRadius: BorderRadius.circular(18),
                         ),
                         child: Row(
@@ -507,13 +507,13 @@ class _ProfilePageState extends State<ProfilePage>
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: const Color(0xFFF3E5AB)
+                                color: const Color(0xFFF0F4FF)
                                     .withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: const Icon(
                                 Icons.verified_outlined,
-                                color: Color(0xFFF3E5AB),
+                                color: Color(0xFFF0F4FF),
                                 size: 20,
                               ),
                             ),
@@ -534,7 +534,7 @@ class _ProfilePageState extends State<ProfilePage>
                                 Text(
                                   "Active — data is being saved",
                                   style: TextStyle(
-                                    color: Color(0xFFF3E5AB),
+                                    color: Color(0xFFF0F4FF),
                                     fontWeight: FontWeight.w700,
                                     fontSize: 14,
                                   ),
@@ -567,13 +567,13 @@ class _ProfilePageState extends State<ProfilePage>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3E5AB).withValues(alpha: 0.2),
+        color: const Color(0xFFF0F4FF).withValues(alpha: 0.2),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF3E5AB), width: 1.5),
+        border: Border.all(color: const Color(0xFFF0F4FF), width: 1.5),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: Colors.black54),
+          Icon(icon, size: 18, color: Color(0x8A0A0E1A)),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -584,14 +584,14 @@ class _ProfilePageState extends State<ProfilePage>
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.5,
-                      color: Colors.black38,
+                      color: Color(0x610A0E1A),
                     )),
                 const SizedBox(height: 3),
                 Text(value,
                     style: const TextStyle(
                       fontWeight: FontWeight.w700,
                       fontSize: 15,
-                      color: Colors.black87,
+                      color: Color(0xDD0A0E1A),
                     )),
               ],
             ),
@@ -601,7 +601,7 @@ class _ProfilePageState extends State<ProfilePage>
               padding:
                   const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.black.withValues(alpha: 0.06),
+                color: Color(0xFF0A0E1A).withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: const Text(
@@ -610,7 +610,7 @@ class _ProfilePageState extends State<ProfilePage>
                     fontSize: 9,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1,
-                    color: Colors.black38),
+                    color: Color(0x610A0E1A)),
               ),
             ),
         ],
@@ -626,23 +626,23 @@ class _ProfilePageState extends State<ProfilePage>
     return TextField(
       controller: controller,
       style: const TextStyle(
-          fontWeight: FontWeight.w600, fontSize: 15, color: Colors.black),
+          fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF0A0E1A)),
       decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: Colors.black54, size: 20),
+        prefixIcon: Icon(icon, color: Color(0x8A0A0E1A), size: 20),
         labelText: label,
         labelStyle: const TextStyle(
-            color: Colors.black38, fontSize: 14, fontWeight: FontWeight.w500),
+            color: Color(0x610A0E1A), fontSize: 14, fontWeight: FontWeight.w500),
         filled: true,
-        fillColor: const Color(0xFFF3E5AB).withValues(alpha: 0.2),
+        fillColor: const Color(0xFFF0F4FF).withValues(alpha: 0.2),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide:
-              const BorderSide(color: Color(0xFFF3E5AB), width: 1.5),
+              const BorderSide(color: Color(0xFFF0F4FF), width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
           borderSide:
-              const BorderSide(color: Color(0xFFF3E5AB), width: 2),
+              const BorderSide(color: Color(0xFFF0F4FF), width: 2),
         ),
       ),
     );
@@ -662,7 +662,7 @@ class _ProfilePageState extends State<ProfilePage>
             height: 260,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFFF3E5AB).withValues(alpha: 0.35),
+              color: const Color(0xFFF0F4FF).withValues(alpha: 0.35),
             ),
           ),
         ),
@@ -674,7 +674,7 @@ class _ProfilePageState extends State<ProfilePage>
             height: 320,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFFF3E5AB).withValues(alpha: 0.15),
+              color: const Color(0xFFF0F4FF).withValues(alpha: 0.15),
             ),
           ),
         ),
@@ -692,11 +692,11 @@ class _ProfilePageState extends State<ProfilePage>
                       child: Container(
                         padding: const EdgeInsets.all(10),
                         decoration: BoxDecoration(
-                          color: Colors.black,
+                          color: Color(0xFF0A0E1A),
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: const Icon(Icons.arrow_back_ios_new,
-                            color: Color(0xFFF3E5AB), size: 16),
+                            color: Color(0xFFF0F4FF), size: 16),
                       ),
                     ),
                   ],
@@ -753,10 +753,10 @@ class _ProfilePageState extends State<ProfilePage>
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       border: Border.all(
-                          color: const Color(0xFFF3E5AB), width: 3),
+                          color: const Color(0xFFF0F4FF), width: 3),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFFF3E5AB).withValues(alpha: 0.4),
+                          color: const Color(0xFFF0F4FF).withValues(alpha: 0.4),
                           blurRadius: 20,
                           offset: const Offset(0, 6),
                         ),
@@ -765,13 +765,13 @@ class _ProfilePageState extends State<ProfilePage>
                     child: CircleAvatar(
                       radius: 52,
                       backgroundColor:
-                          const Color(0xFFF3E5AB).withValues(alpha: 0.1),
+                          const Color(0xFFF0F4FF).withValues(alpha: 0.1),
                       backgroundImage: _base64Image != null
                           ? MemoryImage(base64Decode(_base64Image!))
                           : null,
                       child: _base64Image == null
                           ? const Icon(Icons.camera_alt_outlined,
-                              color: Colors.black26, size: 28)
+                              color: Color(0x420A0E1A), size: 28)
                           : null,
                     ),
                   ),
@@ -781,9 +781,9 @@ class _ProfilePageState extends State<ProfilePage>
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: const BoxDecoration(
-                          color: Colors.black, shape: BoxShape.circle),
+                          color: Color(0xFF0A0E1A), shape: BoxShape.circle),
                       child: const Icon(Icons.edit,
-                          color: Color(0xFFF3E5AB), size: 13),
+                          color: Color(0xFFF0F4FF), size: 13),
                     ),
                   ),
                 ],
@@ -836,19 +836,19 @@ class _ProfilePageState extends State<ProfilePage>
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             decoration: BoxDecoration(
-              color: const Color(0xFFF3E5AB).withValues(alpha: 0.2),
+              color: const Color(0xFFF0F4FF).withValues(alpha: 0.2),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                  color: const Color(0xFFF3E5AB), width: 1.5),
+                  color: const Color(0xFFF0F4FF), width: 1.5),
             ),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: const BoxDecoration(
-                      color: Colors.black, shape: BoxShape.circle),
+                      color: Color(0xFF0A0E1A), shape: BoxShape.circle),
                   child: const Icon(Icons.mail_outline_rounded,
-                      color: Color(0xFFF3E5AB), size: 18),
+                      color: Color(0xFFF0F4FF), size: 18),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -860,13 +860,13 @@ class _ProfilePageState extends State<ProfilePage>
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 1.5,
-                              color: Colors.black38)),
+                              color: Color(0x610A0E1A))),
                       const SizedBox(height: 3),
                       Text(_emailController.text.trim(),
                           style: const TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
-                              color: Colors.black87),
+                              color: Color(0xDD0A0E1A)),
                           overflow: TextOverflow.ellipsis),
                     ],
                   ),
@@ -879,20 +879,20 @@ class _ProfilePageState extends State<ProfilePage>
             padding:
                 const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: Colors.black.withValues(alpha: 0.04),
+              color: Color(0xFF0A0E1A).withValues(alpha: 0.04),
               borderRadius: BorderRadius.circular(12),
             ),
             child: const Row(
               children: [
                 Icon(Icons.touch_app_rounded,
-                    size: 15, color: Colors.black38),
+                    size: 15, color: Color(0x610A0E1A)),
                 SizedBox(width: 8),
                 Expanded(
                   child: Text(
                     "We'll send a link to your email. Tap it and all your data comes back.",
                     style: TextStyle(
                         fontSize: 12,
-                        color: Colors.black45,
+                        color: Color(0x730A0E1A),
                         fontWeight: FontWeight.w500),
                   ),
                 ),
@@ -914,8 +914,8 @@ class _ProfilePageState extends State<ProfilePage>
             child: OutlinedButton(
               onPressed: _anonLoading ? null : _saveNewAnonProfile,
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.black54,
-                side: const BorderSide(color: Colors.black12),
+                foregroundColor: Color(0x8A0A0E1A),
+                side: const BorderSide(color: Color(0x1F0A0E1A)),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18)),
               ),
@@ -970,11 +970,11 @@ class _ProfilePageState extends State<ProfilePage>
                     width: 62,
                     height: 62,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFF3E5AB).withValues(alpha: 0.15),
+                      color: const Color(0xFFF0F4FF).withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.mail_rounded,
-                        color: Colors.black, size: 28),
+                        color: Color(0xFF0A0E1A), size: 28),
                   ),
                 ],
               ),
@@ -985,7 +985,7 @@ class _ProfilePageState extends State<ProfilePage>
             child: Text(
               "Waiting for you to tap the link…",
               style: TextStyle(
-                  color: Colors.black.withValues(alpha: 0.35),
+                  color: Color(0xFF0A0E1A).withValues(alpha: 0.35),
                   fontWeight: FontWeight.w600,
                   fontSize: 13),
             ),
@@ -996,10 +996,10 @@ class _ProfilePageState extends State<ProfilePage>
               onPressed: _anonLoading ? null : _sendMagicLink,
               child: const Text("Resend link",
                   style: TextStyle(
-                    color: Colors.black45,
+                    color: Color(0x730A0E1A),
                     fontWeight: FontWeight.w600,
                     decoration: TextDecoration.underline,
-                    decorationColor: Colors.black26,
+                    decorationColor: Color(0x420A0E1A),
                   )),
             ),
           ),
@@ -1040,12 +1040,12 @@ class _ProfilePageState extends State<ProfilePage>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: Colors.black,
+            color: Color(0xFF0A0E1A),
             borderRadius: BorderRadius.circular(6),
           ),
           child: Text(tag,
               style: const TextStyle(
-                  color: Color(0xFFF3E5AB),
+                  color: Color(0xFFF0F4FF),
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 2)),
@@ -1057,11 +1057,11 @@ class _ProfilePageState extends State<ProfilePage>
                 fontWeight: FontWeight.w900,
                 height: 1.05,
                 letterSpacing: -1.5,
-                color: Colors.black)),
+                color: Color(0xFF0A0E1A))),
         const SizedBox(height: 10),
         Text(subtitle,
             style: const TextStyle(
-                color: Colors.black45,
+                color: Color(0x730A0E1A),
                 fontWeight: FontWeight.w500,
                 fontSize: 14,
                 height: 1.5)),
@@ -1081,16 +1081,16 @@ class _ProfilePageState extends State<ProfilePage>
         controller: controller,
         keyboardType: keyboardType,
         style: const TextStyle(
-            fontWeight: FontWeight.w600, fontSize: 15, color: Colors.black),
+            fontWeight: FontWeight.w600, fontSize: 15, color: Color(0xFF0A0E1A)),
         decoration: InputDecoration(
-          prefixIcon: Icon(icon, color: Colors.black54, size: 20),
+          prefixIcon: Icon(icon, color: Color(0x8A0A0E1A), size: 20),
           labelText: label,
           labelStyle: const TextStyle(
-              color: Colors.black38,
+              color: Color(0x610A0E1A),
               fontSize: 14,
               fontWeight: FontWeight.w500),
           filled: true,
-          fillColor: const Color(0xFFF3E5AB).withValues(alpha: 0.12),
+          fillColor: const Color(0xFFF0F4FF).withValues(alpha: 0.12),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: const BorderSide(color: Colors.transparent),
@@ -1098,7 +1098,7 @@ class _ProfilePageState extends State<ProfilePage>
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide:
-                const BorderSide(color: Color(0xFFF3E5AB), width: 2),
+                const BorderSide(color: Color(0xFFF0F4FF), width: 2),
           ),
         ),
       ),
@@ -1116,20 +1116,20 @@ class _ProfilePageState extends State<ProfilePage>
       child: ElevatedButton(
         onPressed: isLoading ? null : onTap,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.black,
-          foregroundColor: const Color(0xFFF3E5AB),
-          disabledBackgroundColor: Colors.black54,
+          backgroundColor: Color(0xFF0A0E1A),
+          foregroundColor: const Color(0xFFF0F4FF),
+          disabledBackgroundColor: Color(0x8A0A0E1A),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18)),
           elevation: 6,
-          shadowColor: Colors.black.withValues(alpha: 0.3),
+          shadowColor: Color(0xFF0A0E1A).withValues(alpha: 0.3),
         ),
         child: isLoading
             ? const SizedBox(
                 width: 22,
                 height: 22,
                 child: CircularProgressIndicator(
-                    color: Color(0xFFF3E5AB), strokeWidth: 2.5))
+                    color: Color(0xFFF0F4FF), strokeWidth: 2.5))
             : Text(label,
                 style: const TextStyle(
                     fontWeight: FontWeight.w900,
@@ -1152,8 +1152,8 @@ class _SweepRingPainter extends CustomPainter {
       ..strokeWidth = 3
       ..shader = SweepGradient(
         colors: [
-          const Color(0xFFF3E5AB).withValues(alpha: 0),
-          const Color(0xFFF3E5AB),
+          const Color(0xFFF0F4FF).withValues(alpha: 0),
+          const Color(0xFFF0F4FF),
         ],
       ).createShader(rect);
     canvas.drawArc(rect, 0, pi * 1.8, false, paint);

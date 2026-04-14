@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:app_links/app_links.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -20,9 +21,9 @@ import 'global_stt_wrapper.dart';
 import 'custom_commands_provider.dart';
 import 'analytics_service.dart';
 import 'floating_chat_bot.dart';
+import 'notification_service.dart';
 
 final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
-final ValueNotifier<bool> showChatBotNotifier = ValueNotifier<bool>(false);
 
 // ─────────────────────────────────────────────
 //  AUTH WRAPPER - Listens to Firebase auth state
@@ -63,10 +64,19 @@ void main() async {
   await dotenv.load(fileName: 'project.env');
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+  
+  // Force enable Offline Persistence for the entire Database
+  FirebaseFirestore.instance.settings = const Settings(
+    persistenceEnabled: true,
+    cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
+  );
 
   // Load saved analytics data and record this app launch
   await AnalyticsService.instance.load();
   await AnalyticsService.instance.recordAppOpen();
+
+  // Initialize notifications service
+  await NotificationService.init();
 
   // Auto-sync analytics to Firebase if needed (daily for authenticated users)
   AnalyticsService.instance.autoSyncIfNeeded();
@@ -136,9 +146,6 @@ class _TheVoxAppState extends State<TheVoxApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: globalNavigatorKey,
-      builder: (context, child) {
-        return FloatingBotWrapper(child: child ?? const SizedBox.shrink());
-      },
       // Wrap the SplashScreen with the GlobalSttWrapper
       home: const GlobalSttWrapper(child: SplashScreen()),
       routes: {

@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'pdf_service.dart';
 import 'ai_service.dart';
 
 class AiResultPage extends StatefulWidget {
@@ -140,6 +143,36 @@ class _AiResultPageState extends State<AiResultPage> {
     }
   }
 
+  // ── Save to Firebase ───────────────────────────
+  Future<void> _saveAssessment() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in to save assessments.')));
+      return;
+    }
+    
+    if (_flashcards == null || _flashcards!.isEmpty) return;
+
+    setState(() => _loading = true);
+    
+    try {
+      final data = _flashcards!.map((f) => {'question': f.question, 'answer': f.answer}).toList();
+      await FirebaseFirestore.instance.collection('assessments').add({
+        'userId': user.uid,
+        'userEmail': user.email,
+        'documentTitle': widget.documentTitle,
+        'createdAt': FieldValue.serverTimestamp(),
+        'questions': data,
+      });
+      
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Assessment saved successfully!')));
+    } catch(e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving: $e')));
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
   // ── Speaker button ─────────────────────────────
   Widget _buildSpeakerButton({bool compact = false}) {
     return GestureDetector(
@@ -152,8 +185,8 @@ class _AiResultPageState extends State<AiResultPage> {
         ),
         decoration: BoxDecoration(
           color: _isSpeaking
-              ? const Color(0xFFD4B96A)
-              : Colors.black.withOpacity(0.08),
+              ? const Color(0xFF4B9EFF)
+              : Color(0xFF0A0E1A).withOpacity(0.08),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -162,7 +195,7 @@ class _AiResultPageState extends State<AiResultPage> {
             Icon(
               _isSpeaking ? Icons.stop_rounded : Icons.volume_up_rounded,
               size: 15,
-              color: _isSpeaking ? Colors.black : Colors.black54,
+              color: _isSpeaking ? Color(0xFF0A0E1A) : Color(0x8A0A0E1A),
             ),
             if (!compact) ...[
               const SizedBox(width: 5),
@@ -171,7 +204,7 @@ class _AiResultPageState extends State<AiResultPage> {
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: _isSpeaking ? Colors.black : Colors.black54,
+                  color: _isSpeaking ? Color(0xFF0A0E1A) : Color(0x8A0A0E1A),
                 ),
               ),
             ],
@@ -242,7 +275,7 @@ class _AiResultPageState extends State<AiResultPage> {
                   '•  ',
                   style: TextStyle(
                     fontSize: 15,
-                    color: Color(0xFF7A6130),
+                    color: Color(0xFF4B9EFF),
                     fontWeight: FontWeight.bold,
                   ),
                 ),
@@ -252,7 +285,7 @@ class _AiResultPageState extends State<AiResultPage> {
                     style: const TextStyle(
                       fontSize: 15,
                       height: 1.55,
-                      color: Colors.black87,
+                      color: Color(0xDD0A0E1A),
                     ),
                   ),
                 ),
@@ -263,7 +296,7 @@ class _AiResultPageState extends State<AiResultPage> {
                     style: const TextStyle(
                       fontSize: 15,
                       height: 1.65,
-                      color: Colors.black87,
+                      color: Color(0xDD0A0E1A),
                     ),
                   ),
                 ),
@@ -315,7 +348,7 @@ class _AiResultPageState extends State<AiResultPage> {
               value: (_currentCard + 1) / cards.length,
               backgroundColor: Colors.grey[200],
               valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFFD4B96A),
+                Color(0xFF4B9EFF),
               ),
               minHeight: 4,
             ),
@@ -347,14 +380,14 @@ class _AiResultPageState extends State<AiResultPage> {
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.08),
+                      color: Color(0xFF0A0E1A).withOpacity(0.08),
                       blurRadius: 20,
                       offset: const Offset(0, 6),
                     ),
                   ],
                   border: Border.all(
                     color: isFlipped
-                        ? const Color(0xFFD4B96A).withOpacity(0.4)
+                        ? const Color(0xFF4B9EFF).withOpacity(0.4)
                         : Colors.grey.withOpacity(0.15),
                   ),
                 ),
@@ -368,7 +401,7 @@ class _AiResultPageState extends State<AiResultPage> {
                       ),
                       decoration: BoxDecoration(
                         color: isFlipped
-                            ? const Color(0xFFD4B96A).withOpacity(0.15)
+                            ? const Color(0xFF4B9EFF).withOpacity(0.15)
                             : Colors.grey[100],
                         borderRadius: BorderRadius.circular(20),
                       ),
@@ -379,7 +412,7 @@ class _AiResultPageState extends State<AiResultPage> {
                           fontWeight: FontWeight.w800,
                           letterSpacing: 1.5,
                           color: isFlipped
-                              ? const Color(0xFFD4B96A)
+                              ? const Color(0xFF4B9EFF)
                               : Colors.grey[500],
                         ),
                       ),
@@ -392,7 +425,7 @@ class _AiResultPageState extends State<AiResultPage> {
                         fontSize: 17,
                         height: 1.6,
                         fontWeight: FontWeight.w600,
-                        color: isFlipped ? Colors.white : Colors.black87,
+                        color: isFlipped ? Colors.white : Color(0xDD0A0E1A),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -439,10 +472,10 @@ class _AiResultPageState extends State<AiResultPage> {
                         }
                       : null,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.black,
+                    foregroundColor: Color(0xFF0A0E1A),
                     side: BorderSide(
                       color: _currentCard > 0
-                          ? Colors.black
+                          ? Color(0xFF0A0E1A)
                           : Colors.grey[300]!,
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
@@ -476,8 +509,8 @@ class _AiResultPageState extends State<AiResultPage> {
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: const Color(0xFFF3E5AB),
+                    backgroundColor: Color(0xFF0A0E1A),
+                    foregroundColor: const Color(0xFFF0F4FF),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
@@ -501,10 +534,10 @@ class _AiResultPageState extends State<AiResultPage> {
   @override
   Widget build(BuildContext context) {
     final isSummary = widget.mode == 'summary';
-    final title = isSummary ? 'Summary' : 'Flashcards';
+    final title = isSummary ? 'Summary' : 'Assessment';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3E5AB),
+      backgroundColor: const Color(0xFFF0F4FF),
       body: SafeArea(
         child: Column(
           children: [
@@ -550,6 +583,58 @@ class _AiResultPageState extends State<AiResultPage> {
                   if (!_loading && _error == null && isSummary)
                     _buildSpeakerButton(),
                   const SizedBox(width: 6),
+                  
+                  // Save button (assessments only)
+                  if (!_loading && _error == null && !isSummary)
+                    GestureDetector(
+                      onTap: _saveAssessment,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.green.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.bookmark_add_outlined, size: 16, color: Colors.green),
+                            SizedBox(width: 4),
+                            Text('Save', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(width: 6),
+                  
+                  // Download PDF button
+                  if (!_loading && _error == null)
+                    GestureDetector(
+                      onTap: () {
+                        if (isSummary && _summary != null) {
+                          PdfService.exportSummaryPdf(context, widget.documentTitle, _summary!);
+                        } else if (!isSummary && _flashcards != null) {
+                          final qList = _flashcards!.map((f) => {'question': f.question, 'answer': f.answer}).toList();
+                          PdfService.exportAssessmentPdf(context, widget.documentTitle, qList);
+                        }
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.picture_as_pdf_outlined, size: 16, color: Colors.blue),
+                            SizedBox(width: 4),
+                            Text('PDF', style: TextStyle(color: Colors.blue, fontSize: 11, fontWeight: FontWeight.bold)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  const SizedBox(width: 6),
+                  
                   // Retry
                   if (!_loading)
                     GestureDetector(
@@ -557,7 +642,7 @@ class _AiResultPageState extends State<AiResultPage> {
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.black.withOpacity(0.08),
+                          color: Color(0xFF0A0E1A).withOpacity(0.08),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Icon(Icons.refresh, size: 20),
@@ -567,7 +652,7 @@ class _AiResultPageState extends State<AiResultPage> {
               ),
             ),
 
-            const Divider(height: 1, color: Colors.black12),
+            const Divider(height: 1, color: Color(0x1F0A0E1A)),
 
             // Body
             Expanded(
@@ -576,13 +661,13 @@ class _AiResultPageState extends State<AiResultPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const CircularProgressIndicator(color: Colors.black),
+                          const CircularProgressIndicator(color: Color(0xFF0A0E1A)),
                           const SizedBox(height: 16),
                           Text(
                             isSummary
                                 ? 'Generating summary...'
-                                : 'Creating ${widget.cardCount} flashcards...',
-                            style: const TextStyle(color: Colors.black54),
+                                : 'Creating ${widget.cardCount} questions...',
+                            style: const TextStyle(color: Color(0x8A0A0E1A)),
                           ),
                         ],
                       ),
@@ -597,7 +682,7 @@ class _AiResultPageState extends State<AiResultPage> {
                             const Icon(
                               Icons.error_outline,
                               size: 48,
-                              color: Colors.black38,
+                              color: Color(0x610A0E1A),
                             ),
                             const SizedBox(height: 16),
                             const Text(
@@ -612,7 +697,7 @@ class _AiResultPageState extends State<AiResultPage> {
                               _error!,
                               textAlign: TextAlign.center,
                               style: const TextStyle(
-                                color: Colors.black54,
+                                color: Color(0x8A0A0E1A),
                                 fontSize: 13,
                               ),
                             ),
@@ -620,8 +705,8 @@ class _AiResultPageState extends State<AiResultPage> {
                             ElevatedButton(
                               onPressed: _fetch,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.black,
-                                foregroundColor: const Color(0xFFF3E5AB),
+                                backgroundColor: Color(0xFF0A0E1A),
+                                foregroundColor: const Color(0xFFF0F4FF),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),

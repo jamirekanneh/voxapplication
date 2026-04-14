@@ -122,18 +122,18 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFFD4B96A).withOpacity(0.4),
+              color: const Color(0xFF4B9EFF).withOpacity(0.4),
               blurRadius: 15,
               spreadRadius: 2,
             ),
           ],
-          border: Border.all(color: const Color(0xFFD4B96A), width: 2),
+          border: Border.all(color: const Color(0xFF4B9EFF), width: 2),
         ),
         child: const Center(
           child: Text(
             'V',
             style: TextStyle(
-              color: Color(0xFFD4B96A),
+              color: Color(0xFF4B9EFF),
               fontSize: 28,
               fontWeight: FontWeight.w900,
               fontFamily: 'Serif',
@@ -153,12 +153,12 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.2),
+            color: Color(0xFF0A0E1A).withOpacity(0.2),
             blurRadius: 20,
             spreadRadius: 5,
           ),
         ],
-        border: Border.all(color: const Color(0xFFD4B96A).withOpacity(0.5)),
+        border: Border.all(color: const Color(0xFF4B9EFF).withOpacity(0.5)),
       ),
       child: Column(
         children: [
@@ -178,7 +178,7 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
                   child: Text(
                     'Vox Assistant',
                     style: TextStyle(
-                      color: Color(0xFFD4B96A),
+                      color: Color(0xFF4B9EFF),
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
@@ -213,7 +213,7 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: Colors.black12)),
+              border: Border(top: BorderSide(color: Color(0x1F0A0E1A))),
             ),
             child: Row(
               children: [
@@ -230,7 +230,7 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
                 ),
                 IconButton(
                   onPressed: _sendMessage,
-                  icon: const Icon(Icons.send_rounded, color: Color(0xFFD4B96A)),
+                  icon: const Icon(Icons.send_rounded, color: Color(0xFF4B9EFF)),
                 ),
               ],
             ),
@@ -247,7 +247,7 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
         margin: const EdgeInsets.symmetric(vertical: 4),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isUser ? const Color(0xFFD4B96A) : const Color(0xFFF3F3F3),
+          color: isUser ? const Color(0xFF4B9EFF) : const Color(0xFFF3F3F3),
           borderRadius: BorderRadius.circular(15).copyWith(
             bottomRight: isUser ? Radius.zero : null,
             bottomLeft: !isUser ? Radius.zero : null,
@@ -256,7 +256,7 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
         child: Text(
           content,
           style: TextStyle(
-            color: isUser ? Colors.black : Colors.black87,
+            color: isUser ? Color(0xFF0A0E1A) : Color(0xDD0A0E1A),
             fontSize: 13,
           ),
         ),
@@ -276,7 +276,7 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
         ),
         child: const Text(
           'Typing...',
-          style: TextStyle(color: Colors.black45, fontSize: 11, fontStyle: FontStyle.italic),
+          style: TextStyle(color: Color(0x730A0E1A), fontSize: 11, fontStyle: FontStyle.italic),
         ),
       ),
     );

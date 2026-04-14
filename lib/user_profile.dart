@@ -421,7 +421,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   Future<void> _onStartFreshTapped() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      barrierColor: Colors.black.withValues(alpha: 0.6),
+      barrierColor: Color(0xFF0A0E1A).withValues(alpha: 0.6),
       builder: (ctx) => Dialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -458,14 +458,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   fontWeight: FontWeight.w900,
                   letterSpacing: -1,
                   height: 1.1,
-                  color: Colors.black,
+                  color: Color(0xFF0A0E1A),
                 ),
               ),
               const SizedBox(height: 12),
               const Text(
                 "All your previous Vox activity — notes, library files, and profile — linked to this email will be permanently deleted. This cannot be undone.",
                 style: TextStyle(
-                  color: Colors.black54,
+                  color: Color(0x8A0A0E1A),
                   fontSize: 14,
                   height: 1.6,
                   fontWeight: FontWeight.w500,
@@ -510,8 +510,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(ctx, false),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.black,
-                        side: const BorderSide(color: Colors.black26),
+                        foregroundColor: Color(0xFF0A0E1A),
+                        side: const BorderSide(color: Color(0x420A0E1A)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -798,13 +798,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: Color(0xFF0A0E1A)),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           'Edit Profile',
           style: TextStyle(
-            color: Colors.black,
+            color: Color(0xFF0A0E1A),
             fontWeight: FontWeight.w600,
           ),
         ),
@@ -916,7 +916,7 @@ class _ProfileFormView extends StatelessWidget {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 24),
                 decoration: BoxDecoration(
-                  color: Colors.black.withValues(alpha: 0.1),
+                  color: Color(0xFF0A0E1A).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
@@ -926,7 +926,7 @@ class _ProfileFormView extends StatelessWidget {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.black,
+                    color: Color(0xFF0A0E1A),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
@@ -950,7 +950,7 @@ class _ProfileFormView extends StatelessWidget {
             const Text(
               "Without an account, nothing you do in Vox will be saved. If you close the app your activity is gone forever.",
               style: TextStyle(
-                color: Colors.black54,
+                color: Color(0x8A0A0E1A),
                 fontSize: 14,
                 fontWeight: FontWeight.w500,
                 height: 1.6,
@@ -968,7 +968,7 @@ class _ProfileFormView extends StatelessWidget {
                   Icon(
                     Icons.info_outline_rounded,
                     size: 15,
-                    color: Colors.black54,
+                    color: Color(0x8A0A0E1A),
                   ),
                   SizedBox(width: 8),
                   Expanded(
@@ -976,7 +976,7 @@ class _ProfileFormView extends StatelessWidget {
                       "You can always add your details later from the menu.",
                       style: TextStyle(
                         fontSize: 12,
-                        color: Colors.black54,
+                        color: Color(0x8A0A0E1A),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -991,8 +991,8 @@ class _ProfileFormView extends StatelessWidget {
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(context),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.black,
-                      side: const BorderSide(color: Colors.black26),
+                      foregroundColor: Color(0xFF0A0E1A),
+                      side: const BorderSide(color: Color(0x420A0E1A)),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
                       ),
@@ -1022,7 +1022,7 @@ class _ProfileFormView extends StatelessWidget {
                       }
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.black,
+                      backgroundColor: Color(0xFF0A0E1A),
                       foregroundColor: VoxColors.yellow,
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(16),
@@ -1088,7 +1088,7 @@ class _ProfileFormView extends StatelessWidget {
                       child: base64Image == null
                           ? const Icon(
                               Icons.camera_alt_outlined,
-                              color: Colors.black26,
+                              color: Color(0x420A0E1A),
                               size: 28,
                             )
                           : null,
@@ -1100,7 +1100,7 @@ class _ProfileFormView extends StatelessWidget {
                     child: Container(
                       padding: const EdgeInsets.all(6),
                       decoration: const BoxDecoration(
-                        color: Colors.black,
+                        color: Color(0xFF0A0E1A),
                         shape: BoxShape.circle,
                       ),
                       child: const Icon(
@@ -1210,10 +1210,10 @@ class _ProfileFormView extends StatelessWidget {
                 child: const Text(
                   "Continue without account",
                   style: TextStyle(
-                    color: Colors.black38,
+                    color: Color(0x610A0E1A),
                     fontWeight: FontWeight.w600,
                     decoration: TextDecoration.underline,
-                    decorationColor: Colors.black26,
+                    decorationColor: Color(0x420A0E1A),
                   ),
                 ),
               ),
@@ -1279,7 +1279,7 @@ class _ReturningUserView extends StatelessWidget {
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.w600,
-                          color: Colors.black87,
+                          color: Color(0xDD0A0E1A),
                         ),
                       ),
                     ),
@@ -1298,7 +1298,7 @@ class _ReturningUserView extends StatelessWidget {
                   "We found an existing profile with this email.",
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.black54,
+                    color: Color(0x8A0A0E1A),
                     height: 1.5,
                   ),
                 ),
@@ -1364,7 +1364,7 @@ class _AwaitingLinkView extends StatelessWidget {
               borderRadius: BorderRadius.circular(24),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.05),
+                  color: Color(0xFF0A0E1A).withValues(alpha: 0.05),
                   blurRadius: 20,
                   offset: const Offset(0, 4),
                 ),
@@ -1398,7 +1398,7 @@ class _AwaitingLinkView extends StatelessWidget {
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 14,
-                    color: Colors.black54,
+                    color: Color(0x8A0A0E1A),
                     height: 1.5,
                   ),
                 ),
@@ -1465,7 +1465,7 @@ class _VoxHeader extends StatelessWidget {
               fontSize: 42,
               fontWeight: FontWeight.w900,
               height: 1.1,
-              color: Colors.black,
+              color: Color(0xFF0A0E1A),
             ),
           ),
           const SizedBox(height: 12),
@@ -1473,7 +1473,7 @@ class _VoxHeader extends StatelessWidget {
             subtitle,
             style: const TextStyle(
               fontSize: 15,
-              color: Colors.black54,
+              color: Color(0x8A0A0E1A),
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -1512,7 +1512,7 @@ class _VoxTextField extends StatelessWidget {
         ),
         decoration: InputDecoration(
           labelText: label,
-          prefixIcon: Icon(icon, size: 20, color: Colors.black45),
+          prefixIcon: Icon(icon, size: 20, color: Color(0x730A0E1A)),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(14),
             borderSide: BorderSide(color: Colors.grey.shade300),
@@ -1552,7 +1552,7 @@ class _VoxButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: isLoading ? null : onTap,
         style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.black,
+          backgroundColor: Color(0xFF0A0E1A),
           foregroundColor: VoxColors.yellow,
           minimumSize: const Size(double.infinity, 54),
           shape: RoundedRectangleBorder(
@@ -1602,7 +1602,7 @@ class _DividerRow extends StatelessWidget {
             child: Text(
               "or",
               style: TextStyle(
-                color: Colors.black38,
+                color: Color(0x610A0E1A),
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
               ),
@@ -1636,7 +1636,7 @@ class _GoogleButton extends StatelessWidget {
       child: OutlinedButton(
         onPressed: isLoading ? null : onTap,
         style: OutlinedButton.styleFrom(
-          foregroundColor: Colors.black87,
+          foregroundColor: Color(0xDD0A0E1A),
           side: BorderSide(color: Colors.grey.shade300),
           minimumSize: const Size(double.infinity, 54),
           shape: RoundedRectangleBorder(

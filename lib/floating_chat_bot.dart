@@ -63,17 +63,13 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
     return Stack(
       children: [
         widget.child,
-        ValueListenableBuilder<bool>(
-          valueListenable: showChatBotNotifier,
-          builder: (context, show, child) {
-            if (!show) return const SizedBox.shrink();
-            return Positioned(
-              left: position.dx,
-              top: position.dy,
-              child: GestureDetector(
-                onPanUpdate: _onPanUpdate,
-                onPanEnd: _onPanEnd,
-                onTap: _openChat,
+        Positioned(
+          left: position.dx,
+          top: position.dy,
+          child: GestureDetector(
+            onPanUpdate: _onPanUpdate,
+            onPanEnd: _onPanEnd,
+            onTap: _openChat,
                 child: Material(
                   color: Colors.transparent,
                   child: Container(
@@ -95,7 +91,7 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
                       ),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: Color(0xFF0A0E1A).withOpacity(0.3),
                           blurRadius: 12,
                           offset: const Offset(0, 6),
                         ),
@@ -111,7 +107,7 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
                           letterSpacing: 1.5,
                           shadows: [
                             Shadow(
-                              color: Colors.black26,
+                              color: Color(0x420A0E1A),
                               blurRadius: 4,
                               offset: Offset(0, 2),
                             ),
@@ -122,11 +118,9 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
                   ),
                 ),
               ),
-            );
-          },
-        ),
-      ],
-    );
+            ),
+          ],
+        );
   }
 }
 

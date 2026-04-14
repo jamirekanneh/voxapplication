@@ -6,6 +6,9 @@ import 'tts_service.dart';
 import 'language_provider.dart';
 import 'ai_result_page.dart';
 import 'analytics_service.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'notification_service.dart';
+import 'pdf_service.dart';
 
 class ReaderPage extends StatefulWidget {
   final String title;
@@ -356,12 +359,12 @@ class _ReaderPageState extends State<ReaderPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFFF3E5AB),
+          backgroundColor: const Color(0xFFF0F4FF),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
           title: const Text(
-            'How many flashcards?',
+            'How many questions?',
             style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
           ),
           content: Column(
@@ -372,7 +375,7 @@ class _ReaderPageState extends State<ReaderPage> {
                 style: const TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
-                  color: Color(0xFF7A6130),
+                  color: Color(0xFF4B9EFF),
                 ),
               ),
               Slider(
@@ -380,7 +383,7 @@ class _ReaderPageState extends State<ReaderPage> {
                 min: 5,
                 max: 20,
                 divisions: 15,
-                activeColor: Colors.black,
+                activeColor: Color(0xFF0A0E1A),
                 inactiveColor: Colors.grey[300],
                 onChanged: (v) => setDialogState(() => selected = v.round()),
               ),
@@ -404,14 +407,14 @@ class _ReaderPageState extends State<ReaderPage> {
               onPressed: () => Navigator.pop(ctx),
               child: const Text(
                 'Cancel',
-                style: TextStyle(color: Colors.black54),
+                style: TextStyle(color: Color(0x8A0A0E1A)),
               ),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, selected),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.black,
-                foregroundColor: const Color(0xFFF3E5AB),
+                backgroundColor: Color(0xFF0A0E1A),
+                foregroundColor: const Color(0xFFF0F4FF),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -458,7 +461,7 @@ class _ReaderPageState extends State<ReaderPage> {
         width: 48,
         height: 48,
         decoration: BoxDecoration(
-          color: bg ?? Colors.grey[800],
+          color: bg ?? Color(0xFF1c2333),
           shape: BoxShape.circle,
         ),
         child: Icon(icon, color: Colors.white, size: 24),
@@ -472,7 +475,7 @@ class _ReaderPageState extends State<ReaderPage> {
     if (text.isEmpty) {
       return const Text(
         'No text content available for this file.',
-        style: TextStyle(fontSize: 16, height: 1.8, color: Colors.black54),
+        style: TextStyle(fontSize: 16, height: 1.8, color: Color(0x8A0A0E1A)),
       );
     }
 
@@ -491,7 +494,7 @@ class _ReaderPageState extends State<ReaderPage> {
         style: const TextStyle(
           fontSize: 16,
           height: 1.8,
-          color: Colors.black87,
+          color: Color(0xDD0A0E1A),
         ),
       );
     }
@@ -501,7 +504,7 @@ class _ReaderPageState extends State<ReaderPage> {
         style: const TextStyle(
           fontSize: 16,
           height: 1.8,
-          color: Colors.black87,
+          color: Color(0xDD0A0E1A),
         ),
         children: [
           if (sStart > 0) TextSpan(text: text.substring(0, sStart)),
@@ -511,7 +514,7 @@ class _ReaderPageState extends State<ReaderPage> {
               backgroundColor: _hasPinnedHighlight
                   ? const Color(0xFFFFC107)
                   : const Color(0xFFFFE066),
-              color: Colors.black,
+              color: Color(0xFF0A0E1A),
               fontWeight: FontWeight.w600,
             ),
           ),
@@ -529,79 +532,156 @@ class _ReaderPageState extends State<ReaderPage> {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.black.withOpacity(0.08)),
+        border: Border.all(color: Color(0xFF0A0E1A).withOpacity(0.08)),
       ),
-      child: Row(
-        children: [
-          const Icon(Icons.auto_awesome, size: 15, color: Color(0xFF7A6130)),
-          const SizedBox(width: 8),
-          const Text(
-            'AI Tools',
-            style: TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 12,
-              color: Color(0xFF7A6130),
-            ),
-          ),
-          const Spacer(),
-          // Summarize button
-          GestureDetector(
-            onTap: () => _openAiPage('summary'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.circular(20),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(
+          children: [
+            const Icon(Icons.auto_awesome, size: 15, color: Color(0xFF4B9EFF)),
+            const SizedBox(width: 8),
+            const Text(
+              'Actions',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 12,
+                color: Color(0xFF4B9EFF),
               ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.summarize_outlined,
-                    color: Color(0xFFF3E5AB),
-                    size: 13,
-                  ),
-                  SizedBox(width: 5),
-                  Text(
-                    'Summarize',
-                    style: TextStyle(
-                      color: Color(0xFFF3E5AB),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+            ),
+            const SizedBox(width: 12),
+            // Summarize button
+            GestureDetector(
+              onTap: () => _openAiPage('summary'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Color(0xFF0A0E1A),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.summarize_outlined,
+                      color: Color(0xFFF0F4FF),
+                      size: 13,
                     ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Flashcards button
-          GestureDetector(
-            onTap: () => _openAiPage('flashcards'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-              decoration: BoxDecoration(
-                color: const Color(0xFFD4B96A),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.style_outlined, color: Colors.black, size: 13),
-                  SizedBox(width: 5),
-                  Text(
-                    'Flashcards',
-                    style: TextStyle(
-                      color: Colors.black,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
+                    SizedBox(width: 5),
+                    Text(
+                      'Summarize',
+                      style: TextStyle(
+                        color: Color(0xFFF0F4FF),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            // Assessment button
+            GestureDetector(
+              onTap: () => _openAiPage('flashcards'),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4B9EFF),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.style_outlined, color: Color(0xFF0A0E1A), size: 13),
+                    SizedBox(width: 5),
+                    Text(
+                      'Assessment',
+                      style: TextStyle(
+                        color: Color(0xFF0A0E1A),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // PDF Button
+            GestureDetector(
+              onTap: () => PdfService.exportSummaryPdf(context, widget.title, widget.content),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.blue.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.picture_as_pdf_outlined, color: Colors.blue, size: 13),
+                    SizedBox(width: 5),
+                    Text(
+                      'PDF',
+                      style: TextStyle(
+                        color: Colors.blue,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Reminder Button
+            GestureDetector(
+              onTap: () async {
+                final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                if (time != null && mounted) {
+                  final now = DateTime.now();
+                  var scheduledTime = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+                  if (scheduledTime.isBefore(now)) {
+                    scheduledTime = scheduledTime.add(const Duration(days: 1));
+                  }
+                  
+                  await NotificationService.scheduleReminder(
+                    id: scheduledTime.millisecondsSinceEpoch ~/ 1000,
+                    title: 'Study Reminder: ${widget.title}',
+                    body: 'It is time to dive back into your reading material!',
+                    scheduledTime: scheduledTime,
+                  );
+                  
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('Reminder set for ${time.format(context)}')),
+                  );
+                }
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.access_alarm, color: Colors.orange, size: 13),
+                    SizedBox(width: 5),
+                    Text(
+                      'Remind',
+                      style: TextStyle(
+                        color: Colors.orange,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -612,7 +692,7 @@ class _ReaderPageState extends State<ReaderPage> {
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        color: Color(0xFF141A29),
         borderRadius: BorderRadius.circular(16),
       ),
       child: Column(
@@ -620,12 +700,12 @@ class _ReaderPageState extends State<ReaderPage> {
         children: [
           Row(
             children: [
-              const Icon(Icons.mic, color: Color(0xFFD4B96A), size: 14),
+              const Icon(Icons.mic, color: Color(0xFF4B9EFF), size: 14),
               const SizedBox(width: 6),
               const Text(
                 'Voice Commands',
                 style: TextStyle(
-                  color: Color(0xFFD4B96A),
+                  color: Color(0xFF4B9EFF),
                   fontWeight: FontWeight.bold,
                   fontSize: 12,
                 ),
@@ -710,7 +790,7 @@ class _ReaderPageState extends State<ReaderPage> {
                             ? 'Voice commands active'
                             : 'Voice commands off'),
                   style: TextStyle(
-                    color: Colors.grey[800],
+                    color: Color(0xFF1c2333),
                     fontWeight: FontWeight.w600,
                     fontSize: 12,
                   ),
@@ -793,7 +873,7 @@ class _ReaderPageState extends State<ReaderPage> {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        color: Color(0xFF141A29),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Column(
@@ -861,14 +941,14 @@ class _ReaderPageState extends State<ReaderPage> {
                     ),
                     decoration: BoxDecoration(
                       color: selected
-                          ? const Color(0xFFD4B96A)
-                          : Colors.grey[800],
+                          ? const Color(0xFF4B9EFF)
+                          : Color(0xFF1c2333),
                       borderRadius: BorderRadius.circular(30),
                     ),
                     child: Text(
                       '${s}x',
                       style: TextStyle(
-                        color: selected ? Colors.black : Colors.white,
+                        color: selected ? Color(0xFF0A0E1A) : Colors.white,
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -882,7 +962,7 @@ class _ReaderPageState extends State<ReaderPage> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: Colors.grey[850],
+              color: Color(0xFF141A29),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
@@ -909,7 +989,7 @@ class _ReaderPageState extends State<ReaderPage> {
                 Switch(
                   value: _autoSpeed,
                   onChanged: (v) => setState(() => _autoSpeed = v),
-                  activeThumbColor: const Color(0xFFD4B96A),
+                  activeThumbColor: const Color(0xFF4B9EFF),
                   inactiveTrackColor: Colors.grey[700],
                 ),
               ],
@@ -928,7 +1008,7 @@ class _ReaderPageState extends State<ReaderPage> {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
-        color: Colors.grey[900],
+        color: Color(0xFF141A29),
         borderRadius: _showSpeedPanel
             ? BorderRadius.zero
             : const BorderRadius.vertical(top: Radius.circular(28)),
@@ -943,7 +1023,7 @@ class _ReaderPageState extends State<ReaderPage> {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: Colors.grey[800],
+                color: Color(0xFF1c2333),
                 shape: BoxShape.circle,
               ),
               child: Center(
@@ -966,12 +1046,12 @@ class _ReaderPageState extends State<ReaderPage> {
               width: 64,
               height: 64,
               decoration: const BoxDecoration(
-                color: Color(0xFFD4B96A),
+                color: Color(0xFF4B9EFF),
                 shape: BoxShape.circle,
               ),
               child: Icon(
                 tts.isPlaying ? Icons.pause : Icons.play_arrow,
-                color: Colors.black,
+                color: Color(0xFF0A0E1A),
                 size: 34,
               ),
             ),
@@ -988,15 +1068,15 @@ class _ReaderPageState extends State<ReaderPage> {
               height: 52,
               decoration: BoxDecoration(
                 color: _showSpeedPanel
-                    ? const Color(0xFFD4B96A)
-                    : Colors.grey[800],
+                    ? const Color(0xFF4B9EFF)
+                    : Color(0xFF1c2333),
                 shape: BoxShape.circle,
               ),
               child: Center(
                 child: Text(
                   rate.toStringAsFixed(2),
                   style: TextStyle(
-                    color: _showSpeedPanel ? Colors.black : Colors.white,
+                    color: _showSpeedPanel ? Color(0xFF0A0E1A) : Colors.white,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
@@ -1016,7 +1096,7 @@ class _ReaderPageState extends State<ReaderPage> {
     final locale = context.watch<LanguageProvider>().ttsLocale;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3E5AB),
+      backgroundColor: const Color(0xFFF0F4FF),
       body: SafeArea(
         child: Column(
           children: [
@@ -1056,7 +1136,7 @@ class _ReaderPageState extends State<ReaderPage> {
               value: tts.progress,
               backgroundColor: Colors.grey[300],
               valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFFD4B96A),
+                Color(0xFF4B9EFF),
               ),
               minHeight: 3,
             ),

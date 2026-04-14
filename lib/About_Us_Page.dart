@@ -5,8 +5,8 @@ import 'language_provider.dart';
 class AboutUsPage extends StatelessWidget {
   const AboutUsPage({super.key});
 
-  static const Color primaryGold = Color(0xFFD4B96A);
-  static const Color creamBg = Color(0xFFF3E5AB);
+  static const Color primaryGold = Color(0xFF4B9EFF);
+  static const Color creamBg = Color(0xFFF0F4FF);
   static const Color cardGrey = Color(0xFFE8E8E8);
   static const Color darkText = Color(0xFF1A1A1A);
 
@@ -183,7 +183,7 @@ class AboutUsPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.08),
+            color: Color(0xFF0A0E1A).withValues(alpha: 0.08),
             blurRadius: 8,
             offset: const Offset(0, 3),
           ),
@@ -244,7 +244,7 @@ class AboutUsPage extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.black26,
+                            color: Color(0x420A0E1A),
                             borderRadius: BorderRadius.circular(5),
                           ),
                           child: const Text(
@@ -264,7 +264,7 @@ class AboutUsPage extends StatelessWidget {
                     style: const TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: Colors.black87,
+                      color: Color(0xDD0A0E1A),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -291,7 +291,7 @@ class AboutUsPage extends StatelessWidget {
                     resp,
                     style: const TextStyle(
                       fontSize: 11,
-                      color: Colors.black54,
+                      color: Color(0x8A0A0E1A),
                       height: 1.3,
                       fontWeight: FontWeight.w500,
                     ),
@@ -367,7 +367,7 @@ class AboutUsPage extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.6,
-                    color: Colors.black87,
+                    color: Color(0xDD0A0E1A),
                   ),
                 ),
               ],
@@ -407,7 +407,7 @@ class AboutUsPage extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.6,
-                  color: Colors.black87,
+                  color: Color(0xDD0A0E1A),
                 ),
               ),
             ],
@@ -444,7 +444,7 @@ class AboutUsPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
+            color: Color(0xFF0A0E1A).withValues(alpha: 0.04),
             blurRadius: 4,
             offset: const Offset(0, 2),
           ),

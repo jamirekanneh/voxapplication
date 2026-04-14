@@ -304,7 +304,7 @@ class TtsService extends ChangeNotifier {
 
     await showModalBottomSheet(
       context: context,
-      backgroundColor: Colors.grey[900],
+      backgroundColor: Color(0xFF141A29),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -361,13 +361,13 @@ class TtsService extends ChangeNotifier {
                         minVerticalPadding: 14,
                         leading: CircleAvatar(
                           backgroundColor: isSelected
-                              ? const Color(0xFFD4B96A)
+                              ? const Color(0xFF4B9EFF)
                               : Colors.grey[700],
                           radius: 18,
                           child: Text(
                             v['locale']!.substring(0, 2).toUpperCase(),
                             style: TextStyle(
-                              color: isSelected ? Colors.black : Colors.white,
+                              color: isSelected ? Color(0xFF0A0E1A) : Colors.white,
                               fontSize: 11,
                               fontWeight: FontWeight.bold,
                             ),
@@ -377,7 +377,7 @@ class TtsService extends ChangeNotifier {
                           displayName,
                           style: TextStyle(
                             color: isSelected
-                                ? const Color(0xFFD4B96A)
+                                ? const Color(0xFF4B9EFF)
                                 : Colors.white,
                             fontWeight: isSelected
                                 ? FontWeight.bold
@@ -395,7 +395,7 @@ class TtsService extends ChangeNotifier {
                         trailing: isSelected
                             ? const Icon(
                                 Icons.check_circle,
-                                color: Color(0xFFD4B96A),
+                                color: Color(0xFF4B9EFF),
                               )
                             : null,
                         onTap: () {

@@ -152,7 +152,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         content: const Text('Microphone permission denied. Enable it in Settings.'),
         backgroundColor: const Color(0xFF333333),
         behavior: SnackBarBehavior.floating,
-        action: SnackBarAction(label: 'Settings', textColor: const Color(0xFFD4B96A), onPressed: openAppSettings),
+        action: SnackBarAction(label: 'Settings', textColor: const Color(0xFF4B9EFF), onPressed: openAppSettings),
       ));
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -469,17 +469,44 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   //  DELETE
   // ─────────────────────────────────────────────
   Future<void> _deleteNote(String docId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Delete Note?'),
+          ],
+        ),
+        content: const Text('This item will be stored in the Recycle Bin and permanently deleted after 30 days.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Color(0x8A0A0E1A)))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
     try {
       final docRef = FirebaseFirestore.instance.collection('notes').doc(docId);
       final snapshot = await docRef.get();
+      String? noteTitle;
       if (snapshot.exists) {
         final data = snapshot.data()!;
+        noteTitle = data['title']?.toString();
         final targetUid = data['userId']?.toString() ?? FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid;
         if (targetUid != null) {
           await FirebaseFirestore.instance.collection('users').doc(targetUid).collection('deleted_library').add({
             'fileName': data['title'] ?? 'Note',
             'content': data['content'],
             'audioUrl': data['audioUrl'],
+            'recordingDurationSeconds': data['recordingDurationSeconds'],
             'fileType': 'note',
             'sourceCollection': 'notes',
             'deletedAt': FieldValue.serverTimestamp(),
@@ -489,6 +516,25 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         }
       }
       await docRef.delete();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Row(
+            children: [
+              const Icon(Icons.delete_sweep_outlined, color: Colors.white, size: 18),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  '${noteTitle != null ? '"$noteTitle" moved' : 'Note moved'} to Recycle Bin. Kept for 30 days.',
+                ),
+              ),
+            ],
+          ),
+          backgroundColor: const Color(0xFF333333),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+        ));
+      }
     } on FirebaseException catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -557,7 +603,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           builder: (ctx, setSheetState) {
             return Container(
               decoration: const BoxDecoration(
-                color: Color(0xFFF3E5AB),
+                color: Color(0xFFF0F4FF),
                 borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
               ),
               child: Padding(
@@ -575,7 +621,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         child: Container(
                           width: 36,
                           height: 4,
-                          decoration: BoxDecoration(color: Colors.black26, borderRadius: BorderRadius.circular(10)),
+                          decoration: BoxDecoration(color: Color(0x420A0E1A), borderRadius: BorderRadius.circular(10)),
                         ),
                       ),
                       const SizedBox(height: 16),
@@ -597,7 +643,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                         hintText: 'Title',
                                         counterText: '',
                                         filled: true,
-                                        fillColor: Colors.black.withValues(alpha: 0.05),
+                                        fillColor: Color(0xFF0A0E1A).withValues(alpha: 0.05),
                                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
                                         contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                                       ),
@@ -607,7 +653,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             if (!isEditMode) ...[
                               _sheetIconBtn(
                                 icon: isSpeaking ? Icons.stop_circle_outlined : Icons.volume_up_rounded,
-                                color: isSpeaking ? const Color(0xFFD4B96A) : Colors.black54,
+                                color: isSpeaking ? const Color(0xFF4B9EFF) : Color(0x8A0A0E1A),
                                 onTap: () {
                                   if (isSpeaking) { tts.stop(); setSheetState(() => isSpeaking = false); }
                                   else { tts.play(title, content, lang.ttsLocale); setSheetState(() => isSpeaking = true); }
@@ -615,21 +661,21 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                               ),
                               _sheetIconBtn(
                                 icon: Icons.edit_note_rounded,
-                                color: Colors.black54,
+                                color: Color(0x8A0A0E1A),
                                 onTap: () {
                                   tts.stop();
                                   setSheetState(() { isEditMode = true; isSpeaking = false; });
                                 },
                               ),
                             ] else ...[
-                              _sheetIconBtn(icon: Icons.close, color: Colors.black38, onTap: () {
+                              _sheetIconBtn(icon: Icons.close, color: Color(0x610A0E1A), onTap: () {
                                 popupTitleController.text = title;
                                 popupContentController.text = content;
                                 setSheetState(() => isEditMode = false);
                               }),
                               isSaving
-                                  ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black)))
-                                  : _sheetIconBtn(icon: Icons.check_rounded, color: Colors.black87, onTap: () async {
+                                  ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0A0E1A))))
+                                  : _sheetIconBtn(icon: Icons.check_rounded, color: Color(0xDD0A0E1A), onTap: () async {
                                       final newTitle = popupTitleController.text.trim();
                                       final newContent = popupContentController.text.trim();
                                       if (newTitle.isEmpty || newContent.isEmpty) return;
@@ -671,21 +717,21 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                             decoration: BoxDecoration(
-                              color: Colors.black,
+                              color: Color(0xFF0A0E1A),
                               borderRadius: BorderRadius.circular(16),
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.auto_awesome, size: 13, color: Color(0xFFD4B96A)),
+                                const Icon(Icons.auto_awesome, size: 13, color: Color(0xFF4B9EFF)),
                                 const SizedBox(width: 6),
-                                const Text('AI Tools', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Color(0xFFD4B96A))),
+                                const Text('AI Tools', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Color(0xFF4B9EFF))),
                                 const Spacer(),
                                 _aiChip(label: 'Summarize', icon: Icons.summarize_outlined, dark: true, onTap: () {
                                   tts.stop(); Navigator.pop(ctx);
                                   Navigator.push(context, MaterialPageRoute(builder: (_) => AiResultPage(documentTitle: title, documentContent: content, mode: 'summary')));
                                 }),
                                 const SizedBox(width: 8),
-                                _aiChip(label: 'Flashcards', icon: Icons.style_outlined, dark: false, onTap: () async {
+                                _aiChip(label: 'Assessment', icon: Icons.style_outlined, dark: false, onTap: () async {
                                   tts.stop();
                                   final count = await _pickCardCount(context);
                                   if (count == null || !context.mounted) return;
@@ -731,7 +777,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                     hintText: 'Transcript...',
                                     counterText: '',
                                     filled: true,
-                                    fillColor: Colors.black.withValues(alpha: 0.04),
+                                    fillColor: Color(0xFF0A0E1A).withValues(alpha: 0.04),
                                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
                                     contentPadding: const EdgeInsets.all(14),
                                   ),
@@ -742,7 +788,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                     controller: scrollController,
                                     padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
                                     children: [
-                                      Text(content, style: const TextStyle(fontSize: 15, height: 1.75, color: Colors.black87)),
+                                      Text(content, style: const TextStyle(fontSize: 15, height: 1.75, color: Color(0xDD0A0E1A))),
                                     ],
                                   )
                                 : _audioPlayerPanel(
@@ -787,7 +833,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.black,
+              color: Color(0xFF0A0E1A),
               borderRadius: BorderRadius.circular(24),
             ),
             child: Column(
@@ -795,9 +841,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.mic, color: const Color(0xFFD4B96A), size: 18),
+                    Icon(Icons.mic, color: const Color(0xFF4B9EFF), size: 18),
                     const SizedBox(width: 8),
-                    const Text('Voice Recording', style: TextStyle(color: Color(0xFFD4B96A), fontWeight: FontWeight.w700, fontSize: 14)),
+                    const Text('Voice Recording', style: TextStyle(color: Color(0xFF4B9EFF), fontWeight: FontWeight.w700, fontSize: 14)),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -825,10 +871,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     width: 72,
                     height: 72,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFD4B96A),
+                      color: const Color(0xFF4B9EFF),
                       borderRadius: BorderRadius.circular(36),
                     ),
-                    child: Icon(isPlayingLocal ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.black, size: 36),
+                    child: Icon(isPlayingLocal ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Color(0xFF0A0E1A), size: 36),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -842,9 +888,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   ),
                   SliderTheme(
                     data: SliderTheme.of(context).copyWith(
-                      activeTrackColor: const Color(0xFFD4B96A),
+                      activeTrackColor: const Color(0xFF4B9EFF),
                       inactiveTrackColor: Colors.white12,
-                      thumbColor: const Color(0xFFD4B96A),
+                      thumbColor: const Color(0xFF4B9EFF),
                       trackHeight: 3,
                     ),
                     child: Slider(
@@ -878,15 +924,15 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: dark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFFD4B96A),
+          color: dark ? Colors.white.withValues(alpha: 0.12) : const Color(0xFF4B9EFF),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: dark ? const Color(0xFFD4B96A) : Colors.black, size: 12),
+            Icon(icon, color: dark ? const Color(0xFF4B9EFF) : Color(0xFF0A0E1A), size: 12),
             const SizedBox(width: 4),
-            Text(label, style: TextStyle(color: dark ? const Color(0xFFD4B96A) : Colors.black, fontSize: 11, fontWeight: FontWeight.w700)),
+            Text(label, style: TextStyle(color: dark ? const Color(0xFF4B9EFF) : Color(0xFF0A0E1A), fontSize: 11, fontWeight: FontWeight.w700)),
           ],
         ),
       ),
@@ -900,10 +946,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         duration: const Duration(milliseconds: 180),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         decoration: BoxDecoration(
-          color: selected ? Colors.black : Colors.black.withValues(alpha: 0.07),
+          color: selected ? Color(0xFF0A0E1A) : Color(0xFF0A0E1A).withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(20),
         ),
-        child: Text(label, style: TextStyle(color: selected ? const Color(0xFFD4B96A) : Colors.black54, fontSize: 12, fontWeight: FontWeight.w700)),
+        child: Text(label, style: TextStyle(color: selected ? const Color(0xFF4B9EFF) : Color(0x8A0A0E1A), fontSize: 12, fontWeight: FontWeight.w700)),
       ),
     );
   }
@@ -914,16 +960,16 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFFF3E5AB),
+          backgroundColor: const Color(0xFFF0F4FF),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-          title: const Text('How many flashcards?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
+          title: const Text('How many questions?', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('$selected cards', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF7A6130))),
+              Text('$selected cards', style: const TextStyle(fontSize: 32, fontWeight: FontWeight.bold, color: Color(0xFF4B9EFF))),
               Slider(
                 value: selected.toDouble(), min: 5, max: 20, divisions: 15,
-                activeColor: Colors.black, inactiveColor: Colors.grey[300],
+                activeColor: Color(0xFF0A0E1A), inactiveColor: Colors.grey[300],
                 onChanged: (v) => setDialogState(() => selected = v.round()),
               ),
               Row(
@@ -936,10 +982,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: Colors.black54))),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel', style: TextStyle(color: Color(0x8A0A0E1A)))),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, selected),
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.black, foregroundColor: const Color(0xFFD4B96A), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
+              style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF0A0E1A), foregroundColor: const Color(0xFF4B9EFF), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
               child: const Text('Generate'),
             ),
           ],
@@ -963,7 +1009,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
               width: double.infinity,
               padding: const EdgeInsets.symmetric(vertical: 28),
               decoration: BoxDecoration(
-                color: Colors.black,
+                color: Color(0xFF0A0E1A),
                 borderRadius: BorderRadius.circular(24),
               ),
               child: Column(
@@ -972,11 +1018,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     width: 72,
                     height: 72,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFD4B96A),
+                      color: const Color(0xFF4B9EFF),
                       borderRadius: BorderRadius.circular(36),
-                      boxShadow: [BoxShadow(color: const Color(0xFFD4B96A).withValues(alpha: 0.4), blurRadius: 20, spreadRadius: 4)],
+                      boxShadow: [BoxShadow(color: const Color(0xFF4B9EFF).withValues(alpha: 0.4), blurRadius: 20, spreadRadius: 4)],
                     ),
-                    child: const Icon(Icons.mic, color: Colors.black, size: 36),
+                    child: const Icon(Icons.mic, color: Color(0xFF0A0E1A), size: 36),
                   ),
                   const SizedBox(height: 14),
                   const Text('Tap to Record', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16, letterSpacing: 0.5)),
@@ -992,7 +1038,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         if (_recordingState == RecordingState.recording) ...[
           Container(
             width: double.infinity,
-            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(24)),
+            decoration: BoxDecoration(color: Color(0xFF0A0E1A), borderRadius: BorderRadius.circular(24)),
             child: Column(
               children: [
                 const SizedBox(height: 20),
@@ -1075,10 +1121,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 36),
-            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(24)),
+            decoration: BoxDecoration(color: Color(0xFF0A0E1A), borderRadius: BorderRadius.circular(24)),
             child: const Column(
               children: [
-                CircularProgressIndicator(color: Color(0xFFD4B96A), strokeWidth: 2),
+                CircularProgressIndicator(color: Color(0xFF4B9EFF), strokeWidth: 2),
                 SizedBox(height: 16),
                 Text('Processing audio...', style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600)),
                 SizedBox(height: 4),
@@ -1094,15 +1140,15 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(color: Colors.black, borderRadius: BorderRadius.circular(24)),
+            decoration: BoxDecoration(color: Color(0xFF0A0E1A), borderRadius: BorderRadius.circular(24)),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.check_circle, color: Color(0xFFD4B96A), size: 18),
+                    const Icon(Icons.check_circle, color: Color(0xFF4B9EFF), size: 18),
                     const SizedBox(width: 8),
-                    const Text('Recording complete', style: TextStyle(color: Color(0xFFD4B96A), fontWeight: FontWeight.w700, fontSize: 13)),
+                    const Text('Recording complete', style: TextStyle(color: Color(0xFF4B9EFF), fontWeight: FontWeight.w700, fontSize: 13)),
                     const Spacer(),
                     Text(_formatDuration(_recordingDuration), style: const TextStyle(color: Colors.white38, fontSize: 12)),
                   ],
@@ -1117,8 +1163,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         child: Container(
                           width: 48,
                           height: 48,
-                          decoration: BoxDecoration(color: const Color(0xFFD4B96A), borderRadius: BorderRadius.circular(24)),
-                          child: Icon(_isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.black, size: 26),
+                          decoration: BoxDecoration(color: const Color(0xFF4B9EFF), borderRadius: BorderRadius.circular(24)),
+                          child: Icon(_isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Color(0xFF0A0E1A), size: 26),
                         ),
                       ),
                       const SizedBox(width: 12),
@@ -1133,9 +1179,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             if (_audioDuration > Duration.zero)
                               SliderTheme(
                                 data: SliderTheme.of(context).copyWith(
-                                  activeTrackColor: const Color(0xFFD4B96A),
+                                  activeTrackColor: const Color(0xFF4B9EFF),
                                   inactiveTrackColor: Colors.white12,
-                                  thumbColor: const Color(0xFFD4B96A),
+                                  thumbColor: const Color(0xFF4B9EFF),
                                   trackHeight: 2.5,
                                 ),
                                 child: Slider(
@@ -1158,11 +1204,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   onTap: () => showDialog(
                     context: context,
                     builder: (ctx) => AlertDialog(
-                      backgroundColor: const Color(0xFFF3E5AB),
+                      backgroundColor: const Color(0xFFF0F4FF),
                       title: const Text('Discard recording?', style: TextStyle(fontWeight: FontWeight.bold)),
                       content: const Text('This will delete the audio and transcript.'),
                       actions: [
-                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Keep', style: TextStyle(color: Colors.black54))),
+                        TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Keep', style: TextStyle(color: Color(0x8A0A0E1A)))),
                         ElevatedButton(
                           onPressed: () { Navigator.pop(ctx); _discardRecording(); },
                           style: ElevatedButton.styleFrom(backgroundColor: Colors.red, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
@@ -1199,9 +1245,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
                   child: Row(
                     children: [
-                      const Icon(Icons.article_outlined, size: 14, color: Colors.black45),
+                      const Icon(Icons.article_outlined, size: 14, color: Color(0x730A0E1A)),
                       const SizedBox(width: 6),
-                      const Text('Transcript', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Colors.black45)),
+                      const Text('Transcript', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Color(0x730A0E1A))),
                       const Spacer(),
                       Text('${_transcriptController.text.length} chars', style: TextStyle(fontSize: 10, color: Colors.grey[400])),
                     ],
@@ -1230,6 +1276,83 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   }
 
   // ─────────────────────────────────────────────
+  //  DELETE ALL
+  // ─────────────────────────────────────────────
+  Future<void> _deleteAllNotes() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_sweep, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Delete All Notes?'),
+          ],
+        ),
+        content: const Text('All notes will be moved to the Recycle Bin and permanently deleted after 30 days. Are you sure?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Color(0x8A0A0E1A)))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: const Text('Delete All'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      if (_isAnonymousUser) {
+        final provider = context.read<TempNotesProvider>();
+        final ids = provider.notes.map((e) => e.id).toList();
+        for (var id in ids) {
+          provider.remove(id);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All notes deleted.'), backgroundColor: Color(0xFF333333)));
+        }
+      } else {
+        final uid = FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid;
+        if (uid == null) return;
+
+        final query = await FirebaseFirestore.instance.collection('notes').where('userId', isEqualTo: uid).get();
+        if (query.docs.isEmpty) return;
+
+        final batch = FirebaseFirestore.instance.batch();
+        final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
+
+        for (var doc in query.docs) {
+          final data = doc.data();
+          final newDocRef = userDoc.collection('deleted_library').doc();
+          batch.set(newDocRef, {
+            'fileName': data['title'] ?? 'Note',
+            'content': data['content'],
+            'audioUrl': data['audioUrl'],
+            'recordingDurationSeconds': data['recordingDurationSeconds'],
+            'fileType': 'note',
+            'sourceCollection': 'notes',
+            'deletedAt': FieldValue.serverTimestamp(),
+            'originalTimestamp': data['timestamp'] ?? FieldValue.serverTimestamp(),
+            'userId': uid,
+          });
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All notes moved to Recycle Bin.'), backgroundColor: Color(0xFF333333)));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete notes: $e'), backgroundColor: Colors.redAccent));
+      }
+    }
+  }
+
+  // ─────────────────────────────────────────────
   //  BUILD
   // ─────────────────────────────────────────────
   @override
@@ -1237,25 +1360,30 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     final lang = context.watch<LanguageProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3E5AB),
+      backgroundColor: const Color(0xFFF0F4FF),
       appBar: AppBar(
-        title: const Text('Voice Notes', style: TextStyle(color: Colors.black, fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: -0.5)),
+        title: const Text('Voice Notes', style: TextStyle(color: Color(0xFF0A0E1A), fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: -0.5)),
         backgroundColor: Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
         actions: [
+          IconButton(
+            icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
+            tooltip: 'Delete All',
+            onPressed: _deleteAllNotes,
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: Center(
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(20)),
+                decoration: BoxDecoration(color: Color(0xFF0A0E1A).withValues(alpha: 0.08), borderRadius: BorderRadius.circular(20)),
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(width: 6, height: 6, decoration: BoxDecoration(color: _isAnonymousUser ? Colors.orange : Colors.green, borderRadius: BorderRadius.circular(3))),
                     const SizedBox(width: 5),
-                    Text(lang.selectedLanguage, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Colors.black87)),
+                    Text(lang.selectedLanguage, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xDD0A0E1A))),
                   ],
                 ),
               ),
@@ -1287,7 +1415,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         children: [
                           Icon(Icons.info_outline, color: Colors.orange, size: 14),
                           SizedBox(width: 8),
-                          Expanded(child: Text('Guest mode — notes are temporary. Sign up to keep them.', style: TextStyle(color: Colors.black54, fontSize: 11, height: 1.4))),
+                          Expanded(child: Text('Guest mode — notes are temporary. Sign up to keep them.', style: TextStyle(color: Color(0x8A0A0E1A), fontSize: 11, height: 1.4))),
                         ],
                       ),
                     ),
@@ -1309,7 +1437,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         hintStyle: TextStyle(color: Colors.grey[400], fontWeight: FontWeight.w500, fontSize: 17),
                         counterText: '',
                         border: InputBorder.none,
-                        prefixIcon: const Icon(Icons.bookmark_border, color: Colors.black38, size: 20),
+                        prefixIcon: const Icon(Icons.bookmark_border, color: Color(0x610A0E1A), size: 20),
                         contentPadding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                     ),
@@ -1329,7 +1457,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           child: OutlinedButton(
                             onPressed: _discardRecording,
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.black54,
+                              foregroundColor: Color(0x8A0A0E1A),
                               side: BorderSide(color: Colors.grey[400]!),
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1347,8 +1475,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                 : const Icon(Icons.save_alt, size: 18),
                             label: Text(_isEditing ? 'Update Note' : 'Save Note', style: const TextStyle(fontWeight: FontWeight.w800)),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: Colors.black,
-                              foregroundColor: const Color(0xFFD4B96A),
+                              backgroundColor: Color(0xFF0A0E1A),
+                              foregroundColor: const Color(0xFF4B9EFF),
                               disabledBackgroundColor: Colors.grey[300],
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
                               padding: const EdgeInsets.symmetric(vertical: 14),
@@ -1389,12 +1517,12 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: _isAnonymousUser ? Colors.orange[100] : Colors.black,
+                            color: _isAnonymousUser ? Colors.orange[100] : Color(0xFF0A0E1A),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             _isAnonymousUser ? 'GUEST' : 'SAVED',
-                            style: TextStyle(color: _isAnonymousUser ? Colors.orange[800] : const Color(0xFFD4B96A), fontSize: 9, fontWeight: FontWeight.w800),
+                            style: TextStyle(color: _isAnonymousUser ? Colors.orange[800] : const Color(0xFF4B9EFF), fontSize: 9, fontWeight: FontWeight.w800),
                           ),
                         ),
                       ],
@@ -1516,7 +1644,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       ),
 
       bottomNavigationBar: BottomAppBar(
-        color: Colors.grey[850],
+        color: Color(0xFF141A29),
         shape: const CircularNotchedRectangle(),
         notchMargin: 8,
         child: SizedBox(
@@ -1535,7 +1663,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.black,
+        backgroundColor: Color(0xFF0A0E1A),
         onPressed: () => Navigator.pushNamed(context, '/upload'),
         child: const Icon(Icons.file_upload_outlined, color: Colors.white),
       ),
@@ -1559,7 +1687,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         decoration: BoxDecoration(
           color: Colors.white.withValues(alpha: 0.75),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.black.withValues(alpha: 0.05)),
+          border: Border.all(color: Color(0xFF0A0E1A).withValues(alpha: 0.05)),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -1569,10 +1697,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
               width: 40,
               height: 40,
               decoration: BoxDecoration(
-                color: hasAudio ? Colors.black : Colors.grey[200],
+                color: hasAudio ? Color(0xFF0A0E1A) : Colors.grey[200],
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(hasAudio ? Icons.mic : Icons.article_outlined, color: hasAudio ? const Color(0xFFD4B96A) : Colors.grey[500], size: 20),
+              child: Icon(hasAudio ? Icons.mic : Icons.article_outlined, color: hasAudio ? const Color(0xFF4B9EFF) : Colors.grey[500], size: 20),
             ),
             const SizedBox(width: 12),
 
@@ -1589,8 +1717,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       if (isTemp)
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-                          decoration: BoxDecoration(color: Colors.black.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(5)),
-                          child: const Text('TEMP', style: TextStyle(fontSize: 8, color: Colors.black45, fontWeight: FontWeight.w800)),
+                          decoration: BoxDecoration(color: Color(0xFF0A0E1A).withValues(alpha: 0.06), borderRadius: BorderRadius.circular(5)),
+                          child: const Text('TEMP', style: TextStyle(fontSize: 8, color: Color(0x730A0E1A), fontWeight: FontWeight.w800)),
                         ),
                     ],
                   ),

@@ -24,18 +24,18 @@ class HistoryScreen extends StatelessWidget {
     final t = lang.t;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF3E5AB), // Same as homepage
+      backgroundColor: const Color(0xFFF0F4FF), // Same as homepage
       appBar: AppBar(
         title: Text(
           t('history_title'),
-          style: const TextStyle(color: Colors.black),
+          style: const TextStyle(color: Color(0xFF0A0E1A)),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.black),
+        iconTheme: const IconThemeData(color: Color(0xFF0A0E1A)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add, color: Colors.black),
+            icon: const Icon(Icons.add, color: Color(0xFF0A0E1A)),
             onPressed: () {
               addWord("Word ${DateTime.now().second}");
             },
@@ -47,7 +47,7 @@ class HistoryScreen extends StatelessWidget {
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
             return const Center(
-              child: CircularProgressIndicator(color: Colors.black),
+              child: CircularProgressIndicator(color: Color(0xFF0A0E1A)),
             );
           }
 
@@ -57,7 +57,7 @@ class HistoryScreen extends StatelessWidget {
             return Center(
               child: Text(
                 t('history_empty'),
-                style: const TextStyle(color: Colors.black54),
+                style: const TextStyle(color: Color(0x8A0A0E1A)),
               ),
             );
           }
@@ -99,7 +99,7 @@ class HistoryScreen extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: Color(0xFF0A0E1A).withOpacity(0.05),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -109,14 +109,14 @@ class HistoryScreen extends StatelessWidget {
                     title: Text(
                       doc["word"],
                       style: const TextStyle(
-                        color: Colors.black87,
+                        color: Color(0xDD0A0E1A),
                         fontWeight: FontWeight.w600,
                         fontSize: 14,
                       ),
                     ),
                     trailing: const Icon(
                       Icons.chevron_right,
-                      color: Colors.black45,
+                      color: Color(0x730A0E1A),
                     ),
                   ),
                 ),

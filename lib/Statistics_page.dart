@@ -1,16 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'analytics_service.dart';
 import 'language_provider.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  STATISTICS PAGE
-//  Design tokens are identical to the rest of the VOX app:
-//    • Background  : Color(0xFFF3E5AB)  cream
-//    • Header      : Color(0xFFD4B96A)  gold  (same as MenuPage, AboutUsPage)
-//    • Cards       : Color(0xFFE8E8E8)  light grey (same as AboutUsPage cards)
-//    • Accent gold : Color(0xFFD4B96A)
-//    • Dark text   : Color(0xFF1A1A1A)
+//  Loads Firebase developer-centric metrics for the authenticated user natively.
 // ─────────────────────────────────────────────────────────────────────────────
 
 class StatisticsPage extends StatefulWidget {
@@ -22,23 +20,24 @@ class StatisticsPage extends StatefulWidget {
 
 class _StatisticsPageState extends State<StatisticsPage> {
   // ── Colour constants ─────────────────────────────────────
-  static const Color _gold = Color(0xFFD4B96A);
-  static const Color _cream = Color(0xFFF3E5AB);
+  static const Color _gold = Color(0xFF4B9EFF);
+  static const Color _cream = Color(0xFFF0F4FF);
   static const Color _card = Color(0xFFE8E8E8);
   static const Color _dark = Color(0xFF1A1A1A);
 
-  // Five colours cycle across feature bars (gold first = top feature)
   static const List<Color> _barColors = [
-    Color(0xFFD4B96A), // gold
-    Color(0xFF5C8A6E), // teal
-    Color(0xFF7A6BAB), // purple
-    Color(0xFFB05C5C), // red
-    Color(0xFF4A7FA0), // blue
+    Color(0xFF4B9EFF),
+    Color(0xFF5C8A6E),
+    Color(0xFF7A6BAB),
+    Color(0xFFB05C5C),
+    Color(0xFF4A7FA0),
   ];
 
   bool _loading = true;
-  String _period = 'week'; // 'week' | 'month'
   bool _syncing = false;
+  bool _isAnonymous = true;
+  String? _uid;
+  Map<String, dynamic>? _firebaseData;
 
   // ── Lifecycle ─────────────────────────────────────────────
   @override
@@ -55,18 +54,75 @@ class _StatisticsPageState extends State<StatisticsPage> {
   }
 
   Future<void> _load() async {
-    await AnalyticsService.instance.load();
+    final user = FirebaseAuth.instance.currentUser;
+    final prefs = await SharedPreferences.getInstance();
+    final savedEmail = prefs.getString('userEmail') ?? '';
+
+    if (user != null && !user.isAnonymous) {
+      _isAnonymous = false;
+      _uid = user.uid;
+    } else if (savedEmail.isNotEmpty) {
+      final query = await FirebaseFirestore.instance
+          .collection('users')
+          .where('email',
+              isEqualTo: savedEmail)
+          .limit(1)
+          .get();
+      if (query.docs.isNotEmpty) {
+        _isAnonymous = false;
+        _uid = query.docs.first.id;
+      } else {
+        _isAnonymous = true;
+      }
+    } else {
+      _isAnonymous = true;
+    }
+
+    if (!_isAnonymous && _uid != null) {
+      await _fetchFirebaseData();
+    }
+
     if (mounted) setState(() => _loading = false);
+  }
+
+  Future<void> _fetchFirebaseData() async {
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(_uid)
+          .collection('analytics')
+          .doc('daily_stats')
+          .get();
+      
+      if (doc.exists) {
+        _firebaseData = doc.data();
+      } else {
+        // Force a sync if there's no data
+        await AnalyticsService.instance.syncToFirebase();
+        final doc2 = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(_uid)
+            .collection('analytics')
+            .doc('daily_stats')
+            .get();
+        if (doc2.exists) {
+          _firebaseData = doc2.data();
+        }
+      }
+    } catch (e) {
+      debugPrint('Error fetching firebase analytics: $e');
+    }
   }
 
   Future<void> _syncData() async {
     setState(() => _syncing = true);
     try {
       await AnalyticsService.instance.syncToFirebase();
+      await _fetchFirebaseData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Analytics synced to cloud'),
+            content: Text('Developer analytics synced from cloud'),
             backgroundColor: Color(0xFF333333),
             behavior: SnackBarBehavior.floating,
           ),
@@ -99,16 +155,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
     return '${s}s';
   }
 
-  double _pct(int ms, int total) =>
-      total == 0 ? 0.0 : (ms / total).clamp(0.0, 1.0);
-
-  String _shortDay(int wd) =>
-      ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][wd - 1];
-
-  String _dayKey(DateTime d) =>
-      '${d.year}-${d.month.toString().padLeft(2, '0')}-'
-      '${d.day.toString().padLeft(2, '0')}';
-
   // ─────────────────────────────────────────────────────────
   //  BUILD
   // ─────────────────────────────────────────────────────────
@@ -124,6 +170,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
             const Expanded(
               child: Center(child: CircularProgressIndicator(color: _gold)),
             )
+          else if (_isAnonymous)
+            Expanded(child: _buildGuestState())
           else
             Expanded(child: _buildBody()),
         ],
@@ -131,8 +179,50 @@ class _StatisticsPageState extends State<StatisticsPage> {
     );
   }
 
+  Widget _buildGuestState() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 32),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.privacy_tip_outlined, color: Colors.grey[400], size: 60),
+          const SizedBox(height: 16),
+          const Text(
+            'Guest Usage',
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w900,
+              color: _dark,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Analytics and statistics logging are fully disabled for guest accounts to ensure privacy.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.grey[600],
+              height: 1.5,
+            ),
+          ),
+          const SizedBox(height: 24),
+          ElevatedButton(
+            onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _dark,
+              foregroundColor: _gold,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+            ),
+            child: const Text('Log In / Sign Up', style: TextStyle(fontWeight: FontWeight.w800)),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─────────────────────────────────────────────────────────
-  //  HEADER  — same pattern as AboutUsPage & ContactUsPage
+  //  HEADER
   // ─────────────────────────────────────────────────────────
   Widget _buildHeader(BuildContext context) {
     return Container(
@@ -149,7 +239,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
       ),
       child: Row(
         children: [
-          // Back button — identical to AboutUsPage style
           GestureDetector(
             onTap: () => Navigator.of(context).pop(),
             child: Container(
@@ -172,7 +261,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Statistics',
+                  'App Statistics',
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
@@ -181,7 +270,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   ),
                 ),
                 Text(
-                  'Your usage at a glance',
+                  'Developer analytics & metrics',
                   style: TextStyle(
                     fontSize: 12,
                     color: Colors.white70,
@@ -191,116 +280,111 @@ class _StatisticsPageState extends State<StatisticsPage> {
               ],
             ),
           ),
-          // Sync button and decorative icon
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Sync button
-              GestureDetector(
-                onTap: _syncing ? null : _syncData,
-                child: Container(
+          if (!_isAnonymous)
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                GestureDetector(
+                  onTap: _syncing ? null : _syncData,
+                  child: Container(
+                    width: 38,
+                    height: 38,
+                    margin: const EdgeInsets.only(right: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.2),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: _syncing
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                            ),
+                          )
+                        : const Icon(
+                            Icons.cloud_sync_rounded,
+                            color: Colors.white,
+                            size: 18,
+                          ),
+                  ),
+                ),
+                Container(
                   width: 38,
                   height: 38,
-                  margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: _syncing
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : const Icon(
-                          Icons.sync_rounded,
-                          color: Colors.white,
-                          size: 18,
-                        ),
+                  child: const Icon(
+                    Icons.speed_rounded,
+                    color: Colors.white,
+                    size: 22,
+                  ),
                 ),
-              ),
-              // Decorative icon pill
-              Container(
-                width: 38,
-                height: 38,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Icon(
-                  Icons.bar_chart_rounded,
-                  color: Colors.white,
-                  size: 22,
-                ),
-              ),
-            ],
-          ),
+              ],
+            ),
         ],
       ),
     );
   }
 
   // ─────────────────────────────────────────────────────────
-  //  BODY - SIMPLIFIED FOR DEVELOPER INSIGHTS
+  //  BODY
   // ─────────────────────────────────────────────────────────
   Widget _buildBody() {
-    final svc = AnalyticsService.instance;
+    if (_firebaseData == null) {
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.query_stats_rounded, color: Colors.grey[400], size: 60),
+            const SizedBox(height: 16),
+            Text('No cloud analytics found for this user', style: TextStyle(color: Colors.grey[600])),
+            const SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: _syncData,
+              style: ElevatedButton.styleFrom(backgroundColor: _gold, foregroundColor: _dark),
+              child: const Text('Force Cloud Sync', style: TextStyle(fontWeight: FontWeight.w800)),
+            ),
+          ],
+        ),
+      );
+    }
+
+    final data = _firebaseData!;
+    final totalOpens = data['totalOpens'] as int? ?? 0;
+    final todayTimeMs = data['todayTimeMs'] as int? ?? 0;
+    final totalTimeMs = data['totalTimeMs'] as int? ?? 0;
+    final uniqueCmds = data['uniqueVoiceCmds'] as int? ?? 0;
+    final activeDays = data['activeDays'] as int? ?? 0;
+    
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // ─── 0. SYNC STATUS / CONFIG ─────────────────────
-          _sectionLabel('Sync status'),
+          // ─── 1. FIREBASE ACTIVITY ─────────────────────────────
+          _sectionLabel('User Activity Metrics'),
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: _overviewCard(
-                  icon: Icons.sync_rounded,
-                  label: 'Needs Sync',
-                  value: svc.needsSync ? 'Yes' : 'No',
-                  sub: svc.lastSync != null ? 'Last ${svc.lastSync}' : 'Never synced',
-                  smallValue: true,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _overviewCard(
-                  icon: Icons.privacy_tip_outlined,
-                  label: 'Analytics Opt-In',
-                  value: svc.analyticsEnabled ? 'On' : 'Off',
-                  sub: 'User preference',
-                  smallValue: true,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-
-          // ─── 1. KEY METRICS ─────────────────────────────
-          _sectionLabel('Key Metrics'),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _overviewCard(
-                  icon: Icons.touch_app_rounded,
-                  label: 'Daily Active Users',
-                  value: svc.opensToday.toString(),
-                  sub: 'opens today',
+                  icon: Icons.timeline_rounded,
+                  label: 'App Launches',
+                  value: totalOpens.toString(),
+                  sub: 'lifetime total',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _overviewCard(
                   icon: Icons.timer_outlined,
-                  label: 'Avg Session Time',
-                  value: _fmt(svc.todayTotalMs ~/ (svc.opensToday == 0 ? 1 : svc.opensToday)),
-                  sub: 'per session',
+                  label: 'Lifetime Session',
+                  value: _fmt(totalTimeMs),
+                  sub: 'total duration',
                 ),
               ),
             ],
@@ -310,51 +394,86 @@ class _StatisticsPageState extends State<StatisticsPage> {
             children: [
               Expanded(
                 child: _overviewCard(
-                  icon: Icons.book_outlined,
-                  label: 'Dictionary Usage',
-                  value: svc.totalDictLookups.toString(),
-                  sub: 'total lookups',
+                  icon: Icons.mic_external_on_outlined,
+                  label: 'Total Commands',
+                  value: '${data['totalVoiceCmds'] ?? 0}',
+                  sub: 'voice executions',
                 ),
               ),
               const SizedBox(width: 12),
               Expanded(
                 child: _overviewCard(
-                  icon: Icons.mic_outlined,
-                  label: 'Voice Commands',
-                  value: svc.totalVoiceCmds.toString(),
-                  sub: 'total commands',
+                  icon: Icons.folder_open_rounded,
+                  label: 'File Operations',
+                  value: '${data['totalFileOps'] ?? 0}',
+                  sub: 'reads/deletes/uploads',
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 28),
+          const SizedBox(height: 32),
 
-          // ─── 2. FEATURE ADOPTION ─────────────────────────
-          _sectionLabel('Feature Adoption'),
+          // ─── 2. DEV ENGAGEMENT BREAKDOWN ─────────────────────────
+          _sectionLabel('Cloud Activity Triggers'),
           const SizedBox(height: 12),
-          _featureAdoptionCard(svc),
+          _featureAdoptionCard(data['featureUsage'] as Map<String, dynamic>? ?? {}),
 
-          const SizedBox(height: 28),
+          const SizedBox(height: 32),
 
-          // ─── 3. USER RETENTION ───────────────────────────
-          _sectionLabel('User Retention'),
+          // ─── 3. FIRESTORE DATABASE METRICS ─────────────────────
+          _sectionLabel('Firestore Event Logging'),
           const SizedBox(height: 12),
-          _retentionCard(svc),
-
-          const SizedBox(height: 28),
-
-          // ─── 4. PERFORMANCE METRICS ─────────────────────
-          _sectionLabel('Performance Metrics'),
-          const SizedBox(height: 12),
-          _performanceCard(svc),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _card,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: Color(0x1F0A0E1A)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Schema Version', style: TextStyle(color: _dark, fontWeight: FontWeight.w700)),
+                    Text('v${data['schemaVersion'] ?? 1}', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const Divider(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Today\'s Exec Time', style: TextStyle(color: _dark, fontWeight: FontWeight.w700)),
+                    Text(_fmt(todayTimeMs), style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const Divider(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('Dictionary Entries', style: TextStyle(color: _dark, fontWeight: FontWeight.w700)),
+                    Text('${data['uniqueWords'] ?? 0}', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const Divider(),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('30-Day Retention Check', style: TextStyle(color: _dark, fontWeight: FontWeight.w700)),
+                    Text('$activeDays Active Days', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
+                  ],
+                ),
+              ],
+            ),
+          ),
         ],
       ),
     );
   }
 
   // ─────────────────────────────────────────────────────────
-  //  SECTION LABEL  — same weight & style as About Us
+  //  SECTION LABEL
   // ─────────────────────────────────────────────────────────
   Widget _sectionLabel(String text) => Text(
     text,
@@ -374,7 +493,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
     required String label,
     required String value,
     required String sub,
-    bool smallValue = false,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -383,7 +501,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Color(0xFF0A0E1A).withValues(alpha: 0.05),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -392,7 +510,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Icon bubble
           Container(
             width: 34,
             height: 34,
@@ -403,11 +520,10 @@ class _StatisticsPageState extends State<StatisticsPage> {
             child: Icon(icon, color: _gold, size: 18),
           ),
           const SizedBox(height: 12),
-          // Value
           Text(
             value,
-            style: TextStyle(
-              fontSize: smallValue ? 16 : 24,
+            style: const TextStyle(
+              fontSize: 24,
               fontWeight: FontWeight.w900,
               color: _dark,
               letterSpacing: -0.5,
@@ -416,7 +532,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 2),
-          // Label
           Text(
             label,
             style: const TextStyle(
@@ -425,7 +540,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
               color: _dark,
             ),
           ),
-          // Sub-label
           Text(sub, style: TextStyle(fontSize: 10, color: Colors.grey[500])),
         ],
       ),
@@ -433,22 +547,32 @@ class _StatisticsPageState extends State<StatisticsPage> {
   }
 
   // ─────────────────────────────────────────────────────────
-  //  PERIOD TOGGLE  (This Week / This Month)
+  //  FEATURE ADOPTION CARD (From Firebase Data)
   // ─────────────────────────────────────────────────────────
-  // ─────────────────────────────────────────────────────────
-  //  TREND CARD  — custom bar chart, zero extra packages
-  // ─────────────────────────────────────────────────────────
-  // ─────────────────────────────────────────────────────────
-  //  FEATURE BREAKDOWN CARD
-  // ─────────────────────────────────────────────────────────
-  // ─────────────────────────────────────────────────────────
-  //  USER ENGAGEMENT CARD
-  // ─────────────────────────────────────────────────────────
-  Widget _engagementCard(AnalyticsService svc) {
-    final totalOpens = svc.opens.length;
-    final totalTime = svc.dailyMs.values.fold(0, (a, b) => a + b);
-    final avgSession = totalOpens > 0 ? totalTime ~/ totalOpens : 0;
-    final activeDays = svc.dailyDataFor(30).where((d) => d.ms > 0).length;
+  Widget _featureAdoptionCard(Map<String, dynamic> featureUsageMap) {
+    if (featureUsageMap.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 24),
+        child: Center(
+          child: Column(
+            children: [
+              Icon(Icons.bar_chart_outlined, size: 38, color: Colors.grey[350]),
+              const SizedBox(height: 10),
+              Text(
+                'No feature usage data in cloud yet',
+                style: TextStyle(fontSize: 13, color: Colors.grey[450]),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final list = featureUsageMap.entries.toList()
+      ..sort((a, b) => (b.value as num).compareTo(a.value as num));
+    
+    final features = list.take(5).toList();
+    final totalTime = features.fold(0.0, (sum, entry) => sum + (entry.value as num).toDouble());
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -457,7 +581,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Color(0xFF0A0E1A).withValues(alpha: 0.05),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -466,13 +590,13 @@ class _StatisticsPageState extends State<StatisticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
+          const Row(
             children: [
-              const Icon(Icons.trending_up_outlined, color: _gold, size: 18),
-              const SizedBox(width: 8),
+              Icon(Icons.cloud_done_outlined, color: _gold, size: 18),
+              SizedBox(width: 8),
               Text(
-                'Engagement Metrics',
-                style: const TextStyle(
+                'Top Triggers by Time Evaluated',
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w900,
                   color: _dark,
@@ -481,481 +605,66 @@ class _StatisticsPageState extends State<StatisticsPage> {
             ],
           ),
           const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _engagementMetric(
-                  'Total Opens',
-                  totalOpens.toString(),
-                  Icons.touch_app_rounded,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _engagementMetric(
-                  'Active Days',
-                  '$activeDays/30',
-                  Icons.calendar_today_outlined,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _engagementMetric(
-                  'Total Time',
-                  _fmt(totalTime),
-                  Icons.timer_outlined,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _engagementMetric(
-                  'Avg Session',
-                  _fmt(avgSession),
-                  Icons.access_time_outlined,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+          ...features.asMap().entries.map((e) {
+            final rank = e.key;
+            final name = e.value.key;
+            final timeMs = (e.value.value as num).toInt();
+            final percentage = totalTime > 0 ? (timeMs / totalTime * 100).round() : 0;
 
-  Widget _engagementMetric(String label, String value, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _gold.withValues(alpha: 0.08),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: _gold, size: 20),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-              color: _dark,
-            ),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-          ),
-        ],
-      ),
-    );
-  }
+            final color = _barColors[rank.clamp(0, _barColors.length - 1)];
 
-  IconData _getOperationIcon(String operation) {
-    switch (operation.toLowerCase()) {
-      case 'upload':
-        return Icons.upload_file_outlined;
-      case 'read':
-        return Icons.visibility_outlined;
-      case 'delete':
-        return Icons.delete_outline;
-      case 'restore':
-        return Icons.restore_outlined;
-      case 'edit':
-        return Icons.edit_outlined;
-      case 'share':
-        return Icons.share_outlined;
-      default:
-        return Icons.file_present_outlined;
-    }
-  }
-
-  String _formatOperationName(String operation) {
-    switch (operation.toLowerCase()) {
-      case 'upload':
-        return 'Files Uploaded';
-      case 'read':
-        return 'Files Read';
-      case 'delete':
-        return 'Files Deleted';
-      case 'restore':
-        return 'Files Restored';
-      case 'edit':
-        return 'Files Edited';
-      case 'share':
-        return 'Files Shared';
-      default:
-        return operation.replaceAll('_', ' ').toUpperCase();
-    }
-  }
-
-  // ─────────────────────────────────────────────────────────
-  //  EMPTY STATE
-  // ─────────────────────────────────────────────────────────
-  Widget _emptyState(IconData icon, String message) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 24),
-    child: Center(
-      child: Column(
-        children: [
-          Icon(icon, size: 38, color: Colors.grey[350]),
-          const SizedBox(height: 10),
-          Text(
-            message,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 13,
-              color: Colors.grey[450],
-              height: 1.55,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-
-  // ─────────────────────────────────────────────────────────
-  //  FEATURE ADOPTION CARD - SIMPLIFIED
-  // ─────────────────────────────────────────────────────────
-  Widget _featureAdoptionCard(AnalyticsService svc) {
-    final features = svc.sortedFeatures.take(5).toList();
-    final totalTime = features.fold(0, (sum, entry) => sum + entry.value);
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: features.isEmpty
-          ? _emptyState(Icons.bar_chart_outlined, 'No feature usage data yet')
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    const Icon(Icons.analytics_outlined, color: _gold, size: 18),
-                    const SizedBox(width: 8),
-                    Text(
-                      'Top Features by Time',
-                      style: const TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        color: _dark,
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: color.withValues(alpha: 0.1),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    child: Center(
+                      child: Text(
+                        '${rank + 1}',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w900,
+                          color: color,
+                        ),
                       ),
                     ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                ...features.asMap().entries.map((e) {
-                  final rank = e.key;
-                  final name = e.value.key;
-                  final timeMs = e.value.value;
-                  final percentage = totalTime > 0 ? (timeMs / totalTime * 100).round() : 0;
-
-                  return Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: _barColors[rank.clamp(0, _barColors.length - 1)].withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${rank + 1}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w900,
-                                color: _barColors[rank.clamp(0, _barColors.length - 1)],
-                              ),
-                            ),
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: _dark,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                name,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.w600,
-                                  color: _dark,
-                                ),
-                              ),
-                              Text(
-                                '${_fmt(timeMs)} ($percentage%)',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: Colors.grey[600],
-                                ),
-                              ),
-                            ],
+                        Text(
+                          '${_fmt(timeMs)} ($percentage%)',
+                          style: TextStyle(
+                            fontSize: 11,
+                            color: Colors.grey[600],
                           ),
                         ),
                       ],
                     ),
-                  );
-                }),
-              ],
-            ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────
-  //  RETENTION CARD - SIMPLIFIED
-  // ─────────────────────────────────────────────────────────
-  Widget _retentionCard(AnalyticsService svc) {
-    final today = DateTime.now();
-    final weekAgo = today.subtract(const Duration(days: 7));
-    final monthAgo = today.subtract(const Duration(days: 30));
-
-    final recentOpens = svc.opens.where((date) => date.isAfter(weekAgo)).length;
-    final monthlyOpens = svc.opens.where((date) => date.isAfter(monthAgo)).length;
-    final totalOpens = svc.opens.length;
-
-    final weeklyRetention = totalOpens > 0 ? (recentOpens / totalOpens * 100).round() : 0;
-    final monthlyRetention = totalOpens > 0 ? (monthlyOpens / totalOpens * 100).round() : 0;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.refresh_rounded, color: _gold, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'User Retention',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  color: _dark,
-                ),
+                  ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _retentionMetric(
-                  '7-Day',
-                  '$weeklyRetention%',
-                  recentOpens,
-                  Icons.calendar_view_week,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _retentionMetric(
-                  '30-Day',
-                  '$monthlyRetention%',
-                  monthlyOpens,
-                  Icons.calendar_view_month,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _retentionMetric(String period, String percentage, int count, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _gold.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: _gold, size: 20),
-          const SizedBox(height: 6),
-          Text(
-            percentage,
-            style: const TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w900,
-              color: _dark,
-            ),
-          ),
-          Text(
-            period,
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-          Text(
-            '$count opens',
-            style: TextStyle(
-              fontSize: 9,
-              color: Colors.grey[500],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ─────────────────────────────────────────────────────────
-  //  PERFORMANCE CARD - SIMPLIFIED
-  // ─────────────────────────────────────────────────────────
-  Widget _performanceCard(AnalyticsService svc) {
-    final avgSessionTime = svc.opensToday > 0 ? svc.todayTotalMs ~/ svc.opensToday : 0;
-    final totalFeatures = svc.sortedFeatures.length;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: _card,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
-            blurRadius: 6,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.speed_rounded, color: _gold, size: 18),
-              const SizedBox(width: 8),
-              Text(
-                'Performance Metrics',
-                style: const TextStyle(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w900,
-                  color: _dark,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: _performanceMetric(
-                  'Avg Session',
-                  _fmt(avgSessionTime),
-                  'Duration',
-                  Icons.timer_outlined,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _performanceMetric(
-                  'Features Used',
-                  totalFeatures.toString(),
-                  'Total types',
-                  Icons.category_rounded,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Expanded(
-                child: _performanceMetric(
-                  'Total Time',
-                  _fmt(svc.dailyMs.values.fold(0, (a, b) => a + b)),
-                  'All sessions',
-                  Icons.access_time_rounded,
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: _performanceMetric(
-                  'Active Days',
-                  svc.dailyDataFor(30).where((d) => d.ms > 0).length.toString(),
-                  'Last 30 days',
-                  Icons.calendar_today_rounded,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _performanceMetric(String title, String value, String subtitle, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _gold.withValues(alpha: 0.05),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Column(
-        children: [
-          Icon(icon, color: _gold, size: 20),
-          const SizedBox(height: 6),
-          Text(
-            value,
-            style: const TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w900,
-              color: _dark,
-            ),
-          ),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 10,
-              color: Colors.grey[600],
-              fontWeight: FontWeight.w500,
-            ),
-            textAlign: TextAlign.center,
-          ),
-          Text(
-            subtitle,
-            style: TextStyle(
-              fontSize: 8,
-              color: Colors.grey[500],
-            ),
-            textAlign: TextAlign.center,
-          ),
+            );
+          }),
         ],
       ),
     );
   }
 }
+

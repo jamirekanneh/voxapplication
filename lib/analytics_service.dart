@@ -111,11 +111,9 @@ class AnalyticsService extends ChangeNotifier {
       _lastSync = DateTime.tryParse(ls);
     }
 
-    if (_syncTimer == null) {
-      _syncTimer = Timer.periodic(const Duration(hours: 4), (_) {
+    _syncTimer ??= Timer.periodic(const Duration(hours: 4), (_) {
         autoSyncIfNeeded();
       });
-    }
 
     // run one immediate sync if there is outstanding data
     await autoSyncIfNeeded();
@@ -215,7 +213,7 @@ class AnalyticsService extends ChangeNotifier {
       await devDoc.set(
         {
           'lastSync': FieldValue.serverTimestamp(),
-          'dailyStats.${todayKey}': syncData,
+          'dailyStats.$todayKey': syncData,
         },
         SetOptions(merge: true),
       );

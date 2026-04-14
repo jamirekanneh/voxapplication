@@ -12,7 +12,9 @@ import 'recycle_bin_page.dart';
 import 'custom_commands_page.dart';
 import 'Statistics_page.dart';
 import 'ask_questions_page.dart';
+import 'saved_assessments_page.dart';
 import 'analytics_service.dart';
+import 'floating_chat_bot.dart';
 
 class MenuPage extends StatefulWidget {
   const MenuPage({super.key});
@@ -215,13 +217,13 @@ class _MenuPageState extends State<MenuPage> {
       radius: radius,
       backgroundColor: const Color(0xFFBFA050),
       child: !_hasProfile
-          ? Icon(Icons.person, size: radius, color: const Color(0xFFF3E5AB))
+          ? Icon(Icons.person, size: radius, color: const Color(0xFFF0F4FF))
           : Text(
               _username.isNotEmpty ? _username[0].toUpperCase() : '?',
               style: TextStyle(
                 fontSize: radius * 0.85,
                 fontWeight: FontWeight.w900,
-                color: const Color(0xFFF3E5AB),
+                color: const Color(0xFFF0F4FF),
               ),
             ),
     );
@@ -233,7 +235,7 @@ class _MenuPageState extends State<MenuPage> {
   void _showLanguagePicker(BuildContext context, LanguageProvider lang) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFFF3E5AB),
+      backgroundColor: const Color(0xFFF0F4FF),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -250,7 +252,7 @@ class _MenuPageState extends State<MenuPage> {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
-                  color: Colors.black26,
+                  color: Color(0x420A0E1A),
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
@@ -281,7 +283,7 @@ class _MenuPageState extends State<MenuPage> {
                             ),
                             decoration: BoxDecoration(
                               color: lang.selectedLanguage == l
-                                  ? Colors.black
+                                  ? Color(0xFF0A0E1A)
                                   : Colors.grey[300],
                               borderRadius: BorderRadius.circular(14),
                             ),
@@ -293,7 +295,7 @@ class _MenuPageState extends State<MenuPage> {
                                   style: TextStyle(
                                     color: lang.selectedLanguage == l
                                         ? Colors.white
-                                        : Colors.black87,
+                                        : Color(0xDD0A0E1A),
                                     fontWeight: FontWeight.w600,
                                   ),
                                 ),
@@ -364,7 +366,7 @@ class _MenuPageState extends State<MenuPage> {
               const SizedBox(height: 12),
               Text(
                 lang.t('logout_body'),
-                style: const TextStyle(color: Colors.black54, fontSize: 14),
+                style: const TextStyle(color: Color(0x8A0A0E1A), fontSize: 14),
               ),
               const SizedBox(height: 28),
               Row(
@@ -373,8 +375,8 @@ class _MenuPageState extends State<MenuPage> {
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(ctx),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.black,
-                        side: const BorderSide(color: Colors.black26),
+                        foregroundColor: Color(0xFF0A0E1A),
+                        side: const BorderSide(color: Color(0x420A0E1A)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -466,7 +468,7 @@ class _MenuPageState extends State<MenuPage> {
           children: [
             Icon(
               icon,
-              color: isDanger ? Colors.white : Colors.black87,
+              color: isDanger ? Colors.white : Color(0xDD0A0E1A),
               size: 20,
             ),
             const SizedBox(width: 12),
@@ -476,14 +478,14 @@ class _MenuPageState extends State<MenuPage> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: isDanger ? Colors.white : Colors.black87,
+                  color: isDanger ? Colors.white : Color(0xDD0A0E1A),
                 ),
               ),
             ),
             if (trailing != null)
               Text(
                 trailing,
-                style: const TextStyle(color: Colors.black45, fontSize: 12),
+                style: const TextStyle(color: Color(0x730A0E1A), fontSize: 12),
               )
             else
               Icon(
@@ -505,7 +507,7 @@ class _MenuPageState extends State<MenuPage> {
         style: const TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w800,
-          color: Colors.black38,
+          color: Color(0x610A0E1A),
           letterSpacing: 2,
         ),
       ),
@@ -519,9 +521,10 @@ class _MenuPageState extends State<MenuPage> {
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
 
-    return Scaffold(
-      backgroundColor: const Color(0xFFF3E5AB),
-      body: Column(
+    return FloatingBotWrapper(
+      child: Scaffold(
+        backgroundColor: const Color(0xFFF0F4FF),
+        body: Column(
         children: [
           // ── Header ──────────────────────────────────
           Container(
@@ -533,7 +536,7 @@ class _MenuPageState extends State<MenuPage> {
               right: 20,
             ),
             decoration: const BoxDecoration(
-              color: Color(0xFFD4B96A),
+              color: Color(0xFF4B9EFF),
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
             ),
             child: Column(
@@ -543,7 +546,7 @@ class _MenuPageState extends State<MenuPage> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFFF3E5AB),
+                    color: Color(0xFFF0F4FF),
                     letterSpacing: 8,
                   ),
                 ),
@@ -558,7 +561,7 @@ class _MenuPageState extends State<MenuPage> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Color(0xFF0A0E1A).withOpacity(0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Row(
@@ -566,14 +569,14 @@ class _MenuPageState extends State<MenuPage> {
                       children: [
                         Icon(
                           Icons.wifi_off,
-                          color: Color(0xFFF3E5AB),
+                          color: Color(0xFFF0F4FF),
                           size: 13,
                         ),
                         SizedBox(width: 6),
                         Text(
                           "Offline — showing cached data",
                           style: TextStyle(
-                            color: Color(0xFFF3E5AB),
+                            color: Color(0xFFF0F4FF),
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
@@ -601,7 +604,7 @@ class _MenuPageState extends State<MenuPage> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: const Color(0xFFF3E5AB),
+                                  color: const Color(0xFFF0F4FF),
                                   width: 2.5,
                                 ),
                               ),
@@ -613,12 +616,12 @@ class _MenuPageState extends State<MenuPage> {
                               child: Container(
                                 padding: const EdgeInsets.all(4),
                                 decoration: const BoxDecoration(
-                                  color: Color(0xFFF3E5AB),
+                                  color: Color(0xFFF0F4FF),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
                                   Icons.edit,
-                                  color: Colors.black,
+                                  color: Color(0xFF0A0E1A),
                                   size: 10,
                                 ),
                               ),
@@ -644,7 +647,7 @@ class _MenuPageState extends State<MenuPage> {
                             ? (_username.isNotEmpty ? _username : "Vox User")
                             : lang.t('guest'),
                         style: const TextStyle(
-                          color: Color(0xFFF3E5AB),
+                          color: Color(0xFFF0F4FF),
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
                         ),
@@ -657,7 +660,7 @@ class _MenuPageState extends State<MenuPage> {
                     child: Text(
                       _email,
                       style: TextStyle(
-                        color: const Color(0xFFF3E5AB).withOpacity(0.7),
+                        color: const Color(0xFFF0F4FF).withOpacity(0.7),
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
@@ -674,13 +677,13 @@ class _MenuPageState extends State<MenuPage> {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.15),
+                      color: Color(0xFF0A0E1A).withOpacity(0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       lang.t('no_account'),
                       style: const TextStyle(
-                        color: Color(0xFFF3E5AB),
+                        color: Color(0xFFF0F4FF),
                         fontSize: 11,
                         fontWeight: FontWeight.w600,
                       ),
@@ -718,6 +721,18 @@ class _MenuPageState extends State<MenuPage> {
                       MaterialPageRoute(builder: (_) => const StatisticsPage()),
                     ),
                   ),
+                  if (_hasProfile) ...[
+                    _buildMenuItem(
+                      icon: Icons.bookmarks_outlined,
+                      title: 'Saved Assessments',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const SavedAssessmentsPage(),
+                        ),
+                      ),
+                    ),
+                  ],
                   _buildMenuItem(
                     icon: Icons.mic_none_rounded,
                     title: lang.t('menu_commands'),
@@ -764,7 +779,7 @@ class _MenuPageState extends State<MenuPage> {
                         context,
                         MaterialPageRoute(
                           builder: (_) =>
-                              RecycleBinPage(resolvedUid: _resolvedUid),
+                              const RecycleBinPage(),
                         ),
                       ),
                     ),
@@ -789,7 +804,7 @@ class _MenuPageState extends State<MenuPage> {
       ),
 
       bottomNavigationBar: BottomAppBar(
-        color: Colors.grey[850],
+        color: Color(0xFF141A29),
         shape: const CircularNotchedRectangle(),
         child: SizedBox(
           height: 65,
@@ -823,11 +838,11 @@ class _MenuPageState extends State<MenuPage> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Colors.black,
+        backgroundColor: Color(0xFF0A0E1A),
         onPressed: () => Navigator.pushNamed(context, '/upload'),
         child: const Icon(Icons.file_upload_outlined, color: Colors.white),
       ),
-    );
+    ));
   }
 
   Widget _navItem(

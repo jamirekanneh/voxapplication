@@ -218,6 +218,14 @@ class CustomCommandsProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> deleteAllCommands() async {
+    _commands.clear();
+    notifyListeners();
+    if (_currentUserId != null) {
+      await _saveForUser(_currentUserId!);
+    }
+  }
+
   Future<void> toggleCommand(String id) async {
     final idx = _commands.indexWhere((c) => c.id == id);
     if (idx != -1) {

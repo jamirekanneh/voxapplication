@@ -20,9 +20,9 @@ const _kEmailJSPublicKey = String.fromEnvironment(
   'EMAILJS_PUBLIC_KEY',
   defaultValue: '7lv-I2bSLiEeBpoYg',
 );
-const _kBgColor = Color(0xFFF3E5AB);
-const _kHeaderColor = Color(0xFFD4B96A);
-const _kTextLight = Color(0xFFF3E5AB);
+const _kBgColor = Color(0xFFF0F4FF);
+const _kHeaderColor = Color(0xFF4B9EFF);
+const _kTextLight = Color(0xFFF0F4FF);
 const _kWaGreen = Color(0xFF25D366);
 const _kDarkBtn = Color(0xFF3A3A3A);
 const _kNavy = Color(0xFF1A1A2E);
@@ -143,7 +143,7 @@ class _BlinkingHintState extends State<_BlinkingHint>
     opacity: _a,
     child: Text(
       widget.text,
-      style: const TextStyle(color: Colors.black38, fontSize: 13),
+      style: const TextStyle(color: Color(0x610A0E1A), fontSize: 13),
     ),
   );
 }
@@ -263,8 +263,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
       _phoneCtrl,
       _titleCtrl,
       _messageCtrl,
-    ])
+    ]) {
       c.dispose();
+    }
     _speech.stop();
     _flutterTts.stop();
     super.dispose();
@@ -371,7 +372,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.black26,
+                color: Color(0x420A0E1A),
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
@@ -427,7 +428,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                             vertical: 12,
                           ),
                           decoration: BoxDecoration(
-                            color: active ? Colors.black : Colors.white,
+                            color: active ? Color(0xFF0A0E1A) : Colors.white,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
@@ -444,7 +445,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                     fontWeight: FontWeight.w600,
                                     color: active
                                         ? Colors.white
-                                        : Colors.black87,
+                                        : Color(0xDD0A0E1A),
                                   ),
                                 ),
                               ),
@@ -453,7 +454,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 style: TextStyle(
                                   color: active
                                       ? Colors.white70
-                                      : Colors.black45,
+                                      : Color(0x730A0E1A),
                                   fontSize: 13,
                                 ),
                               ),
@@ -515,7 +516,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
       style: const TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w800,
-        color: Colors.black38,
+        color: Color(0x610A0E1A),
         letterSpacing: 2,
       ),
     ),
@@ -544,7 +545,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.06),
+                color: Color(0xFF0A0E1A).withOpacity(0.06),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -567,7 +568,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: (isEmail ? Colors.black : _kWaGreen)
+                          color: (isEmail ? Color(0xFF0A0E1A) : _kWaGreen)
                               .withOpacity(0.25),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
@@ -592,7 +593,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                             Icon(
                               Icons.mail_outline_rounded,
                               size: 16,
-                              color: isEmail ? Colors.white : Colors.black45,
+                              color: isEmail ? Colors.white : Color(0x730A0E1A),
                             ),
                             const SizedBox(width: 7),
                             Text(
@@ -600,7 +601,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: isEmail ? Colors.white : Colors.black54,
+                                color: isEmail ? Colors.white : Color(0x8A0A0E1A),
                                 letterSpacing: 0.2,
                               ),
                             ),
@@ -622,7 +623,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                             Icon(
                               Icons.chat_rounded,
                               size: 16,
-                              color: !isEmail ? Colors.white : Colors.black45,
+                              color: !isEmail ? Colors.white : Color(0x730A0E1A),
                             ),
                             const SizedBox(width: 7),
                             Text(
@@ -630,7 +631,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: !isEmail ? Colors.white : Colors.black54,
+                                color: !isEmail ? Colors.white : Color(0x8A0A0E1A),
                                 letterSpacing: 0.2,
                               ),
                             ),
@@ -665,7 +666,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                     : 'WhatsApp opens — tap Send to deliver your message',
                 style: TextStyle(
                   fontSize: 11.5,
-                  color: isEmail ? Colors.black54 : _kWaGreen,
+                  color: isEmail ? Color(0x8A0A0E1A) : _kWaGreen,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -719,7 +720,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
           const Text(
             'Your message has been received.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Colors.black87, height: 1.5),
+            style: TextStyle(fontSize: 14, color: Color(0xDD0A0E1A), height: 1.5),
           ),
           const SizedBox(height: 6),
           Text(
@@ -727,7 +728,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
             textAlign: TextAlign.center,
             style: const TextStyle(
               fontSize: 14,
-              color: Colors.black87,
+              color: Color(0xDD0A0E1A),
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -775,7 +776,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                 _sent = false;
               }),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.black45,
+                foregroundColor: Color(0x730A0E1A),
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 side: const BorderSide(color: Color(0xFFDDDDDD)),
                 shape: RoundedRectangleBorder(
@@ -922,7 +923,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                             prefix: const Icon(
                                               Icons.person_outline_rounded,
                                               size: 18,
-                                              color: Colors.black38,
+                                              color: Color(0x610A0E1A),
                                             ),
                                             suffix: _mic(
                                               'firstName',
@@ -973,7 +974,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                             prefix: const Icon(
                                               Icons.person_outline_rounded,
                                               size: 18,
-                                              color: Colors.black38,
+                                              color: Color(0x610A0E1A),
                                             ),
                                             suffix: _mic(
                                               'lastName',
@@ -1004,23 +1005,25 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   prefix: const Icon(
                                     Icons.mail_outline_rounded,
                                     size: 18,
-                                    color: Colors.black38,
+                                    color: Color(0x610A0E1A),
                                   ),
                                   suffix: _mic('email', _emailCtrl),
                                 ).copyWith(
                                   hintText: 'john@example.com',
                                   hintStyle: const TextStyle(
-                                    color: Colors.black26,
+                                    color: Color(0x420A0E1A),
                                     fontSize: 13,
                                   ),
                                 ),
                             validator: (v) {
-                              if (v == null || v.trim().isEmpty)
+                              if (v == null || v.trim().isEmpty) {
                                 return 'Required';
+                              }
                               if (!RegExp(
                                 r'^[\w\-\.]+@([\w\-]+\.)+[\w\-]{2,}$',
-                              ).hasMatch(v.trim()))
+                              ).hasMatch(v.trim())) {
                                 return 'Invalid email address';
+                              }
                               return null;
                             },
                           ),
@@ -1059,7 +1062,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                       const Icon(
                                         Icons.arrow_drop_down_rounded,
                                         size: 18,
-                                        color: Colors.black38,
+                                        color: Color(0x610A0E1A),
                                       ),
                                     ],
                                   ),
@@ -1077,13 +1080,14 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                       ).copyWith(
                                         hintText: '5XX XXX XXXX',
                                         hintStyle: const TextStyle(
-                                          color: Colors.black26,
+                                          color: Color(0x420A0E1A),
                                           fontSize: 13,
                                         ),
                                       ),
                                   validator: (v) {
-                                    if (v == null || v.trim().isEmpty)
+                                    if (v == null || v.trim().isEmpty) {
                                       return 'Required';
+                                    }
                                     if (v.trim().length < 6) return 'Too short';
                                     return null;
                                   },
@@ -1118,7 +1122,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   prefix: const Icon(
                                     Icons.subject_rounded,
                                     size: 18,
-                                    color: Colors.black38,
+                                    color: Color(0x610A0E1A),
                                   ),
                                   suffix: _mic('title', _titleCtrl),
                                 ),
@@ -1148,7 +1152,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 decoration: _inputDeco().copyWith(
                                   hintText: 'Write your message here…',
                                   hintStyle: const TextStyle(
-                                    color: Colors.black26,
+                                    color: Color(0x420A0E1A),
                                     fontSize: 13,
                                   ),
                                   contentPadding: const EdgeInsets.fromLTRB(
@@ -1159,10 +1163,12 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   ),
                                 ),
                                 validator: (v) {
-                                  if (v == null || v.trim().isEmpty)
+                                  if (v == null || v.trim().isEmpty) {
                                     return 'Please write your message';
-                                  if (v.trim().length < 10)
+                                  }
+                                  if (v.trim().length < 10) {
                                     return 'Message is too short';
+                                  }
                                   return null;
                                 },
                               ),
@@ -1187,9 +1193,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: isWa
                                     ? _kWaGreen
-                                    : Colors.black,
+                                    : Color(0xFF0A0E1A),
                                 foregroundColor: Colors.white,
-                                disabledBackgroundColor: Colors.black
+                                disabledBackgroundColor: Color(0xFF0A0E1A)
                                     .withOpacity(0.35),
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 16,
@@ -1242,14 +1248,14 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 Icon(
                                   Icons.lock_outline_rounded,
                                   size: 12,
-                                  color: Colors.black38,
+                                  color: Color(0x610A0E1A),
                                 ),
                                 SizedBox(width: 4),
                                 Text(
                                   'Your information is kept private',
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.black38,
+                                    color: Color(0x610A0E1A),
                                   ),
                                 ),
                               ],

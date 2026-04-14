@@ -42,11 +42,11 @@ class MiniPlayerBar extends StatelessWidget {
         child: Container(
           margin: const EdgeInsets.only(bottom: 8),
           decoration: BoxDecoration(
-            color: Colors.grey[850],
+            color: Color(0xFF141A29),
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.25),
+                color: Color(0xFF0A0E1A).withOpacity(0.25),
                 blurRadius: 8,
                 offset: const Offset(0, -2),
               ),
@@ -63,7 +63,7 @@ class MiniPlayerBar extends StatelessWidget {
                   value: tts.progress,
                   backgroundColor: Colors.grey[700],
                   valueColor: const AlwaysStoppedAnimation<Color>(
-                    Color(0xFFD4B96A),
+                    Color(0xFF4B9EFF),
                   ),
                   minHeight: 3,
                 ),
@@ -136,12 +136,12 @@ class MiniPlayerBar extends StatelessWidget {
                           width: 38,
                           height: 38,
                           decoration: const BoxDecoration(
-                            color: Color(0xFFD4B96A),
+                            color: Color(0xFF4B9EFF),
                             shape: BoxShape.circle,
                           ),
                           child: Icon(
                             tts.isPlaying ? Icons.pause : Icons.play_arrow,
-                            color: Colors.black,
+                            color: Color(0xFF0A0E1A),
                             size: 22,
                           ),
                         ),

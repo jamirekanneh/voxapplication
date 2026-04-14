@@ -74,7 +74,7 @@ class _SplashScreenState extends State<SplashScreen>
           gradient: LinearGradient(
             begin: Alignment.topCenter,
             end: Alignment.bottomCenter,
-            colors: [Color(0xFFF3E5AB), Color(0xFFF0E0A0)],
+            colors: [Color(0xFFF0F4FF), Color(0xFFF0E0A0)],
           ),
         ),
         child: Stack(
@@ -87,7 +87,7 @@ class _SplashScreenState extends State<SplashScreen>
                 child: Icon(
                   Icons.forum_rounded,
                   size: MediaQuery.of(context).size.width * 0.8,
-                  color: Colors.black.withOpacity(0.12),
+                  color: Color(0xFF0A0E1A).withOpacity(0.12),
                 ),
               ),
             ),
@@ -99,7 +99,7 @@ class _SplashScreenState extends State<SplashScreen>
                   style: TextStyle(
                     fontSize: 42,
                     fontWeight: FontWeight.w900,
-                    color: Colors.black,
+                    color: Color(0xFF0A0E1A),
                     letterSpacing: 4.0,
                   ),
                 ),
@@ -110,14 +110,14 @@ class _SplashScreenState extends State<SplashScreen>
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.05),
+                    color: Color(0xFF0A0E1A).withOpacity(0.05),
                     borderRadius: BorderRadius.circular(4),
                   ),
                   child: const Text(
                     "SOLVING ALL YOUR STUDENT PROBLEMS",
                     style: TextStyle(
                       fontSize: 10,
-                      color: Colors.black54,
+                      color: Color(0x8A0A0E1A),
                       fontWeight: FontWeight.w700,
                       letterSpacing: 1.5,
                     ),
