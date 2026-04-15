@@ -29,6 +29,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
   String _selectedFolder = 'All Files';
   final List<String> _folders = ['All Files', 'PDFs', 'Documents', 'Notes', 'Scans'];
 
+  // Multi-select mode
+  bool _isSelectionMode = false;
+  final Set<String> _selectedIds = {};
+  List<String> _visibleIds = [];
+
   String? _resolvedUid;
   bool _isAnonymousUser = true;
 
@@ -607,6 +612,114 @@ class _VoxHomePageState extends State<VoxHomePage> {
   }
 
   // ─────────────────────────────────────────────
+  //  SELECTION MODE HELPERS
+  // ─────────────────────────────────────────────
+  void _enterSelectionMode(String id) {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedIds.clear();
+      _selectedIds.add(id);
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedIds.clear();
+    });
+  }
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+        if (_selectedIds.isEmpty) _isSelectionMode = false;
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  //  DELETE SELECTED
+  // ─────────────────────────────────────────────
+  Future<void> _deleteSelected() async {
+    if (_selectedIds.isEmpty) return;
+    final count = _selectedIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Delete Selected?'),
+          ],
+        ),
+        content: Text('$count file${count == 1 ? '' : 's'} will be moved to the Recycle Bin and permanently deleted after 30 days.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Color(0x8A0A0E1A)))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: Text('Delete $count'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      if (_isAnonymousUser) {
+        final provider = context.read<TempLibraryProvider>();
+        for (var id in _selectedIds.toList()) {
+          provider.remove(id);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count file${count == 1 ? '' : 's'} deleted.'), backgroundColor: const Color(0xFF333333)));
+        }
+      } else {
+        final uid = _resolvedUid ?? FirebaseAuth.instance.currentUser?.uid;
+        if (uid == null) return;
+
+        final batch = FirebaseFirestore.instance.batch();
+        final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
+
+        for (var docId in _selectedIds) {
+          final docRef = FirebaseFirestore.instance.collection('library').doc(docId);
+          final snapshot = await docRef.get();
+          if (snapshot.exists) {
+            final data = snapshot.data()!;
+            final newDocRef = userDoc.collection('deleted_library').doc();
+            batch.set(newDocRef, {
+              'fileName': data['fileName'] ?? 'File',
+              'content': data['content'],
+              'fileType': data['fileType'] ?? 'file',
+              'sourceCollection': 'library',
+              'deletedAt': FieldValue.serverTimestamp(),
+              'originalTimestamp': data['timestamp'] ?? FieldValue.serverTimestamp(),
+              'userId': uid,
+            });
+            batch.delete(docRef);
+          }
+        }
+        await batch.commit();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count file${count == 1 ? '' : 's'} moved to Recycle Bin.'), backgroundColor: const Color(0xFF333333)));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.redAccent));
+      }
+    }
+
+    _exitSelectionMode();
+  }
+
+  // ─────────────────────────────────────────────
   //  DELETE ALL
   // ─────────────────────────────────────────────
   Future<void> _deleteAllLibrary() async {
@@ -697,63 +810,114 @@ class _VoxHomePageState extends State<VoxHomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header ──────────────────────────────────
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
+              // ── Header / Selection Bar ──────────────────
+              if (_isSelectionMode) ...[
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0A0E1A),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
                     children: [
-                      const Text("Vox", style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
-                      IconButton(icon: const Icon(Icons.delete_sweep, color: Colors.redAccent), onPressed: _deleteAllLibrary, tooltip: 'Delete All'),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white, size: 22),
+                        onPressed: _exitSelectionMode,
+                        tooltip: 'Cancel',
+                      ),
+                      Text(
+                        '${_selectedIds.length} selected',
+                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+                      ),
+                      const Spacer(),
+                      TextButton.icon(
+                        onPressed: () {
+                          setState(() {
+                            if (_selectedIds.length == _visibleIds.length) {
+                              _selectedIds.clear();
+                            } else {
+                              _selectedIds.addAll(_visibleIds);
+                            }
+                          });
+                        },
+                        icon: Icon(_selectedIds.length == _visibleIds.length ? Icons.deselect : Icons.select_all, color: const Color(0xFF4B9EFF), size: 18),
+                        label: Text(_selectedIds.length == _visibleIds.length ? 'Deselect' : 'Select All', style: const TextStyle(color: Color(0xFF4B9EFF), fontWeight: FontWeight.w700, fontSize: 12)),
+                      ),
+                      const SizedBox(width: 4),
+                      ElevatedButton.icon(
+                        onPressed: _selectedIds.isNotEmpty ? _deleteSelected : null,
+                        icon: const Icon(Icons.delete_outline, size: 18),
+                        label: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.redAccent,
+                          foregroundColor: Colors.white,
+                          disabledBackgroundColor: Colors.grey[700],
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                      ),
                     ],
                   ),
-                  SizedBox(
-                    width: 180,
-                    height: 38,
-                    child: TextField(
-                      controller: _searchController,
-                      maxLength: 100,
-                      onChanged: (v) =>
-                          setState(() => _searchQuery = v.trim().toLowerCase()),
-                      decoration: InputDecoration(
-                        hintText: lang.t('search_hint'),
-                        counterText: '',
-                        prefixIcon: const Icon(Icons.search, size: 18),
-                        suffixIcon: GestureDetector(
-                          onTap: _listen,
-                          child: Icon(
-                            _isListening ? Icons.mic : Icons.mic_none,
-                            size: 18,
-                            color: _isListening
-                                ? Colors.redAccent
-                                : Color(0x8A0A0E1A),
+                ),
+                const SizedBox(height: 8),
+              ] else ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Text("Vox", style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
+                        IconButton(icon: const Icon(Icons.delete_sweep, color: Colors.redAccent), onPressed: _deleteAllLibrary, tooltip: 'Delete All'),
+                      ],
+                    ),
+                    SizedBox(
+                      width: 180,
+                      height: 38,
+                      child: TextField(
+                        controller: _searchController,
+                        maxLength: 100,
+                        onChanged: (v) =>
+                            setState(() => _searchQuery = v.trim().toLowerCase()),
+                        decoration: InputDecoration(
+                          hintText: lang.t('search_hint'),
+                          counterText: '',
+                          prefixIcon: const Icon(Icons.search, size: 18),
+                          suffixIcon: GestureDetector(
+                            onTap: _listen,
+                            child: Icon(
+                              _isListening ? Icons.mic : Icons.mic_none,
+                              size: 18,
+                              color: _isListening
+                                  ? Colors.redAccent
+                                  : Color(0x8A0A0E1A),
+                            ),
                           ),
-                        ),
-                        filled: true,
-                        fillColor: Colors.white.withOpacity(0.8),
-                        contentPadding: EdgeInsets.zero,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(20),
-                          borderSide: BorderSide.none,
+                          filled: true,
+                          fillColor: Colors.white.withOpacity(0.8),
+                          contentPadding: EdgeInsets.zero,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(20),
+                            borderSide: BorderSide.none,
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
-              ),
-              Text(
-                lang.t('library'),
-                style: const TextStyle(
-                  fontSize: 18,
-                  color: Color(0xFF9A9A3E),
-                  fontWeight: FontWeight.bold,
+                  ],
                 ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                lang.t('tap_hint'),
-                style: TextStyle(color: Colors.grey[600], fontSize: 11),
-              ),
+                Text(
+                  lang.t('library'),
+                  style: const TextStyle(
+                    fontSize: 18,
+                    color: Color(0xFF9A9A3E),
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  lang.t('tap_hint'),
+                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                ),
+              ],
 
               // ── Guest banner ─────────────────────────────
               if (_isAnonymousUser) ...[
@@ -849,6 +1013,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                           .toList();
 
                       if (items.isEmpty) {
+                        _visibleIds = [];
                         return Center(
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -881,6 +1046,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         );
                       }
 
+                      _visibleIds = items.map((e) => e.id).toList();
                       return GridView.builder(
                         gridDelegate:
                             const SliverGridDelegateWithFixedCrossAxisCount(
@@ -892,16 +1058,21 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         itemCount: items.length,
                         itemBuilder: (context, index) {
                           final item = items[index];
+                          final isSelected = _selectedIds.contains(item.id);
                           return GestureDetector(
-                            onTap: () =>
-                                _openReader(item.fileName, item.content),
-                            onLongPress: () => _confirmDeleteTemp(
-                              context,
-                              item.id,
-                              item.fileName,
-                              tempLibrary,
-                            ),
-                            child: _buildFileCard(item.fileName, item.fileType),
+                            onTap: () {
+                              if (_isSelectionMode) {
+                                _toggleSelection(item.id);
+                              } else {
+                                _openReader(item.fileName, item.content);
+                              }
+                            },
+                            onLongPress: () {
+                              if (!_isSelectionMode) {
+                                _enterSelectionMode(item.id);
+                              }
+                            },
+                            child: _buildFileCard(item.fileName, item.fileType, isSelected: _isSelectionMode && isSelected),
                           );
                         },
                       );
@@ -992,6 +1163,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         });
 
                         if (docs.isEmpty) {
+                          _visibleIds = [];
                           return Center(
                             child: Text(
                               lang.t('no_files'),
@@ -1004,6 +1176,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                           );
                         }
 
+                        _visibleIds = docs.map((d) => d.id).toList();
                         return GridView.builder(
                           gridDelegate:
                               const SliverGridDelegateWithFixedCrossAxisCount(
@@ -1024,11 +1197,21 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             final String content =
                                 data['content'] as String? ?? '';
                             final String docId = docs[index].id;
+                            final isSelected = _selectedIds.contains(docId);
                             return GestureDetector(
-                              onTap: () => _openReader(name, content),
-                              onLongPress: () =>
-                                  _confirmDelete(context, docId, name),
-                              child: _buildFileCard(name, type),
+                              onTap: () {
+                                if (_isSelectionMode) {
+                                  _toggleSelection(docId);
+                                } else {
+                                  _openReader(name, content);
+                                }
+                              },
+                              onLongPress: () {
+                                if (!_isSelectionMode) {
+                                  _enterSelectionMode(docId);
+                                }
+                              },
+                              child: _buildFileCard(name, type, isSelected: _isSelectionMode && isSelected),
                             );
                           },
                         );
@@ -1160,7 +1343,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
-  Widget _buildFileCard(String title, String type) {
+  Widget _buildFileCard(String title, String type, {bool isSelected = false}) {
     IconData iconData;
     Color iconColor;
     switch (type.toLowerCase()) {
@@ -1186,40 +1369,63 @@ class _VoxHomePageState extends State<VoxHomePage> {
         iconData = Icons.insert_drive_file;
         iconColor = Colors.grey.shade600;
     }
-    return Container(
-      decoration: BoxDecoration(
-        color: const Color(0xFFE0E0E0),
-        borderRadius: BorderRadius.circular(14),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0xFF0A0E1A).withOpacity(0.07),
-            blurRadius: 5,
-            offset: const Offset(0, 3),
+    return Stack(
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          decoration: BoxDecoration(
+            color: isSelected ? const Color(0xFF4B9EFF).withOpacity(0.18) : const Color(0xFFE0E0E0),
+            borderRadius: BorderRadius.circular(14),
+            border: isSelected ? Border.all(color: const Color(0xFF4B9EFF), width: 2.5) : null,
+            boxShadow: [
+              BoxShadow(
+                color: Color(0xFF0A0E1A).withOpacity(0.07),
+                blurRadius: 5,
+                offset: const Offset(0, 3),
+              ),
+            ],
           ),
-        ],
-      ),
-      padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            title,
-            style: const TextStyle(
-              color: Color(0xDD0A0E1A),
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              height: 1.2,
+          padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Color(0xDD0A0E1A),
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  height: 1.2,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              Align(
+                alignment: Alignment.bottomRight,
+                child: Icon(iconData, size: 28, color: iconColor),
+              ),
+            ],
+          ),
+        ),
+        if (isSelected)
+          Positioned(
+            top: 4,
+            right: 4,
+            child: Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: const Color(0xFF4B9EFF),
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(color: const Color(0xFF4B9EFF).withOpacity(0.4), blurRadius: 6, spreadRadius: 1),
+                ],
+              ),
+              child: const Icon(Icons.check, color: Colors.white, size: 16),
             ),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
           ),
-          Align(
-            alignment: Alignment.bottomRight,
-            child: Icon(iconData, size: 28, color: iconColor),
-          ),
-        ],
-      ),
+      ],
     );
   }
 

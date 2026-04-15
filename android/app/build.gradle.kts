@@ -13,6 +13,7 @@ android {
     ndkVersion = flutter.ndkVersion
 
     compileOptions {
+        isCoreLibraryDesugaringEnabled = true
         sourceCompatibility = JavaVersion.VERSION_11
         targetCompatibility = JavaVersion.VERSION_11
     }
@@ -31,34 +32,39 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            storeFile = file('debug.keystore')
-            storePassword = 'android'
-            keyAlias = 'androiddebugkey'
-            keyPassword = 'android'
+            // Let the build system use the default debug.keystore
+            // storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
         }
 
         create("release") {
             // Use environment variables for keystore credentials
             // Set these in your CI/CD or local environment
-            storeFile = file(System.getenv('KEYSTORE_PATH') ?: 'upload-keystore.jks')
-            storePassword = System.getenv('KEYSTORE_PASSWORD') ?: 'default_password'
-            keyAlias = System.getenv('KEY_ALIAS') ?: 'upload'
-            keyPassword = System.getenv('KEY_PASSWORD') ?: 'default_password'
+            storeFile = file(System.getenv("KEYSTORE_PATH") ?: "upload-keystore.jks")
+            storePassword = System.getenv("KEYSTORE_PASSWORD") ?: "default_password"
+            keyAlias = System.getenv("KEY_ALIAS") ?: "upload"
+            keyPassword = System.getenv("KEY_PASSWORD") ?: "default_password"
         }
     }
 
     buildTypes {
         getByName("release") {
-            isMinifyEnabled = true
-            isShrinkResources = true
+            isMinifyEnabled = false
+            isShrinkResources = false
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
 
-            // Use proper release signing configuration
-            signingConfig = signingConfigs.getByName("release")
+            // Use debug signing configuration for local testing
+            signingConfig = signingConfigs.getByName("debug")
         }
     }
 }
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
 }

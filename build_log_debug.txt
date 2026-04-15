@@ -1,0 +1,60 @@
+﻿Running Gradle task 'assembleDebug'...                          
+flutter : 
+At line:1 char:1
++ flutter build apk 
+--debug 2>&1 | Out-File 
+-FilePath 
+build_log_debug.t ...
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (:  
+  String) [], RemoteExc   
+ eption
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 
+FAILURE: Build failed 
+with an exception.
+
+* What went wrong:
+Execution failed for task 
+':app:processDebugGoogleSe
+rvices'.
+> File 
+google-services.json is 
+missing. The Google 
+Services Plugin cannot 
+function without it. 
+   Searched Location: 
+  C:\Users\WinDows\Documen
+ts\GitHub\voxapplication\a
+ndroid\app\src\debug\googl
+e-services.json
+  C:\Users\WinDows\Documen
+ts\GitHub\voxapplication\a
+ndroid\app\src\google-serv
+ices.json
+  C:\Users\WinDows\Documen
+ts\GitHub\voxapplication\a
+ndroid\app\google-services
+.json
+
+
+* Try:
+> Run with --stacktrace 
+option to get the stack 
+trace.
+> Run with --info or 
+--debug option to get 
+more log output.
+> Run with --scan to get 
+full insights.
+> Get more help at 
+https://help.gradle.org.
+
+BUILD FAILED in 34s
+Running Gradle task 'assembleDebug'...                             35.6s
+Gradle task assembleDebug 
+failed with exit code 1

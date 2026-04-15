@@ -64,6 +64,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   bool _isAnonymousUser = true;
   final ScrollController _scrollController = ScrollController();
 
+  // Multi-select mode
+  bool _isNoteSelectionMode = false;
+  final Set<String> _selectedNoteIds = {};
+  List<String> _visibleNoteIds = [];
+
   // Tab for note detail view
   int _detailTab = 0; // 0=transcript, 1=audio
 
@@ -569,6 +574,116 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       _audioUrl = null;
       _recordingDuration = Duration.zero;
     });
+  }
+
+  // ─────────────────────────────────────────────
+  //  SELECTION MODE HELPERS
+  // ─────────────────────────────────────────────
+  void _enterNoteSelectionMode(String id) {
+    setState(() {
+      _isNoteSelectionMode = true;
+      _selectedNoteIds.clear();
+      _selectedNoteIds.add(id);
+    });
+  }
+
+  void _exitNoteSelectionMode() {
+    setState(() {
+      _isNoteSelectionMode = false;
+      _selectedNoteIds.clear();
+    });
+  }
+
+  void _toggleNoteSelection(String id) {
+    setState(() {
+      if (_selectedNoteIds.contains(id)) {
+        _selectedNoteIds.remove(id);
+        if (_selectedNoteIds.isEmpty) _isNoteSelectionMode = false;
+      } else {
+        _selectedNoteIds.add(id);
+      }
+    });
+  }
+
+  // ─────────────────────────────────────────────
+  //  DELETE SELECTED NOTES
+  // ─────────────────────────────────────────────
+  Future<void> _deleteSelectedNotes() async {
+    if (_selectedNoteIds.isEmpty) return;
+    final count = _selectedNoteIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.delete_outline, color: Colors.redAccent),
+            SizedBox(width: 8),
+            Text('Delete Selected?'),
+          ],
+        ),
+        content: Text('$count note${count == 1 ? '' : 's'} will be moved to the Recycle Bin and permanently deleted after 30 days.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Color(0x8A0A0E1A)))),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            child: Text('Delete $count'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      if (_isAnonymousUser) {
+        final provider = context.read<TempNotesProvider>();
+        for (var id in _selectedNoteIds.toList()) {
+          provider.remove(id);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count note${count == 1 ? '' : 's'} deleted.'), backgroundColor: const Color(0xFF333333)));
+        }
+      } else {
+        final uid = FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid;
+        if (uid == null) return;
+
+        final batch = FirebaseFirestore.instance.batch();
+        final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
+
+        for (var docId in _selectedNoteIds) {
+          final docRef = FirebaseFirestore.instance.collection('notes').doc(docId);
+          final snapshot = await docRef.get();
+          if (snapshot.exists) {
+            final data = snapshot.data()!;
+            final newDocRef = userDoc.collection('deleted_library').doc();
+            batch.set(newDocRef, {
+              'fileName': data['title'] ?? 'Note',
+              'content': data['content'],
+              'audioUrl': data['audioUrl'],
+              'recordingDurationSeconds': data['recordingDurationSeconds'],
+              'fileType': 'note',
+              'sourceCollection': 'notes',
+              'deletedAt': FieldValue.serverTimestamp(),
+              'originalTimestamp': data['timestamp'] ?? FieldValue.serverTimestamp(),
+              'userId': uid,
+            });
+            batch.delete(docRef);
+          }
+        }
+        await batch.commit();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count note${count == 1 ? '' : 's'} moved to Recycle Bin.'), backgroundColor: const Color(0xFF333333)));
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.redAccent));
+      }
+    }
+
+    _exitNoteSelectionMode();
   }
 
   // ─────────────────────────────────────────────
@@ -1362,34 +1477,80 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     return Scaffold(
       backgroundColor: const Color(0xFFF0F4FF),
       appBar: AppBar(
-        title: const Text('Voice Notes', style: TextStyle(color: Color(0xFF0A0E1A), fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: -0.5)),
-        backgroundColor: Colors.transparent,
+        title: _isNoteSelectionMode
+            ? Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Color(0xFF0A0E1A), size: 22),
+                    onPressed: _exitNoteSelectionMode,
+                  ),
+                  Text(
+                    '${_selectedNoteIds.length} selected',
+                    style: const TextStyle(color: Color(0xFF0A0E1A), fontWeight: FontWeight.w700, fontSize: 16),
+                  ),
+                ],
+              )
+            : const Text('Voice Notes', style: TextStyle(color: Color(0xFF0A0E1A), fontWeight: FontWeight.w900, fontSize: 20, letterSpacing: -0.5)),
+        backgroundColor: _isNoteSelectionMode ? const Color(0xFF4B9EFF).withOpacity(0.1) : Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.delete_sweep_rounded, color: Colors.redAccent),
-            tooltip: 'Delete All',
-            onPressed: _deleteAllNotes,
-          ),
-          Padding(
-            padding: const EdgeInsets.only(right: 16),
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Color(0xFF0A0E1A).withValues(alpha: 0.08), borderRadius: BorderRadius.circular(20)),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(width: 6, height: 6, decoration: BoxDecoration(color: _isAnonymousUser ? Colors.orange : Colors.green, borderRadius: BorderRadius.circular(3))),
-                    const SizedBox(width: 5),
-                    Text(lang.selectedLanguage, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xDD0A0E1A))),
-                  ],
+        actions: _isNoteSelectionMode
+            ? [
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      if (_selectedNoteIds.length == _visibleNoteIds.length && _visibleNoteIds.isNotEmpty) {
+                        _selectedNoteIds.clear();
+                      } else {
+                        _selectedNoteIds.addAll(_visibleNoteIds);
+                      }
+                    });
+                  },
+                  icon: Icon(
+                    _selectedNoteIds.length == _visibleNoteIds.length && _visibleNoteIds.isNotEmpty ? Icons.deselect : Icons.select_all,
+                    color: const Color(0xFF0A0E1A),
+                    size: 18,
+                  ),
+                  label: Text(
+                    _selectedNoteIds.length == _visibleNoteIds.length && _visibleNoteIds.isNotEmpty ? 'Deselect' : 'Select All',
+                    style: const TextStyle(color: Color(0xFF0A0E1A), fontWeight: FontWeight.w700, fontSize: 12),
+                  ),
                 ),
-              ),
-            ),
-          ),
-        ],
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: ElevatedButton.icon(
+                    onPressed: _selectedNoteIds.isNotEmpty ? _deleteSelectedNotes : null,
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.redAccent,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: Colors.grey[400],
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    ),
+                  ),
+                ),
+              ]
+            : [
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(color: Color(0xFF0A0E1A).withValues(alpha: 0.08), borderRadius: BorderRadius.circular(20)),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(width: 6, height: 6, decoration: BoxDecoration(color: _isAnonymousUser ? Colors.orange : Colors.green, borderRadius: BorderRadius.circular(3))),
+                          const SizedBox(width: 5),
+                          Text(lang.selectedLanguage, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: Color(0xDD0A0E1A))),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
       ),
       body: SingleChildScrollView(
         controller: _scrollController,
@@ -1540,6 +1701,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
               builder: (context, tempNotes, _) {
                 if (_isAnonymousUser) {
                   if (tempNotes.notes.isEmpty) {
+                    _visibleNoteIds = [];
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 40),
                       child: Column(
@@ -1553,6 +1715,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       ),
                     );
                   }
+                  _visibleNoteIds = tempNotes.notes.map((e) => e.id).toList();
                   return ListView.builder(
                     padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                     shrinkWrap: true,
@@ -1560,12 +1723,25 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     itemCount: tempNotes.notes.length,
                     itemBuilder: (ctx, i) {
                       final note = tempNotes.notes[i];
+                      final isSelected = _selectedNoteIds.contains(note.id);
                       return _noteCard(
                         title: note.title,
                         content: note.content,
                         hasAudio: false,
                         isTemp: true,
-                        onTap: () => _showNoteDetails(note.id, note.title, note.content),
+                        isSelected: _isNoteSelectionMode && isSelected,
+                        onTap: () {
+                          if (_isNoteSelectionMode) {
+                            _toggleNoteSelection(note.id);
+                          } else {
+                            _showNoteDetails(note.id, note.title, note.content);
+                          }
+                        },
+                        onLongPress: () {
+                          if (!_isNoteSelectionMode) {
+                            _enterNoteSelectionMode(note.id);
+                          }
+                        },
                         onDelete: () => _deleteTempNote(note.id, tempNotes),
                       );
                     },
@@ -1600,6 +1776,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       });
 
                     if (docs.isEmpty) {
+                      _visibleNoteIds = [];
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 40),
                         child: Column(
@@ -1612,6 +1789,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       );
                     }
 
+                    _visibleNoteIds = docs.map((d) => d.id).toList();
                     return ListView.builder(
                       padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
                       shrinkWrap: true,
@@ -1624,13 +1802,26 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         final audioUrl = data['audioUrl'] as String?;
                         final durationSecs = data['recordingDurationSeconds'] as int?;
                         final docId = docs[i].id;
+                        final isSelected = _selectedNoteIds.contains(docId);
                         return _noteCard(
                           title: title,
                           content: content,
                           hasAudio: audioUrl != null,
                           durationSeconds: durationSecs,
                           isTemp: false,
-                          onTap: () => _showNoteDetails(docId, title, content, audioUrl: audioUrl, durationSeconds: durationSecs),
+                          isSelected: _isNoteSelectionMode && isSelected,
+                          onTap: () {
+                            if (_isNoteSelectionMode) {
+                              _toggleNoteSelection(docId);
+                            } else {
+                              _showNoteDetails(docId, title, content, audioUrl: audioUrl, durationSeconds: durationSecs);
+                            }
+                          },
+                          onLongPress: () {
+                            if (!_isNoteSelectionMode) {
+                              _enterNoteSelectionMode(docId);
+                            }
+                          },
                           onDelete: () => _deleteNote(docId),
                         );
                       },
@@ -1676,32 +1867,50 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     required bool hasAudio,
     int? durationSeconds,
     required bool isTemp,
+    bool isSelected = false,
     required VoidCallback onTap,
+    VoidCallback? onLongPress,
     required VoidCallback onDelete,
   }) {
     return GestureDetector(
       onTap: onTap,
-      child: Container(
+      onLongPress: onLongPress,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
         margin: const EdgeInsets.only(bottom: 10),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.75),
+          color: isSelected ? const Color(0xFF4B9EFF).withOpacity(0.12) : Colors.white.withValues(alpha: 0.75),
           borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Color(0xFF0A0E1A).withValues(alpha: 0.05)),
+          border: Border.all(
+            color: isSelected ? const Color(0xFF4B9EFF) : Color(0xFF0A0E1A).withValues(alpha: 0.05),
+            width: isSelected ? 2 : 1,
+          ),
         ),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Left icon
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: hasAudio ? Color(0xFF0A0E1A) : Colors.grey[200],
-                borderRadius: BorderRadius.circular(12),
+            // Left icon / checkbox
+            if (isSelected)
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: const Color(0xFF4B9EFF),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.check, color: Colors.white, size: 22),
+              )
+            else
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: hasAudio ? Color(0xFF0A0E1A) : Colors.grey[200],
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(hasAudio ? Icons.mic : Icons.article_outlined, color: hasAudio ? const Color(0xFF4B9EFF) : Colors.grey[500], size: 20),
               ),
-              child: Icon(hasAudio ? Icons.mic : Icons.article_outlined, color: hasAudio ? const Color(0xFF4B9EFF) : Colors.grey[500], size: 20),
-            ),
             const SizedBox(width: 12),
 
             // Content
@@ -1735,15 +1944,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     ),
                   ],
                 ],
-              ),
-            ),
-
-            // Delete
-            GestureDetector(
-              onTap: onDelete,
-              child: Padding(
-                padding: const EdgeInsets.only(left: 8, top: 2),
-                child: Icon(Icons.delete_outline, color: Colors.grey[400], size: 20),
               ),
             ),
           ],

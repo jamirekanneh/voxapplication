@@ -1,0 +1,49 @@
+﻿Running Gradle task 'assembleRelease'...                        
+Font asset "MaterialIcons-Regular.otf" was tree-shaken, reducing it from 1645184 to 20400 bytes (98.8% reduction). Tree-shaking can be disabled by providing the --no-tree-shake-icons flag when building your app.
+flutter : 
+At line:1 char:1
++ flutter build apk 
+--release 2>&1 | Out-File 
+-FilePath build_log7.txt  
+...
++ ~~~~~~~~~~~~~~~~~~~~~~~~
+~~~~~~~~
+    + CategoryInfo        
+      : NotSpecified: (:  
+  String) [], RemoteExc   
+ eption
+    + FullyQualifiedError 
+   Id : NativeCommandErr  
+  or
+ 
+FAILURE: Build failed 
+with an exception.
+
+* What went wrong:
+Execution failed for task 
+':app:validateSigningRelea
+se'.
+> Keystore file 'C:\Users\
+WinDows\Documents\GitHub\v
+oxapplication\android\app\
+debug.keystore' not found 
+for signing config 
+'debug'.
+
+* Try:
+> Run with --stacktrace 
+option to get the stack 
+trace.
+> Run with --info or 
+--debug option to get 
+more log output.
+> Run with --scan to get 
+full insights.
+> Get more help at 
+https://help.gradle.org.
+
+BUILD FAILED in 1m 1s
+Running Gradle task 'assembleRelease'...                           62.1s
+Gradle task 
+assembleRelease failed 
+with exit code 1
