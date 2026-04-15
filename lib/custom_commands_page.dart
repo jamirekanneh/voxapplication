@@ -269,11 +269,6 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
                           letterSpacing: -0.5,
                         ),
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.delete_sweep, color: Colors.redAccent),
-                        tooltip: 'Delete All',
-                        onPressed: _deleteAllCommands,
-                      ),
                     ],
                   ),
                   const SizedBox(height: 4),

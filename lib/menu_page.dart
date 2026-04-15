@@ -786,7 +786,7 @@ class _MenuPageState extends State<MenuPage> {
                   ],
 
                   // Logout — show for any user that has a verified account
-                  if (_hasProfile && !_isFirebaseAnonymous) ...[
+                  if (_hasProfile || !_isFirebaseAnonymous) ...[
                     const SizedBox(height: 4),
                     _buildMenuItem(
                       icon: Icons.logout_rounded,

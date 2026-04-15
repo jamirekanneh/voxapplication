@@ -720,81 +720,6 @@ class _VoxHomePageState extends State<VoxHomePage> {
   }
 
   // ─────────────────────────────────────────────
-  //  DELETE ALL
-  // ─────────────────────────────────────────────
-  Future<void> _deleteAllLibrary() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.delete_sweep, color: Colors.redAccent),
-            SizedBox(width: 8),
-            Text('Empty Library?'),
-          ],
-        ),
-        content: const Text('All files will be moved to the Recycle Bin and permanently deleted after 30 days. Are you sure?'),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Color(0x8A0A0E1A)))),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
-            child: const Text('Delete All'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-
-    try {
-      if (_isAnonymousUser) {
-        final provider = context.read<TempLibraryProvider>();
-        final ids = provider.items.map((e) => e.id).toList();
-        for (var id in ids) {
-          provider.remove(id);
-        }
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All files deleted.'), backgroundColor: Color(0xFF333333)));
-        }
-      } else {
-        final uid = _resolvedUid ?? FirebaseAuth.instance.currentUser?.uid;
-        if (uid == null) return;
-
-        final query = await FirebaseFirestore.instance.collection('library').where('userId', isEqualTo: uid).get();
-        if (query.docs.isEmpty) return;
-
-        final batch = FirebaseFirestore.instance.batch();
-        final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
-
-        for (var doc in query.docs) {
-          final data = doc.data();
-          final newDocRef = userDoc.collection('deleted_library').doc();
-          batch.set(newDocRef, {
-            'fileName': data['fileName'] ?? 'File',
-            'content': data['content'],
-            'fileType': data['fileType'] ?? 'file',
-            'sourceCollection': 'library',
-            'deletedAt': FieldValue.serverTimestamp(),
-            'originalTimestamp': data['timestamp'] ?? FieldValue.serverTimestamp(),
-            'userId': uid,
-          });
-          batch.delete(doc.reference);
-        }
-        await batch.commit();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All files moved to Recycle Bin.'), backgroundColor: Color(0xFF333333)));
-        }
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete all: $e'), backgroundColor: Colors.redAccent));
-      }
-    }
-  }
-
-  // ─────────────────────────────────────────────
   //  BUILD
   // ─────────────────────────────────────────────
   @override
@@ -867,7 +792,6 @@ class _VoxHomePageState extends State<VoxHomePage> {
                     Row(
                       children: [
                         const Text("Vox", style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
-                        IconButton(icon: const Icon(Icons.delete_sweep, color: Colors.redAccent), onPressed: _deleteAllLibrary, tooltip: 'Delete All'),
                       ],
                     ),
                     SizedBox(

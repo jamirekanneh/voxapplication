@@ -12,6 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:archive/archive.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'dart:typed_data';
 import 'temp_library_provider.dart';
 import 'language_provider.dart';
 import 'tts_service.dart';
@@ -277,6 +278,15 @@ class _UploadPageState extends State<UploadPage> {
     final String fileName = file.name;
     final String extension = (file.extension ?? 'file').toLowerCase();
 
+    Uint8List? fileBytes = file.bytes;
+    if (fileBytes == null && file.path != null) {
+      try {
+        fileBytes = await File(file.path!).readAsBytes();
+      } catch (e) {
+        debugPrint('File read error: $e');
+      }
+    }
+
     // Enhanced file validation
     if (!_isValidFile(file, extension)) {
       setState(() => _isUploading = false);
@@ -300,40 +310,40 @@ class _UploadPageState extends State<UploadPage> {
     String fileContent = '';
 
     try {
-      if (extension == 'txt' && file.bytes != null) {
-        fileContent = utf8.decode(file.bytes!, allowMalformed: true);
-      } else if (extension == 'pdf' && file.bytes != null) {
+      if (extension == 'txt' && fileBytes != null) {
+        fileContent = utf8.decode(fileBytes, allowMalformed: true);
+      } else if (extension == 'pdf' && fileBytes != null) {
         setState(() => _statusMessage = 'Extracting PDF text...');
-        fileContent = await _extractPdfText(file.bytes!);
+        fileContent = await _extractPdfText(fileBytes);
       } else if ((extension == 'ppt' || extension == 'pptx') &&
-          file.bytes != null) {
+          fileBytes != null) {
         setState(() => _statusMessage = 'Extracting presentation text...');
         fileContent = extension == 'pptx'
-            ? _extractPptxTextFromZip(file.bytes!)
-            : _extractPlainText(file.bytes!);
+            ? _extractPptxTextFromZip(fileBytes)
+            : _extractPlainText(fileBytes);
       } else if ((extension == 'docx' || extension == 'doc') &&
-          file.bytes != null) {
+          fileBytes != null) {
         setState(() => _statusMessage = 'Extracting document text...');
         fileContent = extension == 'docx'
-            ? _extractDocxTextFromZip(file.bytes!)
-            : _extractPlainText(file.bytes!);
+            ? _extractDocxTextFromZip(fileBytes)
+            : _extractPlainText(fileBytes);
       } else if ((extension == 'md' ||
               extension == 'rtf' ||
               extension == 'csv' ||
               extension == 'epub') &&
-          file.bytes != null) {
+          fileBytes != null) {
         setState(() => _statusMessage = 'Reading text file...');
-        fileContent = _extractPlainText(file.bytes!);
+        fileContent = _extractPlainText(fileBytes);
       } else if ((extension == 'xlsx' ||
               extension == 'xls' ||
               extension == 'odt' ||
               extension == 'odp') &&
-          file.bytes != null) {
+          fileBytes != null) {
         setState(() => _statusMessage = 'Extracting file text...');
-        fileContent = _extractXmlBasedText(file.bytes!);
-      } else if (file.bytes != null) {
+        fileContent = _extractXmlBasedText(fileBytes);
+      } else if (fileBytes != null) {
         setState(() => _statusMessage = 'Reading file...');
-        fileContent = _extractPlainText(file.bytes!);
+        fileContent = _extractPlainText(fileBytes);
       }
 
       fileContent = fileContent.trim().replaceAll(RegExp(r'\n{3,}'), '\n\n');

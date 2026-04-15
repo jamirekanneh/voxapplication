@@ -94,6 +94,17 @@ class _SplashScreenState extends State<SplashScreen>
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
+                Image.asset(
+                  'assets/images/vox_logo.png',
+                  width: 150,
+                  height: 150,
+                  errorBuilder: (context, error, stackTrace) => const SizedBox(
+                    width: 150,
+                    height: 150,
+                    child: Placeholder(),
+                  ),
+                ),
+                const SizedBox(height: 24),
                 const Text(
                   "THE VOX APP",
                   style: TextStyle(
