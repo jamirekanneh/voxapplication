@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'ai_service.dart';
-import 'main.dart';
 
 class FloatingBotWrapper extends StatefulWidget {
   final Widget child;
@@ -49,7 +48,7 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
   }
 
   void _openChat() {
-    final ctx = globalNavigatorKey.currentContext;
+    final ctx = context;
     if (ctx != null) {
       showModalBottomSheet(
         context: ctx,
@@ -77,45 +76,20 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
                   child: Container(
                     width: 60,
                     height: 60,
+                    clipBehavior: Clip.hardEdge,
                     decoration: BoxDecoration(
-                      gradient: const LinearGradient(
-                        colors: [
-                          Color(0xFF8D6E63), // Light taupe brown
-                          Color(0xFF4E342E), // Darker elegant brown
-                        ],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
                       shape: BoxShape.circle,
-                      border: Border.all(
-                        color: Colors.white.withOpacity(0.2),
-                        width: 1.5,
-                      ),
                       boxShadow: [
                         BoxShadow(
-                          color: Color(0xFF0A0E1A).withOpacity(0.3),
+                          color: const Color(0xFF0A0E1A).withOpacity(0.3),
                           blurRadius: 12,
                           offset: const Offset(0, 6),
                         ),
                       ],
                     ),
-                    child: const Center(
-                      child: Text(
-                        'V',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 28,
-                          fontWeight: FontWeight.w500,
-                          letterSpacing: 1.5,
-                          shadows: [
-                            Shadow(
-                              color: Color(0x420A0E1A),
-                              blurRadius: 4,
-                              offset: Offset(0, 2),
-                            ),
-                          ],
-                        ),
-                      ),
+                    child: Image.asset(
+                      'assets/images/chatbot_logo.png',
+                      fit: BoxFit.cover,
                     ),
                   ),
                 ),

@@ -83,7 +83,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Saved Q&A Generator', style: TextStyle(color: Color(0xFF0A0E1A), fontWeight: FontWeight.bold)),
+        title: const Text('Q&A Generator', style: TextStyle(color: Color(0xFF0A0E1A), fontWeight: FontWeight.bold)),
         iconTheme: const IconThemeData(color: Color(0xFF0A0E1A)),
       ),
       body: StreamBuilder<QuerySnapshot>(

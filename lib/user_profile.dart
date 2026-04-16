@@ -1654,18 +1654,31 @@ class _GoogleButton extends StatelessWidget {
             : Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  Image.asset(
-                    'assets/images/btn_google_signin.png',
-                    height: 40,
-                    width: 120,
-                    fit: BoxFit.contain,
+                  SizedBox(
+                    width: 18,
+                    height: 18,
+                    child: ClipRect(
+                      child: Stack(
+                        children: [
+                          Positioned(
+                            left: -9,
+                            top: -9,
+                            child: Image.asset(
+                              'assets/images/btn_google_signin.png',
+                              height: 36,
+                              fit: BoxFit.fitHeight,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   const Text(
                     "Continue with Google",
                     style: TextStyle(
                       fontWeight: FontWeight.w600,
-                      fontSize: 15,
+                      fontSize: 16,
                     ),
                   ),
                 ],

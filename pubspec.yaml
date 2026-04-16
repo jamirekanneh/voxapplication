@@ -86,5 +86,6 @@ flutter:
     - assets/images/Abdurahman.jpeg
     - assets/images/IMG_3331.jpg
     - assets/images/btn_google_signin.png
+    - assets/images/chatbot_logo.png
     - assets/images/vox_logo.png
     - assets/project.env

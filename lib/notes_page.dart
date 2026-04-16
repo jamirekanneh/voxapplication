@@ -914,18 +914,19 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       const SizedBox(height: 12),
 
                       // ── Tabs ──
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Row(
-                          children: [
-                            _tabChip(label: 'Transcript', selected: activeTab == 0, onTap: () => setSheetState(() => activeTab = 0)),
-                            const SizedBox(width: 8),
-                            if (audioUrl != null)
+                      if (audioUrl != null) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            children: [
+                              _tabChip(label: 'Transcript', selected: activeTab == 0, onTap: () => setSheetState(() => activeTab = 0)),
+                              const SizedBox(width: 8),
                               _tabChip(label: 'Audio', selected: activeTab == 1, onTap: () => setSheetState(() => activeTab = 1)),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 12),
+                        const SizedBox(height: 12),
+                      ],
 
                       const Divider(height: 1, thickness: 1, indent: 20, endIndent: 20),
 
@@ -1186,25 +1187,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     ),
                   ),
                 ),
-                GestureDetector(
-                  onTap: _startRecording,
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    decoration: const BoxDecoration(
-                      color: Color(0xFF0A0E1A),
-                      borderRadius: BorderRadius.vertical(bottom: Radius.circular(20)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.mic, color: Color(0xFF4B9EFF), size: 18),
-                        const SizedBox(width: 8),
-                        const Text('Voice Record', style: TextStyle(color: Color(0xFF4B9EFF), fontWeight: FontWeight.w700, fontSize: 14)),
-                      ],
-                    ),
-                  ),
-                ),
+
               ],
             ),
           ),

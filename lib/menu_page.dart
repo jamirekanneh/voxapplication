@@ -15,6 +15,7 @@ import 'ask_questions_page.dart';
 import 'saved_assessments_page.dart';
 import 'analytics_service.dart';
 import 'floating_chat_bot.dart';
+import 'recommendations_page.dart';
 
 class MenuPage extends StatefulWidget {
   const MenuPage({super.key});
@@ -724,11 +725,21 @@ class _MenuPageState extends State<MenuPage> {
                   if (_hasProfile) ...[
                     _buildMenuItem(
                       icon: Icons.bookmarks_outlined,
-                      title: 'Saved Q&A Generator',
+                      title: 'Q&A Generator',
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
                           builder: (_) => const SavedAssessmentsPage(),
+                        ),
+                      ),
+                    ),
+                    _buildMenuItem(
+                      icon: Icons.lightbulb_outline_rounded,
+                      title: 'Recommendations',
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const RecommendationsPage(),
                         ),
                       ),
                     ),
