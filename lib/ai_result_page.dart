@@ -153,6 +153,42 @@ class _AiResultPageState extends State<AiResultPage> {
     
     if (_flashcards == null || _flashcards!.isEmpty) return;
 
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final ctrl = TextEditingController(text: widget.documentTitle);
+        return AlertDialog(
+          backgroundColor: const Color(0xFFF0F4FF),
+          title: const Text('Save Q&A Generator'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Enter Chapter or Document Name:', style: TextStyle(fontSize: 13, color: Color(0xAA0A0E1A))),
+              const SizedBox(height: 8),
+              TextField(
+                controller: ctrl,
+                decoration: const InputDecoration(
+                  border: OutlineInputBorder(),
+                  hintText: 'e.g. Chapter 1 Biology',
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0A0E1A), foregroundColor: Colors.white),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (result == null || result.isEmpty) return;
+
     setState(() => _loading = true);
     
     try {
@@ -160,12 +196,12 @@ class _AiResultPageState extends State<AiResultPage> {
       await FirebaseFirestore.instance.collection('assessments').add({
         'userId': user.uid,
         'userEmail': user.email,
-        'documentTitle': widget.documentTitle,
+        'documentTitle': result,
         'createdAt': FieldValue.serverTimestamp(),
         'questions': data,
       });
       
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Assessment saved successfully!')));
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved successfully!')));
     } catch(e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving: $e')));
     } finally {

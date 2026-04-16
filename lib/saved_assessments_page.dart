@@ -35,7 +35,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
       context,
       MaterialPageRoute(
         builder: (_) => AssessmentViewerScreen(
-          title: data['documentTitle'] ?? 'Assessment',
+            title: data['documentTitle'] ?? 'Q&A Generator',
           flashcards: flashcards,
         ),
       ),
@@ -47,8 +47,8 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFFF0F4FF),
-        title: const Text('Delete Assessment?'),
-        content: const Text('Are you sure you want to delete this saved assessment?'),
+        title: const Text('Delete Q&A Generator?'),
+        content: const Text('Are you sure you want to delete this saved Q&A Generator?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -58,7 +58,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
             onPressed: () async {
               Navigator.pop(ctx);
               await FirebaseFirestore.instance.collection('assessments').doc(docId).delete();
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Assessment deleted.')));
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Q&A Generator deleted.')));
             },
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
             child: const Text('Delete', style: TextStyle(color: Colors.white)),
@@ -74,7 +74,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
       return Scaffold(
         backgroundColor: const Color(0xFFF0F4FF),
         appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
-        body: const Center(child: Text("Please sign in to view saved assessments.")),
+        body: const Center(child: Text("Please sign in to view saved Q&A Generators.")),
       );
     }
 
@@ -83,7 +83,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Saved Assessments', style: TextStyle(color: Color(0xFF0A0E1A), fontWeight: FontWeight.bold)),
+        title: const Text('Saved Q&A Generator', style: TextStyle(color: Color(0xFF0A0E1A), fontWeight: FontWeight.bold)),
         iconTheme: const IconThemeData(color: Color(0xFF0A0E1A)),
       ),
       body: StreamBuilder<QuerySnapshot>(
@@ -97,12 +97,12 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
             return const Center(child: CircularProgressIndicator(color: Color(0xFF0A0E1A)));
           }
           if (snapshot.hasError) {
-            return Center(child: Text("Error loading assessments: ${snapshot.error}"));
+            return Center(child: Text("Error loading Q&A Generators: ${snapshot.error}"));
           }
 
           final docs = snapshot.data?.docs ?? [];
           if (docs.isEmpty) {
-            return const Center(child: Text("No saved assessments yet. Generate some and save them!"));
+            return const Center(child: Text("No saved Q&A Generators yet. Generate some and save them!"));
           }
 
           return ListView.builder(
@@ -110,7 +110,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
             itemCount: docs.length,
             itemBuilder: (context, index) {
               final data = docs[index].data() as Map<String, dynamic>;
-              final title = data['documentTitle'] ?? 'Untitled Assessment';
+              final title = data['documentTitle'] ?? 'Untitled Q&A Generator';
               final questions = (data['questions'] as List?)?.length ?? 0;
               final timestamp = (data['createdAt'] as Timestamp?)?.toDate();
 

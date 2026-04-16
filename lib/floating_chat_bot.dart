@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:permission_handler/permission_handler.dart';
 import 'ai_service.dart';
 import 'main.dart';
 
@@ -133,14 +135,62 @@ class ChatBotBottomSheet extends StatefulWidget {
 
 class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> {
   final TextEditingController _controller = TextEditingController();
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isListening = false;
   final List<Map<String, String>> _messages = [
     {'role': 'assistant', 'content': 'Hello! I am the Vox Assistant. How can I help you today?'}
   ];
   bool _isLoading = false;
 
+  @override
+  void dispose() {
+    _speech.stop();
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _listen() async {
+    if (!_isListening) {
+      bool available = await _speech.initialize(
+        onStatus: (status) {
+          if (status == 'done' || status == 'notListening') {
+            setState(() => _isListening = false);
+          }
+        },
+        onError: (error) {
+          setState(() => _isListening = false);
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Speech error: ${error.errorMsg}')));
+        },
+      );
+      if (available) {
+        setState(() => _isListening = true);
+        _speech.listen(
+          onResult: (val) {
+            setState(() {
+              _controller.text = val.recognizedWords;
+            });
+            if (val.hasConfidenceRating && val.confidence > 0 && val.finalResult) {
+               _sendMessage(); // Auto-send when final
+            }
+          },
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Speech recognition not available. Check permissions.')));
+      }
+    } else {
+      setState(() => _isListening = false);
+      _speech.stop();
+    }
+  }
+
   void _sendMessage() async {
     final text = _controller.text.trim();
     if (text.isEmpty) return;
+
+    if (_isListening) {
+      _speech.stop();
+      setState(() => _isListening = false);
+    }
 
     setState(() {
       _messages.add({'role': 'user', 'content': text});
@@ -229,11 +279,22 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> {
               ),
             Row(
               children: [
+                CircleAvatar(
+                  backgroundColor: _isListening ? Colors.red : Colors.grey[200],
+                  child: IconButton(
+                    icon: Icon(
+                      _isListening ? Icons.mic : Icons.mic_none,
+                      color: _isListening ? Colors.white : Colors.black87,
+                    ),
+                    onPressed: _listen,
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _controller,
                     decoration: InputDecoration(
-                      hintText: 'Ask something...',
+                      hintText: _isListening ? 'Listening...' : 'Ask something...',
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(20),
                       ),
@@ -258,3 +319,4 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> {
     );
   }
 }
+

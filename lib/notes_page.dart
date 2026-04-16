@@ -54,6 +54,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   Timer? _maxDurationTimer;
   String _liveTranscript = '';
   bool _isTranscribing = false;
+  bool _isTitleDictating = false;
+  bool _isTranscriptDictating = false;
 
   // Animation controllers
   late AnimationController _pulseController;
@@ -260,6 +262,93 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       },
       listenFor: const Duration(minutes: 5),
       pauseFor: const Duration(seconds: 6),
+      partialResults: true,
+    );
+  }
+
+  Future<void> _toggleDictation(bool isTitle) async {
+    final granted = await _requestMicPermission();
+    if (!granted) return;
+
+    if (isTitle ? _isTitleDictating : _isTranscriptDictating) {
+      await _speech.stop();
+      setState(() {
+        if (isTitle) _isTitleDictating = false;
+        else _isTranscriptDictating = false;
+      });
+      return;
+    }
+
+    if (_speech.isListening) {
+      await _speech.stop();
+      setState(() {
+        _isTitleDictating = false;
+        _isTranscriptDictating = false;
+      });
+    }
+
+    setState(() {
+      if (isTitle) _isTitleDictating = true;
+      else _isTranscriptDictating = true;
+    });
+
+    final langProvider = context.read<LanguageProvider>();
+    bool available = await _speech.initialize(
+      onError: (e) {
+        if (mounted) {
+          setState(() {
+            _isTitleDictating = false;
+            _isTranscriptDictating = false;
+          });
+        }
+      },
+      onStatus: (s) {
+        if (s == 'done' || s == 'notListening') {
+          if (mounted) {
+            setState(() {
+              _isTitleDictating = false;
+              _isTranscriptDictating = false;
+            });
+          }
+        }
+      },
+    );
+
+    if (!available) {
+      if (mounted) {
+        setState(() {
+          _isTitleDictating = false;
+          _isTranscriptDictating = false;
+        });
+      }
+      return;
+    }
+
+    final String existingText = isTitle ? _titleController.text : _transcriptController.text;
+    final prefix = existingText.isNotEmpty ? '$existingText ' : '';
+
+    _speech.listen(
+      localeId: langProvider.sttLocale,
+      onResult: (val) {
+        String newText = val.recognizedWords;
+        // With partialResults: false, we just get the final chunk or we can use partial and just update.
+        // It's better to update on the fly so it feels responsive.
+        if (newText.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              if (isTitle) {
+                _titleController.text = '$prefix$newText';
+                _titleController.selection = TextSelection.fromPosition(TextPosition(offset: _titleController.text.length));
+              } else {
+                _transcriptController.text = '$prefix$newText';
+                _transcriptController.selection = TextSelection.fromPosition(TextPosition(offset: _transcriptController.text.length));
+              }
+            });
+          }
+        }
+      },
+      listenFor: const Duration(minutes: 1),
+      pauseFor: const Duration(seconds: 3),
       partialResults: true,
     );
   }
@@ -698,10 +787,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        final popupTitleController = TextEditingController(text: title);
-        final popupContentController = TextEditingController(text: content);
-        bool isEditMode = false;
-        bool isSaving = false;
         bool isSpeaking = false;
         int activeTab = 0; // 0=transcript, 1=audio
         AudioPlayer localPlayer = AudioPlayer();
@@ -748,65 +833,35 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Expanded(
-                              child: isEditMode
-                                  ? TextField(
-                                      controller: popupTitleController,
-                                      autofocus: true,
-                                      maxLength: _kMaxTitleLength,
-                                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                      decoration: InputDecoration(
-                                        hintText: 'Title',
-                                        counterText: '',
-                                        filled: true,
-                                        fillColor: Color(0xFF0A0E1A).withValues(alpha: 0.05),
-                                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                      ),
-                                    )
-                                  : Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
+                              child: Text(title, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: -0.5)),
                             ),
-                            if (!isEditMode) ...[
-                              _sheetIconBtn(
-                                icon: isSpeaking ? Icons.stop_circle_outlined : Icons.volume_up_rounded,
-                                color: isSpeaking ? const Color(0xFF4B9EFF) : Color(0x8A0A0E1A),
-                                onTap: () {
-                                  if (isSpeaking) { tts.stop(); setSheetState(() => isSpeaking = false); }
-                                  else { tts.play(title, content, lang.ttsLocale); setSheetState(() => isSpeaking = true); }
-                                },
-                              ),
-                              _sheetIconBtn(
-                                icon: Icons.edit_note_rounded,
-                                color: Color(0x8A0A0E1A),
-                                onTap: () {
-                                  tts.stop();
-                                  setSheetState(() { isEditMode = true; isSpeaking = false; });
-                                },
-                              ),
-                            ] else ...[
-                              _sheetIconBtn(icon: Icons.close, color: Color(0x610A0E1A), onTap: () {
-                                popupTitleController.text = title;
-                                popupContentController.text = content;
-                                setSheetState(() => isEditMode = false);
-                              }),
-                              isSaving
-                                  ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0A0E1A))))
-                                  : _sheetIconBtn(icon: Icons.check_rounded, color: Color(0xDD0A0E1A), onTap: () async {
-                                      final newTitle = popupTitleController.text.trim();
-                                      final newContent = popupContentController.text.trim();
-                                      if (newTitle.isEmpty || newContent.isEmpty) return;
-                                      setSheetState(() => isSaving = true);
-                                      try {
-                                        if (_isAnonymousUser) {
-                                          context.read<TempNotesProvider>().update(id, newTitle, newContent);
-                                        } else {
-                                          await FirebaseFirestore.instance.collection('notes').doc(id).update({
-                                            'title': newTitle, 'content': newContent, 'lastUpdated': FieldValue.serverTimestamp(),
-                                          });
-                                        }
-                                        if (context.mounted) { Navigator.pop(ctx); }
-                                      } catch (e) { setSheetState(() => isSaving = false); }
-                                    }),
-                            ],
+                            _sheetIconBtn(
+                              icon: isSpeaking ? Icons.stop_circle_outlined : Icons.volume_up_rounded,
+                              color: isSpeaking ? const Color(0xFF4B9EFF) : Color(0x8A0A0E1A),
+                              onTap: () {
+                                if (isSpeaking) { tts.stop(); setSheetState(() => isSpeaking = false); }
+                                else { tts.play(title, content, lang.ttsLocale); setSheetState(() => isSpeaking = true); }
+                              },
+                            ),
+                            _sheetIconBtn(
+                              icon: Icons.edit_note_rounded,
+                              color: Color(0x8A0A0E1A),
+                              onTap: () {
+                                tts.stop();
+                                Navigator.pop(ctx);
+                                setState(() {
+                                  _titleController.text = title;
+                                  _transcriptController.text = content;
+                                  _isEditing = true;
+                                  _editingId = id;
+                                  _audioUrl = audioUrl;
+                                  if (durationSeconds != null) {
+                                    _recordingDuration = Duration(seconds: durationSeconds);
+                                  }
+                                });
+                                _scrollController.animateTo(0, duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+                              },
+                            ),
                           ],
                         ),
                       ),
@@ -826,100 +881,78 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         ),
 
                       // ── AI Tools bar ──
-                      if (!isEditMode) ...[
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                            decoration: BoxDecoration(
-                              color: Color(0xFF0A0E1A),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.auto_awesome, size: 13, color: Color(0xFF4B9EFF)),
-                                const SizedBox(width: 6),
-                                const Text('AI Tools', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Color(0xFF4B9EFF))),
-                                const Spacer(),
-                                _aiChip(label: 'Summarize', icon: Icons.summarize_outlined, dark: true, onTap: () {
-                                  tts.stop(); Navigator.pop(ctx);
-                                  Navigator.push(context, MaterialPageRoute(builder: (_) => AiResultPage(documentTitle: title, documentContent: content, mode: 'summary')));
-                                }),
-                                const SizedBox(width: 8),
-                                _aiChip(label: 'Assessment', icon: Icons.style_outlined, dark: false, onTap: () async {
-                                  tts.stop();
-                                  final count = await _pickCardCount(context);
-                                  if (count == null || !context.mounted) return;
-                                  Navigator.pop(ctx);
-                                  Navigator.push(context, MaterialPageRoute(builder: (_) => AiResultPage(documentTitle: title, documentContent: content, mode: 'flashcards', cardCount: count)));
-                                }),
-                              ],
-                            ),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: Color(0xFF0A0E1A),
+                            borderRadius: BorderRadius.circular(16),
                           ),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // ── Tabs ──
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 20),
                           child: Row(
                             children: [
-                              _tabChip(label: 'Transcript', selected: activeTab == 0, onTap: () => setSheetState(() => activeTab = 0)),
+                              const Icon(Icons.auto_awesome, size: 13, color: Color(0xFF4B9EFF)),
+                              const SizedBox(width: 6),
+                              const Text('AI Tools', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: Color(0xFF4B9EFF))),
+                              const Spacer(),
+                              _aiChip(label: 'Summarize', icon: Icons.summarize_outlined, dark: true, onTap: () {
+                                tts.stop(); Navigator.pop(ctx);
+                                Navigator.push(context, MaterialPageRoute(builder: (_) => AiResultPage(documentTitle: title, documentContent: content, mode: 'summary')));
+                              }),
                               const SizedBox(width: 8),
-                              if (audioUrl != null)
-                                _tabChip(label: 'Audio', selected: activeTab == 1, onTap: () => setSheetState(() => activeTab = 1)),
+                              _aiChip(label: 'Assessment', icon: Icons.style_outlined, dark: false, onTap: () async {
+                                tts.stop();
+                                final count = await _pickCardCount(context);
+                                if (count == null || !context.mounted) return;
+                                Navigator.pop(ctx);
+                                Navigator.push(context, MaterialPageRoute(builder: (_) => AiResultPage(documentTitle: title, documentContent: content, mode: 'flashcards', cardCount: count)));
+                              }),
                             ],
                           ),
                         ),
-                        const SizedBox(height: 12),
-                      ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ── Tabs ──
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          children: [
+                            _tabChip(label: 'Transcript', selected: activeTab == 0, onTap: () => setSheetState(() => activeTab = 0)),
+                            const SizedBox(width: 8),
+                            if (audioUrl != null)
+                              _tabChip(label: 'Audio', selected: activeTab == 1, onTap: () => setSheetState(() => activeTab = 1)),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 12),
 
                       const Divider(height: 1, thickness: 1, indent: 20, endIndent: 20),
 
                       // ── Body ──
                       Expanded(
-                        child: isEditMode
-                            ? Padding(
-                                padding: const EdgeInsets.all(20),
-                                child: TextField(
-                                  controller: popupContentController,
-                                  maxLines: null,
-                                  expands: true,
-                                  maxLength: _kMaxContentLength,
-                                  textAlignVertical: TextAlignVertical.top,
-                                  style: const TextStyle(fontSize: 15, height: 1.7),
-                                  decoration: InputDecoration(
-                                    hintText: 'Transcript...',
-                                    counterText: '',
-                                    filled: true,
-                                    fillColor: Color(0xFF0A0E1A).withValues(alpha: 0.04),
-                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide.none),
-                                    contentPadding: const EdgeInsets.all(14),
-                                  ),
-                                ),
+                        child: activeTab == 0
+                            ? ListView(
+                                controller: scrollController,
+                                padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+                                children: [
+                                  Text(content, style: const TextStyle(fontSize: 15, height: 1.75, color: Color(0xDD0A0E1A))),
+                                ],
                               )
-                            : activeTab == 0
-                                ? ListView(
-                                    controller: scrollController,
-                                    padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
-                                    children: [
-                                      Text(content, style: const TextStyle(fontSize: 15, height: 1.75, color: Color(0xDD0A0E1A))),
-                                    ],
-                                  )
-                                : _audioPlayerPanel(
-                                    audioUrl: audioUrl!,
-                                    isPlayingLocal: isPlayingLocal,
-                                    localPos: localPos,
-                                    localDur: localDur,
-                                    localPlayer: localPlayer,
-                                    onStateChanged: (playing, pos, dur) {
-                                      setSheetState(() {
-                                        isPlayingLocal = playing;
-                                        localPos = pos;
-                                        localDur = dur;
-                                      });
-                                    },
-                                  ),
+                            : _audioPlayerPanel(
+                                audioUrl: audioUrl!,
+                                isPlayingLocal: isPlayingLocal,
+                                localPos: localPos,
+                                localDur: localDur,
+                                localPlayer: localPlayer,
+                                onStateChanged: (playing, pos, dur) {
+                                  setSheetState(() {
+                                    isPlayingLocal = playing;
+                                    localPos = pos;
+                                    localDur = dur;
+                                  });
+                                },
+                              ),
                       ),
                     ],
                   ),
@@ -1138,6 +1171,19 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     hintStyle: TextStyle(color: Colors.grey[400], fontSize: 15),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.all(16),
+                    suffixIcon: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            _isTranscriptDictating ? Icons.mic : Icons.mic_none,
+                            color: _isTranscriptDictating ? const Color(0xFF4B9EFF) : const Color(0x610A0E1A),
+                          ),
+                          onPressed: () => _toggleDictation(false),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 GestureDetector(
@@ -1537,6 +1583,13 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         counterText: '',
                         border: InputBorder.none,
                         prefixIcon: const Icon(Icons.bookmark_border, color: Color(0x610A0E1A), size: 20),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isTitleDictating ? Icons.mic : Icons.mic_none,
+                            color: _isTitleDictating ? const Color(0xFF4B9EFF) : const Color(0x610A0E1A),
+                          ),
+                          onPressed: () => _toggleDictation(true),
+                        ),
                         contentPadding: const EdgeInsets.symmetric(vertical: 16),
                       ),
                     ),
@@ -1877,8 +1930,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         ),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Text(content, maxLines: 2, overflow: TextOverflow.ellipsis, style: TextStyle(fontSize: 12, color: Colors.grey[600], height: 1.4)),
                   if (hasAudio && durationSeconds != null) ...[
                     const SizedBox(height: 6),
                     Row(

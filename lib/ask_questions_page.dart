@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_tts/flutter_tts.dart';
 import 'contact_us_page.dart';
 import 'floating_chat_bot.dart';
 
@@ -14,6 +15,9 @@ class AskQuestionsPage extends StatefulWidget {
 }
 
 class _AskQuestionsPageState extends State<AskQuestionsPage> {
+  final FlutterTts _tts = FlutterTts();
+  int _playingIndex = -1;
+
   final List<Map<String, String>> faqs = [
     {
       'q': 'How do I recover deleted files?',
@@ -123,6 +127,32 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
   ];
 
   @override
+  void initState() {
+    super.initState();
+    _tts.setCompletionHandler(() {
+      if (mounted) setState(() => _playingIndex = -1);
+    });
+  }
+
+  @override
+  void dispose() {
+    _tts.stop();
+    super.dispose();
+  }
+
+  Future<void> _playFaq(int index) async {
+    if (_playingIndex == index) {
+      await _tts.stop();
+      setState(() => _playingIndex = -1);
+    } else {
+      await _tts.stop();
+      setState(() => _playingIndex = index);
+      String fullText = "Question: ${faqs[index]['q']}. Answer: ${faqs[index]['a']}";
+      await _tts.speak(fullText);
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return FloatingBotWrapper(
       child: Scaffold(
@@ -175,9 +205,22 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
                       child: ExpansionTile(
                         iconColor: _kHeaderColor,
                         collapsedIconColor: _kNavy,
-                        title: Text(
-                          faqs[index]['q']!,
-                          style: const TextStyle(fontWeight: FontWeight.w700, color: _kNavy),
+                        title: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                faqs[index]['q']!,
+                                style: const TextStyle(fontWeight: FontWeight.w700, color: _kNavy),
+                              ),
+                            ),
+                            IconButton(
+                              icon: Icon(
+                                _playingIndex == index ? Icons.stop_circle : Icons.play_circle_fill,
+                                color: _kHeaderColor,
+                              ),
+                              onPressed: () => _playFaq(index),
+                            ),
+                          ],
                         ),
                         children: [
                           Padding(

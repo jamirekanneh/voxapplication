@@ -58,31 +58,36 @@ class _StatisticsPageState extends State<StatisticsPage> {
     final prefs = await SharedPreferences.getInstance();
     final savedEmail = prefs.getString('userEmail') ?? '';
 
-    if (user != null && !user.isAnonymous) {
-      _isAnonymous = false;
-      _uid = user.uid;
-    } else if (savedEmail.isNotEmpty) {
-      final query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email',
-              isEqualTo: savedEmail)
-          .limit(1)
-          .get();
-      if (query.docs.isNotEmpty) {
+    try {
+      if (user != null && !user.isAnonymous) {
         _isAnonymous = false;
-        _uid = query.docs.first.id;
+        _uid = user.uid;
+      } else if (savedEmail.isNotEmpty) {
+        final query = await FirebaseFirestore.instance
+            .collection('users')
+            .where('email',
+                isEqualTo: savedEmail)
+            .limit(1)
+            .get();
+        if (query.docs.isNotEmpty) {
+          _isAnonymous = false;
+          _uid = query.docs.first.id;
+        } else {
+          _isAnonymous = true;
+        }
       } else {
         _isAnonymous = true;
       }
-    } else {
+
+      if (!_isAnonymous && _uid != null) {
+        await _fetchFirebaseData();
+      }
+    } catch (e) {
+      debugPrint('Error loading stats profile: $e');
       _isAnonymous = true;
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
-
-    if (!_isAnonymous && _uid != null) {
-      await _fetchFirebaseData();
-    }
-
-    if (mounted) setState(() => _loading = false);
   }
 
   Future<void> _fetchFirebaseData() async {

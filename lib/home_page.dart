@@ -27,7 +27,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
   bool _isListening = false;
 
   String _selectedFolder = 'All Files';
-  final List<String> _folders = ['All Files', 'PDFs', 'Documents', 'Notes', 'Scans'];
+  final List<String> _folders = ['All Files', 'PDFs', 'Documents', 'Scans'];
 
   // Multi-select mode
   bool _isSelectionMode = false;
