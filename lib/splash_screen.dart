@@ -80,17 +80,7 @@ class _SplashScreenState extends State<SplashScreen>
         child: Stack(
           alignment: Alignment.center,
           children: [
-            FadeTransition(
-              opacity: _fadeAnimation,
-              child: ScaleTransition(
-                scale: _scaleAnimation,
-                child: Icon(
-                  Icons.forum_rounded,
-                  size: MediaQuery.of(context).size.width * 0.8,
-                  color: Color(0xFF0A0E1A).withOpacity(0.12),
-                ),
-              ),
-            ),
+
             Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [

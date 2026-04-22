@@ -1,5 +1,4 @@
 import 'dart:convert';
-//import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -49,6 +48,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   // Google Sign-In instance
   final GoogleSignIn _googleSignIn = GoogleSignIn(
+    serverClientId: '650391636557-h799717ovtk7k86d171cd6rcqj68csc4.apps.googleusercontent.com',
     scopes: ['email'],
   );
 
@@ -219,7 +219,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
-        _showSnack("Error: $e");
+        String errorMessage = "Error: $e";
+        if (e is FirebaseAuthException) {
+          errorMessage = "Auth Error (${e.code}): ${e.message}";
+        }
+        _showSnack(errorMessage);
       }
     }
   }
@@ -387,7 +391,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
       final acs = ActionCodeSettings(
         url:
-            'https://vox-application-76ecd.firebaseapp.com/verify?email=$email',
+            'https://the-vox-application.firebaseapp.com/verify?email=$email',
         handleCodeInApp: true,
         androidPackageName: 'com.example.voxapplication',
         androidInstallApp: true,
@@ -409,7 +413,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
       if (!mounted) return;
       setState(() => _stage = 'awaiting_link');
     } catch (e) {
-      _showSnack("Error sending link: $e");
+      String errorMessage = "Error sending link: $e";
+      if (e is FirebaseAuthException) {
+        errorMessage = "Magic Link Error (${e.code}): ${e.message}";
+      }
+      _showSnack(errorMessage);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -753,7 +761,11 @@ class _UserProfilePageState extends State<UserProfilePage> {
       if (!mounted) return;
       Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
     } catch (e) {
-      _showSnack("Google sign-in failed: $e");
+      String errorMessage = "Google sign-in failed: $e";
+      if (e is FirebaseAuthException) {
+        errorMessage = "Google Auth Error (${e.code}): ${e.message}";
+      }
+      _showSnack(errorMessage);
     } finally {
       if (mounted) setState(() => _googleLoading = false);
     }
@@ -787,6 +799,50 @@ class _UserProfilePageState extends State<UserProfilePage> {
     );
   }
 
+  void _runDiagnostics() async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => const Center(child: CircularProgressIndicator()),
+    );
+
+    final results = await runFirebaseDiagnostics();
+
+    if (!mounted) return;
+    Navigator.pop(context); // Close loading dialog
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Firebase Diagnostics'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView.builder(
+            shrinkWrap: true,
+            itemCount: results.length,
+            itemBuilder: (context, i) {
+              final r = results[i];
+              return ListTile(
+                leading: Icon(
+                  r.success ? Icons.check_circle : Icons.error,
+                  color: r.success ? Colors.green : Colors.red,
+                ),
+                title: Text(r.name),
+                subtitle: Text(r.message),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ─────────────────────────────────────────────
   //  BUILD
   // ─────────────────────────────────────────────
@@ -816,44 +872,48 @@ class _UserProfilePageState extends State<UserProfilePage> {
           opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
           child: child,
         ),
-        child: () {
-          switch (_stage) {
-            case 'form':
-              return _ProfileFormView(
-                key: const ValueKey('form'),
-                nameController: _nameController,
-                emailController: _emailController,
-                base64Image: _base64Image,
-                isLoading: _isLoading,
-                googleLoading: _googleLoading,
-                isSwitchingEmail: _isSwitchingEmail,
-                canSwitchEmail: _canSwitchEmail && _isEditingMode,
-                isEditingMode: _isEditingMode,
-                currentEmail: _currentEmail,
-                onPickImage: _pickImage,
-                onSave: _onSaveTapped,
-                onGoogleSignIn: _handleGoogleSignIn,
-                onSwitchEmail: _requestEmailSwitch,
-              );
-            case 'returning':
-              return _ReturningUserView(
-                key: const ValueKey('returning'),
-                email: _emailController.text.trim(),
-                onConfirm: () => _sendMagicLink(isFreshStart: false),
-                onStartFresh: _onStartFreshTapped,
-                isLoading: _isLoading,
-              );
-            case 'awaiting_link':
-              return _AwaitingLinkView(
-                key: const ValueKey('awaiting_link'),
-                email: _emailController.text.trim(),
-                onResend: () => _sendMagicLink(isFreshStart: false),
-                onVerified: _onMagicLinkVerified,
-              );
-            default:
-              return const SizedBox.shrink();
-          }
-        }(),
+        child: Stack(
+          children: [
+            () {
+              switch (_stage) {
+                case 'form':
+                  return _ProfileFormView(
+                    key: const ValueKey('form'),
+                    nameController: _nameController,
+                    emailController: _emailController,
+                    base64Image: _base64Image,
+                    isLoading: _isLoading,
+                    googleLoading: _googleLoading,
+                    isSwitchingEmail: _isSwitchingEmail,
+                    canSwitchEmail: _canSwitchEmail && _isEditingMode,
+                    isEditingMode: _isEditingMode,
+                    currentEmail: _currentEmail,
+                    onPickImage: _pickImage,
+                    onSave: _onSaveTapped,
+                    onGoogleSignIn: _handleGoogleSignIn,
+                    onSwitchEmail: _requestEmailSwitch,
+                  );
+                case 'returning':
+                  return _ReturningUserView(
+                    key: const ValueKey('returning'),
+                    email: _emailController.text.trim(),
+                    onConfirm: () => _sendMagicLink(isFreshStart: false),
+                    onStartFresh: _onStartFreshTapped,
+                    isLoading: _isLoading,
+                  );
+                case 'awaiting_link':
+                  return _AwaitingLinkView(
+                    key: const ValueKey('awaiting_link'),
+                    email: _emailController.text.trim(),
+                    onResend: () => _sendMagicLink(isFreshStart: false),
+                    onVerified: _onMagicLinkVerified,
+                  );
+                default:
+                  return const SizedBox.shrink();
+              }
+            }(),
+          ],
+        ),
       ),
     );
   }
@@ -869,12 +929,12 @@ class _ProfileFormView extends StatelessWidget {
   final bool isLoading;
   final bool googleLoading;
   final bool isSwitchingEmail;
-  final VoidCallback onPickImage;
-  final VoidCallback onSave;
-  final VoidCallback onGoogleSignIn;
   final bool canSwitchEmail;
   final bool isEditingMode;
   final String? currentEmail;
+  final VoidCallback onPickImage;
+  final VoidCallback onSave;
+  final VoidCallback onGoogleSignIn;
   final VoidCallback onSwitchEmail;
 
   const _ProfileFormView({

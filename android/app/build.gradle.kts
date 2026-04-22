@@ -32,8 +32,9 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            // Let the build system use the default debug.keystore
-            // storeFile = file("debug.keystore")
+            // Use the default debug keystore location
+            val userHome = System.getProperty("user.home")
+            storeFile = file("$userHome/.android/debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"

@@ -106,7 +106,11 @@ class _ProfilePageState extends State<ProfilePage>
       if (mounted) setState(() => _isEditing = false);
       _showSnack("Profile updated");
     } catch (e) {
-      _showSnack("Error saving: $e");
+      String errorMessage = "Error saving: $e";
+      if (e is FirebaseAuthException) {
+        errorMessage = "Profile Error (${e.code}): ${e.message}";
+      }
+      _showSnack(errorMessage);
     } finally {
       if (mounted) setState(() => _isSaving = false);
     }
@@ -175,7 +179,11 @@ class _ProfilePageState extends State<ProfilePage>
         Navigator.pop(context);
       }
     } catch (e) {
-      _showSnack("Error: $e");
+      String errorMessage = "Error: $e";
+      if (e is FirebaseAuthException) {
+        errorMessage = "Auth Error (${e.code}): ${e.message}";
+      }
+      _showSnack(errorMessage);
     } finally {
       if (mounted) setState(() => _anonLoading = false);
     }
@@ -188,7 +196,7 @@ class _ProfilePageState extends State<ProfilePage>
       final email = _emailController.text.trim();
       final acs = ActionCodeSettings(
         url:
-            'https://vox-application-76ecd.firebaseapp.com/verify?email=$email',
+            'https://the-vox-application.firebaseapp.com/verify?email=$email',
         handleCodeInApp: true,
         androidPackageName: 'com.example.voxapplication',
         androidInstallApp: true,
@@ -203,7 +211,11 @@ class _ProfilePageState extends State<ProfilePage>
       if (!mounted) return;
       setState(() => _anonStage = 'awaiting_link');
     } catch (e) {
-      _showSnack("Error sending link: $e");
+      String errorMessage = "Error sending link: $e";
+      if (e is FirebaseAuthException) {
+        errorMessage = "Magic Link Error (${e.code}): ${e.message}";
+      }
+      _showSnack(errorMessage);
     } finally {
       if (mounted) setState(() => _anonLoading = false);
     }

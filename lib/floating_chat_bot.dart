@@ -78,6 +78,7 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
                     height: 60,
                     clipBehavior: Clip.hardEdge,
                     decoration: BoxDecoration(
+                      color: const Color(0xFF0A0E1A),
                       shape: BoxShape.circle,
                       boxShadow: [
                         BoxShadow(
@@ -87,9 +88,10 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
                         ),
                       ],
                     ),
-                    child: Image.asset(
-                      'assets/images/chatbot_logo.png',
-                      fit: BoxFit.cover,
+                    child: const Icon(
+                      Icons.help_outline_rounded,
+                      color: Colors.lightBlue,
+                      size: 32,
                     ),
                   ),
                 ),

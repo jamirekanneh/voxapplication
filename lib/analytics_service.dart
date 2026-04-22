@@ -208,16 +208,6 @@ class AnalyticsService extends ChangeNotifier {
 
       await analyticsDoc.set(syncData, SetOptions(merge: true));
 
-      // Developer-level metric summary (for cross-reference and reporting)
-      final devDoc = FirebaseFirestore.instance.collection('analytics').doc('dev_metrics');
-      await devDoc.set(
-        {
-          'lastSync': FieldValue.serverTimestamp(),
-          'dailyStats.$todayKey': syncData,
-        },
-        SetOptions(merge: true),
-      );
-
       // Update last sync time
       _lastSync = DateTime.now();
       final p = await SharedPreferences.getInstance();
