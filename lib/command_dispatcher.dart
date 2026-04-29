@@ -20,6 +20,8 @@ const Map<String, Map<String, String>> _feedback = {
     'ttsSlowDown': 'Slowing down',
     'searchNotes': 'Searching notes',
     'openNote': 'Opening note',
+    'searchLibrary': 'Searching library',
+    'openAssessments': 'Opening saved assessments',
     'noMatch': 'Command not recognized',
   },
   'Spanish': {
@@ -34,6 +36,8 @@ const Map<String, Map<String, String>> _feedback = {
     'ttsSlowDown': 'Ralentizando',
     'searchNotes': 'Buscando notas',
     'openNote': 'Abriendo nota',
+    'searchLibrary': 'Buscando en la biblioteca',
+    'openAssessments': 'Abriendo evaluaciones guardadas',
     'noMatch': 'Comando no reconocido',
   },
   'French': {
@@ -48,6 +52,8 @@ const Map<String, Map<String, String>> _feedback = {
     'ttsSlowDown': 'Ralentissement',
     'searchNotes': 'Recherche de notes',
     'openNote': 'Ouverture de la note',
+    'searchLibrary': 'Recherche dans la bibliothèque',
+    'openAssessments': 'Ouverture des évaluations enregistrées',
     'noMatch': 'Commande non reconnue',
   },
   'Arabic': {
@@ -62,6 +68,8 @@ const Map<String, Map<String, String>> _feedback = {
     'ttsSlowDown': 'تبطيء',
     'searchNotes': 'البحث في الملاحظات',
     'openNote': 'فتح الملاحظة',
+    'searchLibrary': 'البحث في المكتبة',
+    'openAssessments': 'فتح التقييمات المحفوظة',
     'noMatch': 'الأمر غير معروف',
   },
   'Turkish': {
@@ -76,6 +84,8 @@ const Map<String, Map<String, String>> _feedback = {
     'ttsSlowDown': 'Yavaşlatılıyor',
     'searchNotes': 'Notlarda aranıyor',
     'openNote': 'Not açılıyor',
+    'searchLibrary': 'Kütüphanede aranıyor',
+    'openAssessments': 'Kayıtlı değerlendirmeler açılıyor',
     'noMatch': 'Komut tanınmadı',
   },
   'Chinese': {
@@ -90,6 +100,8 @@ const Map<String, Map<String, String>> _feedback = {
     'ttsSlowDown': '减速',
     'searchNotes': '搜索笔记',
     'openNote': '打开笔记',
+    'searchLibrary': '搜索图书馆',
+    'openAssessments': '打开保存的评估',
     'noMatch': '未识别命令',
   },
 };
@@ -115,6 +127,7 @@ class CommandDispatcher {
     final locale = langProvider.currentLocale;
 
     if (matched == null) {
+      AnalyticsService.instance.recordUnmatchedCommand(spokenText);
       if (commandsProvider.voiceFeedbackEnabled) {
         await ttsService.play(
           '',
@@ -216,6 +229,16 @@ class CommandDispatcher {
           '/notes',
           arguments: {'openNote': command.parameter ?? ''},
         );
+        break;
+      case CommandActionType.searchLibrary:
+        Navigator.pushNamed(
+          context,
+          '/home',
+          arguments: {'searchQuery': command.parameter ?? ''},
+        );
+        break;
+      case CommandActionType.openAssessments:
+        Navigator.pushNamed(context, '/saved_assessments');
         break;
       case CommandActionType.macroSequence:
         // Macro logic is handled in dispatch; no direct action here.

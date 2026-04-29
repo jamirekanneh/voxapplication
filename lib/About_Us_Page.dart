@@ -6,9 +6,9 @@ class AboutUsPage extends StatelessWidget {
   const AboutUsPage({super.key});
 
   static const Color primaryGold = Color(0xFF4B9EFF);
-  static const Color creamBg = Color(0xFFF0F4FF);
-  static const Color cardGrey = Color(0xFFE8E8E8);
-  static const Color darkText = Color(0xFF1A1A1A);
+  static const Color creamBg = Color(0xFF0A0E1A);
+  static const Color cardGrey = Color(0xFF161B2E);
+  static const Color darkText = Colors.white;
 
   @override
   Widget build(BuildContext context) {
@@ -183,9 +183,9 @@ class AboutUsPage extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         boxShadow: [
           BoxShadow(
-            color: Color(0xFF0A0E1A).withValues(alpha: 0.08),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
@@ -261,10 +261,10 @@ class AboutUsPage extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     'ID: $id',
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: Color(0xDD0A0E1A),
+                      color: Colors.white.withValues(alpha: 0.5),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -272,7 +272,7 @@ class AboutUsPage extends StatelessWidget {
                     email,
                     style: const TextStyle(
                       fontSize: 13,
-                      color: Color(0xFF1A4675),
+                      color: primaryGold,
                       fontWeight: FontWeight.w800,
                       decoration: TextDecoration.underline,
                     ),
@@ -289,9 +289,9 @@ class AboutUsPage extends StatelessWidget {
                   const SizedBox(height: 4),
                   Text(
                     resp,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
-                      color: Color(0x8A0A0E1A),
+                      color: Colors.white.withValues(alpha: 0.4),
                       height: 1.3,
                       fontWeight: FontWeight.w500,
                     ),
@@ -312,7 +312,10 @@ class AboutUsPage extends StatelessWidget {
       decoration: BoxDecoration(
         color: cardGrey,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: primaryGold.withValues(alpha: 0.5), width: 1.5),
+        border: Border.all(
+          color: primaryGold.withValues(alpha: 0.5),
+          width: 1.5,
+        ),
       ),
       child: Column(
         children: [
@@ -361,13 +364,13 @@ class AboutUsPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 8),
-                const Text(
-                  'This project, prepared by Group 1 from the CIS Department at Near East University in 2026, reflects our collective knowledge and commitment. We extend our sincere gratitude for her continuous support, guidance, and encouragement throughout this project. Her valuable insights played a significant role in the successful completion of this work.',
+                Text(
+                  'This project, prepared by Group 1 Graduation Project CIS400, Class of 2025/2026, CIS Department at Near East University, reflects our collective knowledge and commitment. We extend our sincere gratitude for her continuous support, guidance, and encouragement throughout this project. Her valuable insights played a significant role in the successful completion of this work.',
                   textAlign: TextAlign.center,
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.6,
-                    color: Color(0xDD0A0E1A),
+                    color: Colors.white.withOpacity(0.7),
                   ),
                 ),
               ],
@@ -394,7 +397,7 @@ class AboutUsPage extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Voice Command Document Reader',
+                'Vox (Voice Command App.)',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w900,
@@ -403,11 +406,11 @@ class AboutUsPage extends StatelessWidget {
               ),
               SizedBox(height: 10),
               Text(
-                'This application is designed to assist users, especially visually impaired individuals, by allowing them to upload documents and have them read aloud using text-to-speech technology. The app also supports voice commands for a hands-free experience.',
+                'This application is designed to assist users, especially students and individuals with limited abilities. The Vox app allows users upload or scan documents and have them read aloud using text-to-speech technology. The app also supports voice commands for a hands-free experience. Users can also record notes using the app and transcribe recordings to text using speech-to-text features. The Vox app is also equipped with a large dictionary that supports various fields like medical, legal, general and technical searches. This app also suports six main languages: English, Spanish, French, Arabic, Turkish and Chinese.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.6,
-                  color: Color(0xDD0A0E1A),
+                  color: Colors.white,
                 ),
               ),
             ],
@@ -426,11 +429,13 @@ class AboutUsPage extends StatelessWidget {
           ),
         ),
 
-        _featureRow('Uploading documents'),
+        _featureRow('Upload/Scan documents'),
         const SizedBox(height: 8),
         _featureRow('Text-to-speech reading'),
         const SizedBox(height: 8),
-        _featureRow('Voice commands for controlling playback'),
+        _featureRow('Speech to text Notes'),
+        _featureRow('Dictionary'),
+        const SizedBox(height: 8),
       ],
     );
   }

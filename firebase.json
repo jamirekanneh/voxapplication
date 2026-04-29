@@ -1,1 +1,55 @@
-{"flutter":{"platforms":{"android":{"default":{"projectId":"the-vox-application","appId":"1:650391636557:android:061cb13b6de1461b10ea04","fileOutput":"android/app/google-services.json"}},"dart":{"lib/firebase_options.dart":{"projectId":"the-vox-application","configurations":{"android":"1:650391636557:android:061cb13b6de1461b10ea04","ios":"1:650391636557:ios:e928e402888ac69210ea04","macos":"1:650391636557:ios:e928e402888ac69210ea04","web":"1:650391636557:web:5f1fa32c9341beea10ea04","windows":"1:650391636557:web:049fb2d56fe179c110ea04"}}}}},"auth":{"providers":{"anonymous":true,"emailPassword":true,"googleSignIn":{"oAuthBrandDisplayName":"Vox","supportEmail":"gr.1graduationproject@gmail.com"}}},"firestore":{"database":"(default)","location":"nam5","rules":"firestore.rules","indexes":"firestore.indexes.json"}}
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "the-vox-application",
+          "appId": "1:650391636557:android:061cb13b6de1461b10ea04",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "the-vox-application",
+          "configurations": {
+            "android": "1:650391636557:android:061cb13b6de1461b10ea04",
+            "ios": "1:650391636557:ios:e928e402888ac69210ea04",
+            "macos": "1:650391636557:ios:e928e402888ac69210ea04",
+            "web": "1:650391636557:web:5f1fa32c9341beea10ea04",
+            "windows": "1:650391636557:web:049fb2d56fe179c110ea04"
+          }
+        }
+      }
+    }
+  },
+  "auth": {
+    "providers": {
+      "anonymous": true,
+      "emailPassword": true,
+      "googleSignIn": {
+        "oAuthBrandDisplayName": "Vox",
+        "supportEmail": "gr.1graduationproject@gmail.com"
+      }
+    }
+  },
+  "firestore": {
+    "database": "(default)",
+    "location": "nam5",
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "hosting": {
+    "public": "build/web",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
+}

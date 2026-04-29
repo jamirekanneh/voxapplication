@@ -14,6 +14,13 @@ class LanguageProvider extends ChangeNotifier {
   // Dynamic cache for strings not found in app_strings.dart
   Map<String, String> _dynamicTranslations = {};
   
+  // Accessibility & Focus Modes
+  bool _isDyslexicFontEnabled = false;
+  bool _isBionicReadingEnabled = false;
+
+  bool get isDyslexicFontEnabled => _isDyslexicFontEnabled;
+  bool get isBionicReadingEnabled => _isBionicReadingEnabled;
+  
   // To avoid spamming the translate API with the same string
   final Set<String> _translatingSet = {};
 
@@ -70,6 +77,8 @@ class LanguageProvider extends ChangeNotifier {
     if (saved != null && languages.contains(saved)) {
       _selectedLanguage = saved;
     }
+    _isDyslexicFontEnabled = prefs.getBool('isDyslexicFontEnabled') ?? false;
+    _isBionicReadingEnabled = prefs.getBool('isBionicReadingEnabled') ?? false;
     await _loadDynamicCache();
     notifyListeners();
   }
@@ -82,6 +91,20 @@ class LanguageProvider extends ChangeNotifier {
     
     // Switch dynamic cache
     await _loadDynamicCache();
+    notifyListeners();
+  }
+
+  Future<void> setDyslexicFont(bool enabled) async {
+    _isDyslexicFontEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isDyslexicFontEnabled', enabled);
+    notifyListeners();
+  }
+
+  Future<void> setBionicReading(bool enabled) async {
+    _isBionicReadingEnabled = enabled;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('isBionicReadingEnabled', enabled);
     notifyListeners();
   }
 

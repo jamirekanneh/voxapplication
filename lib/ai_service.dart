@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'analytics_service.dart';
 
 // ignore: uri_does_not_exist
 import 'config/secrets.dart';
@@ -65,9 +66,11 @@ class AiService {
       }
     } on http.ClientException catch (e) {
       debugPrint('🔴 Network error: $e');
+      AnalyticsService.instance.recordApiError('Groq', 'Network Error: $e');
       throw Exception('No internet connection. Please check your network.');
     } catch (e) {
       debugPrint('🔴 Error: $e');
+      AnalyticsService.instance.recordApiError('Groq', e.toString());
       rethrow;
     }
   }
@@ -89,11 +92,14 @@ class AiService {
     const system =
         'You are Vox Assistant, an AI helper for the Vox app. '
         'You MUST give accurate answers based on these facts about the app: '
-        '1) Sign In: The app uses passwordless Magic Link via email. Users do NOT create an account with a password. They just enter their email to get a sign-in link sent to their inbox. '
+        '1) Sign In: The app uses passwordless Magic Link via email. '
         '2) Dictionary: Allows searching terms with General, Medical, and Technical dictionaries. '
-        '3) Notes/Library: Users can upload notes (PDFs/text) to summarize them or generate AI flashcards. TTS (Text-to-Speech) can read notes aloud. '
-        '4) Voice Commands (STT): The app has global speech-to-text allowing users to say things like "go to dictionary". Custom commands can be defined in Profile > Custom Commands. '
-        'Please keep answers very friendly, concise, and do not invent new features not mentioned here. If asked how to sign in without an account, clearly explain the Magic Link process.';
+        '3) Notes/Library: Users can upload documents (PDF/DOCX/Text/Scans). TTS (Text-to-Speech) can read them aloud. '
+        '4) AI Study Buddy: Inside the reader, users can tap "Study Buddy" to chat with the document and ask questions about the text. '
+        '5) Accessibility & Focus: Inside the reader settings (gear icon), users can toggle OpenDyslexic font and Bionic Reading focus mode. '
+        '6) Reading Goals: Users can set a daily reading target (minutes) in the Statistics page and track their Learning Streak. '
+        '7) Voice Commands: Global hands-free control via STT. '
+        'Please keep answers very friendly, concise, and do not invent new features not mentioned here.';
     return _callGroq(system, userMessage);
   }
 
@@ -142,12 +148,12 @@ class AiService {
     const system =
         'You are the Vox App Assistant, a premium AI guide for the Vox Application. '
         'The Vox app features include:\n'
+        '- AI Study Buddy: Chat with your documents in real-time while listening.\n'
+        '- Accessibility: OpenDyslexic font and Bionic Reading focus mode in the reader settings.\n'
         '- Dictionary: Search for General, Medical, and Technical terms.\n'
-        '- Notes: Create, edit, and organize study notes.\n'
-        '- Library/Upload: Upload documents (PDF, text) to read aloud, summarize, or generate flashcards.\n'
-        '- Statistics: Track your learning progress.\n'
-        '- Ask Questions (FAQs): Find answers to common questions.\n'
-        '- Recycle Bin: Access and restore deleted files.\n'
+        '- Notes/Library: Organize documents, summarize them, and create AI flashcards.\n'
+        '- Statistics: Track your daily reading goals and learning streaks.\n'
+        '- Voice Commands: Control everything hands-free.\n'
         'Keep your responses modern, concise, and helpful. Use a friendly yet professional tone.';
     return _callGroq(system, userQuery);
   }

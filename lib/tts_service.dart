@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'analytics_service.dart';
 
 class TtsService extends ChangeNotifier {
   final FlutterTts _tts = FlutterTts();
@@ -158,6 +159,7 @@ class TtsService extends ChangeNotifier {
   }
 
   Future<void> play(String t, String c, String locale) async {
+    AnalyticsService.instance.recordTtsUsage();
     await _tts.stop();
     title = t;
     content = c;
@@ -217,7 +219,9 @@ class TtsService extends ChangeNotifier {
     if (isPlaying && content != null) {
       await _tts.stop();
       await _applyVoiceOrLocale(locale);
-      await _tts.speak(content!);
+      // Resume from current offset
+      final remaining = content!.substring(_currentCharOffset.clamp(0, content!.length));
+      await _tts.speak(remaining.isNotEmpty ? remaining : content!);
     }
     notifyListeners();
   }

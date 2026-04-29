@@ -1,24 +1,28 @@
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
-import 'package:timezone/data/latest_all.dart' as tz;
+import 'package:timezone/data/latest.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
 
 class NotificationService {
-  static final FlutterLocalNotificationsPlugin _notificationsPlugin =
+  static final NotificationService instance = NotificationService._();
+  NotificationService._();
+
+  final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  static Future<void> init() async {
+  Future<void> init() async {
     tz.initializeTimeZones();
 
-    const initializationSettingsAndroid =
+    const AndroidInitializationSettings initializationSettingsAndroid =
         AndroidInitializationSettings('@mipmap/ic_launcher');
 
-    const initializationSettingsIOS = DarwinInitializationSettings(
-      requestAlertPermission: true,
-      requestBadgePermission: true,
-      requestSoundPermission: true,
-    );
+    const DarwinInitializationSettings initializationSettingsIOS =
+        DarwinInitializationSettings(
+          requestAlertPermission: true,
+          requestBadgePermission: true,
+          requestSoundPermission: true,
+        );
 
-    const initializationSettings = InitializationSettings(
+    const InitializationSettings initializationSettings = InitializationSettings(
       android: initializationSettingsAndroid,
       iOS: initializationSettingsIOS,
     );
@@ -28,13 +32,52 @@ class NotificationService {
     );
   }
 
-  static Future<void> scheduleReminder({
+  /// Schedules a daily reminder if the user hasn't met their goal.
+  Future<void> scheduleDailyReminder(int hour, int minute) async {
+    await _notificationsPlugin.zonedSchedule(
+      id: 0,
+      title: 'Ready to Study?',
+      body: 'You haven\'t met your reading goal yet today. Keep your streak alive!',
+      scheduledDate: _nextInstanceOfTime(hour, minute),
+      notificationDetails: const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'daily_reminders',
+          'Daily Reminders',
+          channelDescription: 'Reminders to stay consistent with your reading goals',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.time,
+    );
+  }
+
+  Future<void> showInstantNotification(String title, String body) async {
+    const android = AndroidNotificationDetails(
+      'instant_alerts',
+      'Instant Alerts',
+      importance: Importance.max,
+      priority: Priority.high,
+    );
+    const ios = DarwinNotificationDetails();
+    const details = NotificationDetails(android: android, iOS: ios);
+
+    await _notificationsPlugin.show(
+      id: DateTime.now().millisecond,
+      title: title,
+      body: body,
+      notificationDetails: details,
+    );
+  }
+
+  Future<void> scheduleReminder({
     required int id,
     required String title,
     required String body,
     required DateTime scheduledTime,
   }) async {
-    // Schedule notification
     await _notificationsPlugin.zonedSchedule(
       id: id,
       title: title,
@@ -42,10 +85,9 @@ class NotificationService {
       scheduledDate: tz.TZDateTime.from(scheduledTime, tz.local),
       notificationDetails: const NotificationDetails(
         android: AndroidNotificationDetails(
-          'study_reminders',
-          'Study Reminders',
-          channelDescription: 'Reminders to study your Vox documents',
-          importance: Importance.max,
+          'reminders',
+          'Reminders',
+          importance: Importance.high,
           priority: Priority.high,
         ),
         iOS: DarwinNotificationDetails(),
@@ -53,5 +95,14 @@ class NotificationService {
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
     );
   }
-}
 
+  tz.TZDateTime _nextInstanceOfTime(int hour, int minute) {
+    final tz.TZDateTime now = tz.TZDateTime.now(tz.local);
+    tz.TZDateTime scheduledDate =
+        tz.TZDateTime(tz.local, now.year, now.month, now.day, hour, minute);
+    if (scheduledDate.isBefore(now)) {
+      scheduledDate = scheduledDate.add(const Duration(days: 1));
+    }
+    return scheduledDate;
+  }
+}

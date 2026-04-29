@@ -20,40 +20,43 @@ import 'temp_notes_provider.dart';
 import 'global_stt_wrapper.dart';
 import 'custom_commands_provider.dart';
 import 'analytics_service.dart';
-import 'floating_chat_bot.dart';
 import 'notification_service.dart';
+import 'saved_assessments_page.dart';
 
-final GlobalKey<NavigatorState> globalNavigatorKey = GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> globalNavigatorKey =
+    GlobalKey<NavigatorState>();
 
 // ─────────────────────────────────────────────
 //  AUTH WRAPPER - Listens to Firebase auth state
 // ─────────────────────────────────────────────
-class AuthWrapper extends StatefulWidget {
+class AuthWrapper extends StatelessWidget {
   const AuthWrapper({super.key});
 
   @override
-  State<AuthWrapper> createState() => _AuthWrapperState();
-}
-
-class _AuthWrapperState extends State<AuthWrapper> {
-  @override
-  void initState() {
-    super.initState();
-    // Listen to auth state changes and load commands for current user
-    FirebaseAuth.instance.authStateChanges().listen((User? user) {
-      final commandsProvider = context.read<CustomCommandsProvider>();
-      if (user != null) {
-        commandsProvider.loadCommandsForUser(user.uid);
-      } else {
-        // For anonymous users, use a default UID or handle differently
-        commandsProvider.loadCommandsForUser('anonymous');
-      }
-    });
-  }
-
-  @override
   Widget build(BuildContext context) {
-    return const TheVoxApp();
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        // Show splash/loading while checking auth state
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const GlobalSttWrapper(child: SplashScreen());
+        }
+
+        final user = snapshot.data;
+        
+        // Update CustomCommandsProvider when auth state changes
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (context.mounted) {
+            final commandsProvider = context.read<CustomCommandsProvider>();
+            commandsProvider.loadCommandsForUser(user?.uid ?? 'anonymous');
+          }
+        });
+
+        // TheVoxApp now only contains the theme/routes/etc.
+        // It doesn't need to handle its own root navigation as much.
+        return const TheVoxApp();
+      },
+    );
   }
 }
 
@@ -64,7 +67,7 @@ void main() async {
   await dotenv.load(fileName: 'assets/project.env');
 
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  
+
   // Force enable Offline Persistence for the entire Database
   FirebaseFirestore.instance.settings = const Settings(
     persistenceEnabled: true,
@@ -76,7 +79,8 @@ void main() async {
   await AnalyticsService.instance.recordAppOpen();
 
   // Initialize notifications service
-  await NotificationService.init();
+  await NotificationService.instance.init();
+  await NotificationService.instance.scheduleDailyReminder(20, 0); // 8:00 PM
 
   // Auto-sync analytics to Firebase if needed (daily for authenticated users)
   AnalyticsService.instance.autoSyncIfNeeded();
@@ -154,6 +158,7 @@ class _TheVoxAppState extends State<TheVoxApp> {
         '/menu': (context) => const MenuPage(),
         '/dictionary': (context) => const DictionaryPage(),
         '/notes': (context) => const NotesPage(),
+        '/saved_assessments': (context) => const SavedAssessmentsPage(),
       },
     );
   }

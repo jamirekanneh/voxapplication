@@ -236,7 +236,7 @@ class _MenuPageState extends State<MenuPage> {
   void _showLanguagePicker(BuildContext context, LanguageProvider lang) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: const Color(0xFF141A29),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -253,14 +253,18 @@ class _MenuPageState extends State<MenuPage> {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
-                  color: Color(0x420A0E1A),
+                  color: Colors.white24,
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
             ),
             Text(
               lang.t('select_language'),
-              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+              ),
             ),
             const SizedBox(height: 16),
             ConstrainedBox(
@@ -284,9 +288,14 @@ class _MenuPageState extends State<MenuPage> {
                             ),
                             decoration: BoxDecoration(
                               color: lang.selectedLanguage == l
-                                  ? Color(0xFF0A0E1A)
-                                  : Colors.grey[300],
+                                  ? const Color(0xFF4B9EFF)
+                                  : Colors.white.withOpacity(0.04),
                               borderRadius: BorderRadius.circular(14),
+                              border: Border.all(
+                                color: lang.selectedLanguage == l
+                                    ? const Color(0xFF4B9EFF)
+                                    : Colors.white.withOpacity(0.08),
+                              ),
                             ),
                             child: Row(
                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -295,15 +304,15 @@ class _MenuPageState extends State<MenuPage> {
                                   l,
                                   style: TextStyle(
                                     color: lang.selectedLanguage == l
-                                        ? Colors.white
-                                        : Color(0xDD0A0E1A),
-                                    fontWeight: FontWeight.w600,
+                                        ? const Color(0xFF0A0E1A)
+                                        : Colors.white,
+                                    fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 if (lang.selectedLanguage == l)
                                   const Icon(
-                                    Icons.check,
-                                    color: Colors.white,
+                                    Icons.check_circle,
+                                    color: Color(0xFF0A0E1A),
                                     size: 18,
                                   ),
                               ],
@@ -328,7 +337,7 @@ class _MenuPageState extends State<MenuPage> {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: Colors.white,
+        backgroundColor: const Color(0xFF141A29),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -342,13 +351,14 @@ class _MenuPageState extends State<MenuPage> {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.red.shade700,
+                  color: const Color(0xFFFF5252).withOpacity(0.1),
                   borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: const Color(0xFFFF5252).withOpacity(0.2)),
                 ),
                 child: const Text(
                   "LOGOUT",
                   style: TextStyle(
-                    color: Colors.white,
+                    color: Color(0xFFFF5252),
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 2,
@@ -361,13 +371,14 @@ class _MenuPageState extends State<MenuPage> {
                 style: const TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w900,
+                  color: Colors.white,
                   letterSpacing: -1,
                 ),
               ),
               const SizedBox(height: 12),
               Text(
                 lang.t('logout_body'),
-                style: const TextStyle(color: Color(0x8A0A0E1A), fontSize: 14),
+                style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
               ),
               const SizedBox(height: 28),
               Row(
@@ -376,8 +387,8 @@ class _MenuPageState extends State<MenuPage> {
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(ctx),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Color(0xFF0A0E1A),
-                        side: const BorderSide(color: Color(0x420A0E1A)),
+                        foregroundColor: Colors.white,
+                        side: BorderSide(color: Colors.white.withOpacity(0.1)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -402,7 +413,7 @@ class _MenuPageState extends State<MenuPage> {
                         }
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red.shade700,
+                        backgroundColor: const Color(0xFFFF5252),
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
@@ -462,14 +473,17 @@ class _MenuPageState extends State<MenuPage> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: isDanger ? Colors.red.shade700 : Colors.white,
+          color: isDanger ? const Color(0xFFFF5252).withOpacity(0.1) : Colors.white.withOpacity(0.04),
           borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isDanger ? const Color(0xFFFF5252).withOpacity(0.2) : Colors.white.withOpacity(0.08),
+          ),
         ),
         child: Row(
           children: [
             Icon(
               icon,
-              color: isDanger ? Colors.white : Color(0xDD0A0E1A),
+              color: isDanger ? const Color(0xFFFF5252) : const Color(0xFF4B9EFF),
               size: 20,
             ),
             const SizedBox(width: 12),
@@ -479,19 +493,19 @@ class _MenuPageState extends State<MenuPage> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: isDanger ? Colors.white : Color(0xDD0A0E1A),
+                  color: isDanger ? const Color(0xFFFF5252) : Colors.white,
                 ),
               ),
             ),
             if (trailing != null)
               Text(
                 trailing,
-                style: const TextStyle(color: Color(0x730A0E1A), fontSize: 12),
+                style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12),
               )
             else
               Icon(
                 isDanger ? Icons.logout : Icons.chevron_right,
-                color: isDanger ? Colors.white70 : Colors.grey[400],
+                color: isDanger ? const Color(0xFFFF5252).withOpacity(0.5) : Colors.white24,
                 size: 18,
               ),
           ],
@@ -505,10 +519,10 @@ class _MenuPageState extends State<MenuPage> {
       padding: const EdgeInsets.only(left: 4, bottom: 8, top: 12),
       child: Text(
         label,
-        style: const TextStyle(
+        style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w800,
-          color: Color(0x610A0E1A),
+          color: Colors.white.withOpacity(0.3),
           letterSpacing: 2,
         ),
       ),
@@ -524,7 +538,7 @@ class _MenuPageState extends State<MenuPage> {
 
     return FloatingBotWrapper(
       child: Scaffold(
-        backgroundColor: const Color(0xFFF0F4FF),
+        backgroundColor: const Color(0xFF0A0E1A),
         body: Column(
         children: [
           // ── Header ──────────────────────────────────
@@ -537,8 +551,9 @@ class _MenuPageState extends State<MenuPage> {
               right: 20,
             ),
             decoration: const BoxDecoration(
-              color: Color(0xFF4B9EFF),
+              color: Color(0xFF0A0E1A),
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
+              border: Border(bottom: BorderSide(color: Colors.white10)),
             ),
             child: Column(
               children: [
@@ -547,7 +562,7 @@ class _MenuPageState extends State<MenuPage> {
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFFF0F4FF),
+                    color: Color(0xFF4B9EFF),
                     letterSpacing: 8,
                   ),
                 ),
@@ -605,8 +620,8 @@ class _MenuPageState extends State<MenuPage> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: const Color(0xFFF0F4FF),
-                                  width: 2.5,
+                                  color: const Color(0xFF4B9EFF),
+                                  width: 2.0,
                                 ),
                               ),
                               child: _buildAvatar(radius: 34),
@@ -617,7 +632,7 @@ class _MenuPageState extends State<MenuPage> {
                               child: Container(
                                 padding: const EdgeInsets.all(4),
                                 decoration: const BoxDecoration(
-                                  color: Color(0xFFF0F4FF),
+                                  color: Color(0xFF4B9EFF),
                                   shape: BoxShape.circle,
                                 ),
                                 child: const Icon(
@@ -648,7 +663,7 @@ class _MenuPageState extends State<MenuPage> {
                             ? (_username.isNotEmpty ? _username : "Vox User")
                             : lang.t('guest'),
                         style: const TextStyle(
-                          color: Color(0xFFF0F4FF),
+                          color: Colors.white,
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
                         ),
@@ -661,7 +676,7 @@ class _MenuPageState extends State<MenuPage> {
                     child: Text(
                       _email,
                       style: TextStyle(
-                        color: const Color(0xFFF0F4FF).withOpacity(0.7),
+                        color: Colors.white.withOpacity(0.6),
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
@@ -684,9 +699,9 @@ class _MenuPageState extends State<MenuPage> {
                     child: Text(
                       lang.t('no_account'),
                       style: const TextStyle(
-                        color: Color(0xFFF0F4FF),
+                        color: Color(0xFF4B9EFF),
                         fontSize: 11,
-                        fontWeight: FontWeight.w600,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ),
@@ -725,7 +740,7 @@ class _MenuPageState extends State<MenuPage> {
                   if (_hasProfile) ...[
                     _buildMenuItem(
                       icon: Icons.bookmarks_outlined,
-                      title: 'Q&A Generator',
+                      title: 'Saved Assessments',
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -746,7 +761,7 @@ class _MenuPageState extends State<MenuPage> {
                   ],
                   _buildMenuItem(
                     icon: Icons.mic_none_rounded,
-                    title: lang.t('menu_commands'),
+                    title: 'Personalized Commands',
                     onTap: () {
                       Navigator.push(
                         context,

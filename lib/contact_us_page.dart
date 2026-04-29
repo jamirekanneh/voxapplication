@@ -20,12 +20,12 @@ const _kEmailJSPublicKey = String.fromEnvironment(
   'EMAILJS_PUBLIC_KEY',
   defaultValue: '7lv-I2bSLiEeBpoYg',
 );
-const _kBgColor = Color(0xFFF0F4FF);
-const _kHeaderColor = Color(0xFF4B9EFF);
-const _kTextLight = Color(0xFFF0F4FF);
+const _kBgColor = Color(0xFF0A0E1A);
+const _kHeaderColor = Color(0xFF0A0E1A);
+const _kTextLight = Colors.white;
 const _kWaGreen = Color(0xFF25D366);
-const _kDarkBtn = Color(0xFF3A3A3A);
-const _kNavy = Color(0xFF1A1A2E);
+const _kDarkBtn = Color(0xFF141A29);
+const _kNavy = Color(0xFF141A29);
 
 enum ContactPreference { email, whatsapp }
 
@@ -143,7 +143,7 @@ class _BlinkingHintState extends State<_BlinkingHint>
     opacity: _a,
     child: Text(
       widget.text,
-      style: const TextStyle(color: Color(0x610A0E1A), fontSize: 13),
+      style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13),
     ),
   );
 }
@@ -357,7 +357,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: _kBgColor,
+      backgroundColor: const Color(0xFF0A0E1A),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -372,7 +372,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Color(0x420A0E1A),
+                color: Colors.white.withOpacity(0.2),
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
@@ -384,7 +384,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                   hintText: 'Search country…',
                   prefixIcon: const Icon(Icons.search, size: 18),
                   filled: true,
-                  fillColor: Colors.white,
+                  fillColor: Colors.white.withOpacity(0.04),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 10,
@@ -428,7 +428,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                             vertical: 12,
                           ),
                           decoration: BoxDecoration(
-                            color: active ? Color(0xFF0A0E1A) : Colors.white,
+                            color: active
+                                ? const Color(0xFF4B9EFF)
+                                : Colors.transparent,
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
@@ -445,7 +447,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                     fontWeight: FontWeight.w600,
                                     color: active
                                         ? Colors.white
-                                        : Color(0xDD0A0E1A),
+                                        : Colors.white.withOpacity(0.8),
                                   ),
                                 ),
                               ),
@@ -454,7 +456,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 style: TextStyle(
                                   color: active
                                       ? Colors.white70
-                                      : Color(0x730A0E1A),
+                                      : Colors.white.withOpacity(0.5),
                                   fontSize: 13,
                                 ),
                               ),
@@ -486,18 +488,22 @@ class _ContactUsPageState extends State<ContactUsPage> {
         prefixIcon: prefix,
         suffixIcon: suffix,
         filled: true,
-        fillColor: Colors.white,
+        fillColor: Colors.white.withOpacity(0.04),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 14,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: _kHeaderColor, width: 2),
+          borderSide: const BorderSide(color: Color(0xFF4B9EFF), width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -513,10 +519,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
     padding: const EdgeInsets.only(bottom: 6),
     child: Text(
       t,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w800,
-        color: Color(0x610A0E1A),
+        color: Colors.white.withOpacity(0.6),
         letterSpacing: 2,
       ),
     ),
@@ -541,7 +547,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
         Container(
           height: 52,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Colors.white.withOpacity(0.04),
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
@@ -593,7 +599,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                             Icon(
                               Icons.mail_outline_rounded,
                               size: 16,
-                              color: isEmail ? Colors.white : Color(0x730A0E1A),
+                              color: isEmail
+                                  ? Colors.white
+                                  : Colors.white.withOpacity(0.4),
                             ),
                             const SizedBox(width: 7),
                             Text(
@@ -601,7 +609,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: isEmail ? Colors.white : Color(0x8A0A0E1A),
+                                color: isEmail
+                                    ? Colors.white
+                                    : Colors.white.withOpacity(0.6),
                                 letterSpacing: 0.2,
                               ),
                             ),
@@ -623,7 +633,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                             Icon(
                               Icons.chat_rounded,
                               size: 16,
-                              color: !isEmail ? Colors.white : Color(0x730A0E1A),
+                              color: !isEmail
+                                  ? Colors.white
+                                  : Colors.white.withOpacity(0.4),
                             ),
                             const SizedBox(width: 7),
                             Text(
@@ -631,7 +643,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               style: TextStyle(
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
-                                color: !isEmail ? Colors.white : Color(0x8A0A0E1A),
+                                color: !isEmail
+                                    ? Colors.white
+                                    : Colors.white.withOpacity(0.6),
                                 letterSpacing: 0.2,
                               ),
                             ),
@@ -666,7 +680,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                     : 'WhatsApp opens — tap Send to deliver your message',
                 style: TextStyle(
                   fontSize: 11.5,
-                  color: isEmail ? Color(0x8A0A0E1A) : _kWaGreen,
+                  color: isEmail ? Colors.white.withOpacity(0.5) : _kWaGreen,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -699,7 +713,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
             ),
             child: const Icon(
               Icons.check_rounded,
-              color: _kHeaderColor,
+              color: Color(0xFF4B9EFF),
               size: 38,
             ),
           ),
@@ -712,23 +726,27 @@ class _ContactUsPageState extends State<ContactUsPage> {
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,
-              color: Color(0xFF1A1A2E),
+              color: Colors.white,
               letterSpacing: -0.3,
             ),
           ),
           const SizedBox(height: 12),
-          const Text(
+          Text(
             'Your message has been received.',
             textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 14, color: Color(0xDD0A0E1A), height: 1.5),
+            style: TextStyle(
+              fontSize: 14,
+              color: Colors.white.withOpacity(0.8),
+              height: 1.5,
+            ),
           ),
           const SizedBox(height: 6),
           Text(
             'We will contact you via $replyVia shortly.',
             textAlign: TextAlign.center,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 14,
-              color: Color(0xDD0A0E1A),
+              color: Colors.white.withOpacity(0.8),
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -743,7 +761,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                 _sent = false;
               }),
               style: ElevatedButton.styleFrom(
-                backgroundColor: _kNavy,
+                backgroundColor: const Color(0xFF4B9EFF),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 shape: RoundedRectangleBorder(
@@ -776,9 +794,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                 _sent = false;
               }),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Color(0x730A0E1A),
+                foregroundColor: Colors.white.withOpacity(0.6),
                 padding: const EdgeInsets.symmetric(vertical: 13),
-                side: const BorderSide(color: Color(0xFFDDDDDD)),
+                side: BorderSide(color: Colors.white.withOpacity(0.1)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -915,15 +933,20 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                         ),
                                         TextFormField(
                                           controller: _firstNameCtrl,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                          ),
                                           textCapitalization:
                                               TextCapitalization.words,
                                           textInputAction: TextInputAction.next,
                                           keyboardType: TextInputType.name,
                                           decoration: _inputDeco(
-                                            prefix: const Icon(
+                                            prefix: Icon(
                                               Icons.person_outline_rounded,
                                               size: 18,
-                                              color: Color(0x610A0E1A),
+                                              color: Colors.white.withOpacity(
+                                                0.5,
+                                              ),
                                             ),
                                             suffix: _mic(
                                               'firstName',
@@ -966,15 +989,20 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                         ),
                                         TextFormField(
                                           controller: _lastNameCtrl,
+                                          style: const TextStyle(
+                                            color: Colors.white,
+                                          ),
                                           textCapitalization:
                                               TextCapitalization.words,
                                           textInputAction: TextInputAction.next,
                                           keyboardType: TextInputType.name,
                                           decoration: _inputDeco(
-                                            prefix: const Icon(
+                                            prefix: Icon(
                                               Icons.person_outline_rounded,
                                               size: 18,
-                                              color: Color(0x610A0E1A),
+                                              color: Colors.white.withOpacity(
+                                                0.5,
+                                              ),
                                             ),
                                             suffix: _mic(
                                               'lastName',
@@ -998,14 +1026,15 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           _label('EMAIL ADDRESS'),
                           TextFormField(
                             controller: _emailCtrl,
+                            style: const TextStyle(color: Colors.white),
                             keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.next,
                             decoration:
                                 _inputDeco(
-                                  prefix: const Icon(
+                                  prefix: Icon(
                                     Icons.mail_outline_rounded,
                                     size: 18,
-                                    color: Color(0x610A0E1A),
+                                    color: Colors.white.withOpacity(0.5),
                                   ),
                                   suffix: _mic('email', _emailCtrl),
                                 ).copyWith(
@@ -1041,8 +1070,11 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                     vertical: 14,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.white,
+                                    color: Colors.white.withOpacity(0.04),
                                     borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(
+                                      color: Colors.white.withOpacity(0.1),
+                                    ),
                                   ),
                                   child: Row(
                                     children: [
@@ -1054,15 +1086,16 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                       Text(
                                         _selectedCountry['dial']!,
                                         style: const TextStyle(
+                                          color: Colors.white,
                                           fontWeight: FontWeight.w700,
                                           fontSize: 13,
                                         ),
                                       ),
                                       const SizedBox(width: 4),
-                                      const Icon(
+                                      Icon(
                                         Icons.arrow_drop_down_rounded,
                                         size: 18,
-                                        color: Color(0x610A0E1A),
+                                        color: Colors.white.withOpacity(0.5),
                                       ),
                                     ],
                                   ),
@@ -1072,6 +1105,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               Expanded(
                                 child: TextFormField(
                                   controller: _phoneCtrl,
+                                  style: const TextStyle(color: Colors.white),
                                   keyboardType: TextInputType.phone,
                                   textInputAction: TextInputAction.next,
                                   decoration:
@@ -1079,8 +1113,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                         suffix: _mic('phone', _phoneCtrl),
                                       ).copyWith(
                                         hintText: '5XX XXX XXXX',
-                                        hintStyle: const TextStyle(
-                                          color: Color(0x420A0E1A),
+                                        hintStyle: TextStyle(
+                                          color: Colors.white.withOpacity(0.3),
                                           fontSize: 13,
                                         ),
                                       ),
@@ -1114,15 +1148,16 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               ),
                               TextFormField(
                                 controller: _titleCtrl,
+                                style: const TextStyle(color: Colors.white),
                                 textCapitalization:
                                     TextCapitalization.sentences,
                                 textInputAction: TextInputAction.next,
                                 keyboardType: TextInputType.text,
                                 decoration: _inputDeco(
-                                  prefix: const Icon(
+                                  prefix: Icon(
                                     Icons.subject_rounded,
                                     size: 18,
-                                    color: Color(0x610A0E1A),
+                                    color: Colors.white.withOpacity(0.5),
                                   ),
                                   suffix: _mic('title', _titleCtrl),
                                 ),
@@ -1140,6 +1175,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                             children: [
                               TextFormField(
                                 controller: _messageCtrl,
+                                style: const TextStyle(color: Colors.white),
                                 maxLines: null,
                                 minLines: 6,
                                 keyboardType: TextInputType.multiline,
@@ -1151,8 +1187,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 ),
                                 decoration: _inputDeco().copyWith(
                                   hintText: 'Write your message here…',
-                                  hintStyle: const TextStyle(
-                                    color: Color(0x420A0E1A),
+                                  hintStyle: TextStyle(
+                                    color: Colors.white.withOpacity(0.3),
                                     fontSize: 13,
                                   ),
                                   contentPadding: const EdgeInsets.fromLTRB(
@@ -1193,10 +1229,11 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: isWa
                                     ? _kWaGreen
-                                    : Color(0xFF0A0E1A),
+                                    : const Color(0xFF4B9EFF),
                                 foregroundColor: Colors.white,
-                                disabledBackgroundColor: Color(0xFF0A0E1A)
-                                    .withOpacity(0.35),
+                                disabledBackgroundColor: const Color(
+                                  0xFF4B9EFF,
+                                ).withOpacity(0.35),
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 16,
                                 ),
@@ -1244,18 +1281,18 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           Center(
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
-                              children: const [
+                              children: [
                                 Icon(
                                   Icons.lock_outline_rounded,
                                   size: 12,
-                                  color: Color(0x610A0E1A),
+                                  color: Colors.white.withOpacity(0.5),
                                 ),
-                                SizedBox(width: 4),
+                                const SizedBox(width: 4),
                                 Text(
                                   'Your information is kept private',
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: Color(0x610A0E1A),
+                                    color: Colors.white.withOpacity(0.5),
                                   ),
                                 ),
                               ],

@@ -5,8 +5,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'tts_service.dart';
 import 'language_provider.dart';
 import 'ai_result_page.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'analytics_service.dart';
-import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'notification_service.dart';
 import 'pdf_service.dart';
 
@@ -42,6 +42,11 @@ class _ReaderPageState extends State<ReaderPage> {
   int _pinnedStart = 0;
   int _pinnedEnd = 0;
 
+  final bool _showStudyBuddy = false;
+  final TextEditingController _buddyController = TextEditingController();
+  final List<Map<String, String>> _buddyMessages = [];
+  bool _isBuddyThinking = false;
+
   // Always-on listening
   bool _alwaysOnEnabled = true;
   bool _commandProcessing = false;
@@ -75,9 +80,20 @@ class _ReaderPageState extends State<ReaderPage> {
   void initState() {
     super.initState();
     final tts = context.read<TtsService>();
+
+    // Clean content for reading (strip XML tags if detected in docx/xml)
+    final cleaned = widget.content
+        .replaceAll(RegExp(r'<[^>]*>'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final finalContent = cleaned.isEmpty ? widget.content : cleaned;
+
     if (!tts.isPlaying || tts.title != widget.title) {
-      tts.play(widget.title, widget.content, widget.locale);
+      tts.play(widget.title, finalContent, widget.locale);
     }
+
+    // Listener for auto-scrolling
+    tts.addListener(_onTtsUpdate);
 
     // Track file read operation
     AnalyticsService.instance.recordFileOperation('read');
@@ -85,8 +101,16 @@ class _ReaderPageState extends State<ReaderPage> {
     _initSpeech();
   }
 
+  void _onTtsUpdate() {
+    if (mounted && context.read<TtsService>().isPlaying) {
+      _scrollToHighlight();
+    }
+  }
+
   @override
   void dispose() {
+    context.read<TtsService>().removeListener(_onTtsUpdate);
+    _buddyController.dispose();
     _speech.stop();
     _scrollController.dispose();
     super.dispose();
@@ -146,6 +170,10 @@ class _ReaderPageState extends State<ReaderPage> {
     _lastRestartTime = DateTime.now();
 
     try {
+      // Force cancel any stuck session
+      await _speech.stop();
+      await _speech.cancel();
+
       setState(() => _isListening = true);
 
       await _speech.listen(
@@ -271,7 +299,7 @@ class _ReaderPageState extends State<ReaderPage> {
     ])) {
       feedback = '⚡ Speed up';
       action = () =>
-          tts.setRate((tts.speechRate + 0.25).clamp(0.5, 2.0), locale);
+          tts.setRate((tts.speechRate + 0.2).clamp(0.1, 2.0), locale);
     } else if (_has(words, [
       'slower',
       'slow down',
@@ -280,7 +308,7 @@ class _ReaderPageState extends State<ReaderPage> {
     ])) {
       feedback = '🐢 Slower';
       action = () =>
-          tts.setRate((tts.speechRate - 0.25).clamp(0.5, 2.0), locale);
+          tts.setRate((tts.speechRate - 0.2).clamp(0.1, 2.0), locale);
     } else if (_has(words, ['restart', 'start over', 'from the beginning'])) {
       feedback = '🔄 Restarted';
       action = () => tts.restart(locale);
@@ -313,14 +341,35 @@ class _ReaderPageState extends State<ReaderPage> {
 
     action?.call();
 
+    // Ensure we scroll to the new position if it changed
+    _scrollToHighlight();
+
     // Resume always-on listening after command
     _commandProcessing = false;
     if (_alwaysOnEnabled) {
       Future.delayed(
-        const Duration(milliseconds: 700),
+        const Duration(milliseconds: 1000), // Slightly longer delay for cleanup
         _startAlwaysOnListening,
       );
     }
+  }
+
+  void _scrollToHighlight() {
+    if (!_scrollController.hasClients) return;
+    final tts = context.read<TtsService>();
+    final text = widget.content;
+    if (text.isEmpty) return;
+
+    // Estimate position based on character offset
+    final progress = tts.sentenceStart / text.length;
+    final maxScroll = _scrollController.position.maxScrollExtent;
+    final target = progress * maxScroll;
+
+    _scrollController.animateTo(
+      (target - 100).clamp(0, maxScroll),
+      duration: const Duration(milliseconds: 500),
+      curve: Curves.easeInOut,
+    );
   }
 
   bool _has(String words, List<String> keywords) =>
@@ -348,6 +397,7 @@ class _ReaderPageState extends State<ReaderPage> {
           documentContent: widget.content,
           mode: mode,
           cardCount: cardCount,
+          source: 'Home',
         ),
       ),
     );
@@ -471,7 +521,7 @@ class _ReaderPageState extends State<ReaderPage> {
 
   // ── Highlighted text ──────────────────────────
   Widget _buildHighlightedText(TtsService tts) {
-    final text = widget.content;
+    final text = tts.content ?? '';
     if (text.isEmpty) {
       return const Text(
         'No text content available for this file.',
@@ -491,35 +541,343 @@ class _ReaderPageState extends State<ReaderPage> {
     if (sStart >= sEnd) {
       return Text(
         text,
-        style: const TextStyle(
-          fontSize: 16,
-          height: 1.8,
-          color: Color(0xDD0A0E1A),
-        ),
+        style: const TextStyle(fontSize: 16, height: 1.8, color: Colors.white),
       );
     }
 
+    // Clean content for display (strip XML tags if detected in docx)
+    final cleanedText = text
+        .replaceAll(RegExp(r'<[^>]*>'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    final displayText = cleanedText.isEmpty ? text : cleanedText;
+
+    final lang = context.watch<LanguageProvider>();
+    final isDyslexic = lang.isDyslexicFontEnabled;
+    final isBionic = lang.isBionicReadingEnabled;
+
     return RichText(
       text: TextSpan(
-        style: const TextStyle(
-          fontSize: 16,
-          height: 1.8,
-          color: Color(0xDD0A0E1A),
-        ),
+        style: isDyslexic
+            ? GoogleFonts.lexend(
+                fontSize: 20,
+                height: 1.8,
+                color: Colors.white,
+                letterSpacing: 1.2,
+              )
+            : const TextStyle(
+                fontSize: 20,
+                height: 1.6,
+                color: Colors.white,
+                letterSpacing: 0.2,
+                fontFamily: 'Inter',
+              ),
         children: [
-          if (sStart > 0) TextSpan(text: text.substring(0, sStart)),
-          TextSpan(
-            text: text.substring(sStart, sEnd),
-            style: TextStyle(
-              backgroundColor: _hasPinnedHighlight
-                  ? const Color(0xFFFFC107)
-                  : const Color(0xFFFFE066),
-              color: Color(0xFF0A0E1A),
-              fontWeight: FontWeight.w600,
+          if (sStart > 0)
+            _processTextSpan(
+              text.substring(0, sStart),
+              isBionic,
+              false,
+              isDyslexic,
             ),
+          _processTextSpan(
+            text.substring(sStart, sEnd),
+            isBionic,
+            true,
+            isDyslexic,
           ),
-          if (sEnd < text.length) TextSpan(text: text.substring(sEnd)),
+          if (sEnd < text.length)
+            _processTextSpan(text.substring(sEnd), isBionic, false, isDyslexic),
         ],
+      ),
+    );
+  }
+
+  TextSpan _processTextSpan(
+    String text,
+    bool isBionic,
+    bool isHighlighted,
+    bool isDyslexic,
+  ) {
+    if (!isBionic) {
+      return TextSpan(
+        text: text,
+        style: isHighlighted
+            ? TextStyle(
+                backgroundColor: const Color(0xFF4B9EFF).withOpacity(0.2),
+                color: const Color(0xFF4B9EFF),
+                fontWeight: FontWeight.w900,
+                decoration: TextDecoration.underline,
+                decorationThickness: 2,
+                decorationColor: const Color(0xFF4B9EFF).withOpacity(0.5),
+              )
+            : null,
+      );
+    }
+
+    // Bionic Reading logic: bold the first half of each word
+    final words = text.split(RegExp(r'(\s+)'));
+    return TextSpan(
+      children: words.map((w) {
+        if (w.trim().isEmpty) return TextSpan(text: w);
+
+        int boldLen = (w.length / 2).ceil().clamp(1, w.length);
+        return TextSpan(
+          children: [
+            TextSpan(
+              text: w.substring(0, boldLen),
+              style: TextStyle(
+                fontWeight: FontWeight.w900,
+                color: isHighlighted ? const Color(0xFF4B9EFF) : Colors.white,
+                backgroundColor: isHighlighted
+                    ? const Color(0xFF4B9EFF).withOpacity(0.2)
+                    : null,
+              ),
+            ),
+            TextSpan(
+              text: w.substring(boldLen),
+              style: TextStyle(
+                fontWeight: FontWeight.w300,
+                color: isHighlighted
+                    ? const Color(0xFF4B9EFF).withOpacity(0.8)
+                    : Colors.white70,
+                backgroundColor: isHighlighted
+                    ? const Color(0xFF4B9EFF).withOpacity(0.2)
+                    : null,
+              ),
+            ),
+          ],
+        );
+      }).toList(),
+    );
+  }
+
+  // ── Study Buddy Chat ────────────────────────────
+  void _showStudyBuddySheet() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Container(
+          height: MediaQuery.of(context).size.height * 0.75,
+          decoration: const BoxDecoration(
+            color: Color(0xFF0A0E1A),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
+            border: Border(top: BorderSide(color: Color(0xFF4B9EFF), width: 2)),
+          ),
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom,
+          ),
+          child: Column(
+            children: [
+              // Header
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.psychology,
+                      color: Color(0xFF4B9EFF),
+                      size: 28,
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'AI Study Buddy',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white54),
+                      onPressed: () => Navigator.pop(ctx),
+                    ),
+                  ],
+                ),
+              ),
+              // Messages
+              Expanded(
+                child: ListView.builder(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  itemCount: _buddyMessages.length + (_isBuddyThinking ? 1 : 0),
+                  itemBuilder: (ctx, i) {
+                    if (i == _buddyMessages.length) {
+                      return const Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          'Thinking...',
+                          style: TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                            fontStyle: FontStyle.italic,
+                          ),
+                        ),
+                      );
+                    }
+                    final msg = _buddyMessages[i];
+                    final isUser = msg['role'] == 'user';
+                    return Align(
+                      alignment: isUser
+                          ? Alignment.centerRight
+                          : Alignment.centerLeft,
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(vertical: 6),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: isUser
+                              ? const Color(0xFF4B9EFF).withOpacity(0.1)
+                              : Colors.white.withOpacity(0.05),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(
+                            color: isUser
+                                ? const Color(0xFF4B9EFF).withOpacity(0.3)
+                                : Colors.white.withOpacity(0.1),
+                          ),
+                        ),
+                        constraints: BoxConstraints(
+                          maxWidth: MediaQuery.of(ctx).size.width * 0.75,
+                        ),
+                        child: Text(
+                          msg['text']!,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+              // Input
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _buddyController,
+                        style: const TextStyle(color: Colors.white),
+                        decoration: InputDecoration(
+                          hintText: 'Ask about this document...',
+                          hintStyle: const TextStyle(color: Colors.white38),
+                          filled: true,
+                          fillColor: Colors.white.withOpacity(0.05),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(25),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 20,
+                          ),
+                        ),
+                        onSubmitted: (_) => _sendBuddyMessage(setSheetState),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    IconButton(
+                      icon: const Icon(Icons.send, color: Color(0xFF4B9EFF)),
+                      onPressed: () => _sendBuddyMessage(setSheetState),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _sendBuddyMessage(StateSetter setSheetState) async {
+    final text = _buddyController.text.trim();
+    if (text.isEmpty) return;
+
+    setSheetState(() {
+      _buddyMessages.add({'role': 'user', 'text': text});
+      _buddyController.clear();
+      _isBuddyThinking = true;
+    });
+
+    try {
+      // Use existing AI Service logic (summarized context)
+      // For now, we'll simulate a response based on the document
+      await Future.delayed(const Duration(seconds: 2));
+
+      setSheetState(() {
+        _isBuddyThinking = false;
+        _buddyMessages.add({
+          'role': 'assistant',
+          'text':
+              'Based on the document "${widget.title}", it seems that your question refers to a key section about... [AI would generate real response here]',
+        });
+      });
+    } catch (e) {
+      setSheetState(() => _isBuddyThinking = false);
+    }
+  }
+
+  void _showSettingsSheet(LanguageProvider lang) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: const Color(0xFF141A29),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => Padding(
+        padding: const EdgeInsets.fromLTRB(24, 16, 24, 36),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 40,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 20),
+              decoration: BoxDecoration(
+                color: Colors.grey[700],
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            const Text(
+              'Reader Settings',
+              style: TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 17,
+              ),
+            ),
+            const SizedBox(height: 20),
+            SwitchListTile(
+              title: const Text(
+                'OpenDyslexic Font',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'Enhanced readability for dyslexia',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              value: lang.isDyslexicFontEnabled,
+              activeThumbColor: const Color(0xFF4B9EFF),
+              onChanged: (v) => lang.setDyslexicFont(v),
+            ),
+            SwitchListTile(
+              title: const Text(
+                'Bionic Reading',
+                style: TextStyle(color: Colors.white),
+              ),
+              subtitle: const Text(
+                'Highlight word starts for faster focus',
+                style: TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+              value: lang.isBionicReadingEnabled,
+              activeThumbColor: const Color(0xFF4B9EFF),
+              onChanged: (v) => lang.setBionicReading(v),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -530,9 +888,9 @@ class _ReaderPageState extends State<ReaderPage> {
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: Colors.white.withOpacity(0.04),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Color(0xFF0A0E1A).withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -553,10 +911,14 @@ class _ReaderPageState extends State<ReaderPage> {
             GestureDetector(
               onTap: () => _openAiPage('summary'),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
-                  color: Color(0xFF0A0E1A),
+                  color: Colors.white.withOpacity(0.06),
                   borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.1)),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
@@ -570,9 +932,9 @@ class _ReaderPageState extends State<ReaderPage> {
                     Text(
                       'Summarize',
                       style: TextStyle(
-                        color: Color(0xFFF0F4FF),
+                        color: Colors.white,
                         fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
@@ -584,7 +946,10 @@ class _ReaderPageState extends State<ReaderPage> {
             GestureDetector(
               onTap: () => _openAiPage('flashcards'),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: const Color(0xFF4B9EFF),
                   borderRadius: BorderRadius.circular(20),
@@ -592,14 +957,53 @@ class _ReaderPageState extends State<ReaderPage> {
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.style_outlined, color: Color(0xFF0A0E1A), size: 13),
+                    Icon(
+                      Icons.style_outlined,
+                      color: Color(0xFF0A0E1A),
+                      size: 13,
+                    ),
                     SizedBox(width: 5),
                     Text(
                       'Assessment',
                       style: TextStyle(
-                        color: Color(0xFF0A0E1A),
+                        color: Colors.white,
                         fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            // Study Buddy Button
+            GestureDetector(
+              onTap: _showStudyBuddySheet,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.purple.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.purple.withOpacity(0.3)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(
+                      Icons.psychology,
+                      color: Colors.purpleAccent,
+                      size: 13,
+                    ),
+                    SizedBox(width: 5),
+                    Text(
+                      'Study Buddy',
+                      style: TextStyle(
+                        color: Colors.purpleAccent,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                   ],
@@ -609,9 +1013,16 @@ class _ReaderPageState extends State<ReaderPage> {
             const SizedBox(width: 8),
             // PDF Button
             GestureDetector(
-              onTap: () => PdfService.exportSummaryPdf(context, widget.title, widget.content),
+              onTap: () => PdfService.exportSummaryPdf(
+                context,
+                widget.title,
+                widget.content,
+              ),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.blue.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(20),
@@ -619,7 +1030,11 @@ class _ReaderPageState extends State<ReaderPage> {
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.picture_as_pdf_outlined, color: Colors.blue, size: 13),
+                    Icon(
+                      Icons.picture_as_pdf_outlined,
+                      color: Colors.blue,
+                      size: 13,
+                    ),
                     SizedBox(width: 5),
                     Text(
                       'PDF',
@@ -637,28 +1052,42 @@ class _ReaderPageState extends State<ReaderPage> {
             // Reminder Button
             GestureDetector(
               onTap: () async {
-                final time = await showTimePicker(context: context, initialTime: TimeOfDay.now());
+                final time = await showTimePicker(
+                  context: context,
+                  initialTime: TimeOfDay.now(),
+                );
                 if (time != null && mounted) {
                   final now = DateTime.now();
-                  var scheduledTime = DateTime(now.year, now.month, now.day, time.hour, time.minute);
+                  var scheduledTime = DateTime(
+                    now.year,
+                    now.month,
+                    now.day,
+                    time.hour,
+                    time.minute,
+                  );
                   if (scheduledTime.isBefore(now)) {
                     scheduledTime = scheduledTime.add(const Duration(days: 1));
                   }
-                  
-                  await NotificationService.scheduleReminder(
+
+                  await NotificationService.instance.scheduleReminder(
                     id: scheduledTime.millisecondsSinceEpoch ~/ 1000,
                     title: 'Study Reminder: ${widget.title}',
                     body: 'It is time to dive back into your reading material!',
                     scheduledTime: scheduledTime,
                   );
-                  
+
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Reminder set for ${time.format(context)}')),
+                    SnackBar(
+                      content: Text('Reminder set for ${time.format(context)}'),
+                    ),
                   );
                 }
               },
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 14,
+                  vertical: 7,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.orange.withOpacity(0.15),
                   borderRadius: BorderRadius.circular(20),
@@ -692,8 +1121,9 @@ class _ReaderPageState extends State<ReaderPage> {
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
       padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
       decoration: BoxDecoration(
-        color: Color(0xFF141A29),
+        color: const Color(0xFF161B2E),
         borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -753,10 +1183,14 @@ class _ReaderPageState extends State<ReaderPage> {
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: _isListening ? Colors.green.withOpacity(0.12) : Colors.grey[200],
+        color: _isListening
+            ? Color(0xFF4B9EFF).withOpacity(0.1)
+            : Colors.white.withOpacity(0.04),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
-          color: _isListening ? Colors.green : Colors.transparent,
+          color: _isListening
+              ? const Color(0xFF4B9EFF)
+              : Colors.white.withOpacity(0.08),
           width: 1.5,
         ),
       ),
@@ -789,9 +1223,9 @@ class _ReaderPageState extends State<ReaderPage> {
                       : (_alwaysOnEnabled
                             ? 'Voice commands active'
                             : 'Voice commands off'),
-                  style: TextStyle(
-                    color: Color(0xFF1c2333),
-                    fontWeight: FontWeight.w600,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
                     fontSize: 12,
                   ),
                 ),
@@ -1096,7 +1530,7 @@ class _ReaderPageState extends State<ReaderPage> {
     final locale = context.watch<LanguageProvider>().ttsLocale;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: const Color(0xFF0A0E1A),
       body: SafeArea(
         child: Column(
           children: [
@@ -1107,25 +1541,44 @@ class _ReaderPageState extends State<ReaderPage> {
                 children: [
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
-                    child: const Icon(Icons.keyboard_arrow_down, size: 32),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 32,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       widget.title,
                       style: const TextStyle(
-                        fontWeight: FontWeight.bold,
+                        fontWeight: FontWeight.w900,
                         fontSize: 16,
+                        color: Colors.white,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
                   GestureDetector(
+                    onTap: () =>
+                        _showSettingsSheet(context.read<LanguageProvider>()),
+                    child: const Icon(
+                      Icons.settings_outlined,
+                      color: Colors.white70,
+                      size: 24,
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  GestureDetector(
                     onTap: () async {
                       await tts.stop();
                       if (context.mounted) Navigator.pop(context);
                     },
-                    child: Icon(Icons.close, color: Colors.grey[700], size: 24),
+                    child: const Icon(
+                      Icons.close,
+                      color: Colors.white70,
+                      size: 24,
+                    ),
                   ),
                 ],
               ),

@@ -359,20 +359,20 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
   Widget build(BuildContext context) {
     if (_loading) {
       return const Scaffold(
-        backgroundColor: Color(0xFFF0F4FF),
-        body: Center(child: CircularProgressIndicator()),
+        backgroundColor: Color(0xFF0A0E1A),
+        body: Center(child: CircularProgressIndicator(color: Color(0xFF4B9EFF), strokeWidth: 2)),
       );
     }
 
     // ── Guest Guard ──────────────────────────────
     if (_isGuest) {
       return Scaffold(
-        backgroundColor: const Color(0xFFF0F4FF),
+        backgroundColor: const Color(0xFF0A0E1A),
         appBar: AppBar(
-          title: const Text('Recycle Bin', style: TextStyle(color: Color(0xFF0A0E1A), fontWeight: FontWeight.bold)),
+          title: const Text('Recycle Bin', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           backgroundColor: Colors.transparent,
           elevation: 0,
-          iconTheme: const IconThemeData(color: Color(0xFF0A0E1A)),
+          iconTheme: const IconThemeData(color: Colors.white),
         ),
         body: Center(
           child: Padding(
@@ -381,24 +381,24 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Container(
-                  width: 100,
-                  height: 100,
+                  width: 90,
+                  height: 90,
                   decoration: BoxDecoration(
-                    color: Color(0xFF0A0E1A).withOpacity(0.08),
+                    color: const Color(0xFF4B9EFF).withOpacity(0.08),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.delete_outline_rounded, size: 52, color: Colors.grey[500]),
+                  child: const Icon(Icons.delete_outline_rounded, size: 46, color: Color(0xFF4B9EFF)),
                 ),
                 const SizedBox(height: 24),
                 const Text(
-                  'Recycle Bin Unavailable',
-                  style: TextStyle(fontSize: 22, fontWeight: FontWeight.w900, letterSpacing: -0.5),
+                  'Sign in to use Recycle Bin',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: Colors.white, letterSpacing: -0.5),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'The Recycle Bin is a feature for registered users only.\n\nGuest data is temporary and is permanently removed when you leave the app. Create an account to unlock 30-day recovery of deleted items.',
-                  style: TextStyle(fontSize: 14, color: Colors.grey[700], height: 1.6),
+                  'The Recycle Bin is for registered users only. Guest data is removed when you leave the app. Create an account to unlock 30-day recovery.',
+                  style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.45), height: 1.6),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -414,18 +414,19 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     return DefaultTabController(
       length: 4,
       child: Scaffold(
-        backgroundColor: const Color(0xFFF0F4FF),
+        backgroundColor: const Color(0xFF0A0E1A),
         appBar: AppBar(
-          title: const Text('Recycle Bin', style: TextStyle(color: Color(0xFF0A0E1A), fontWeight: FontWeight.bold, fontSize: 20)),
+          title: const Text('Recycle Bin', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 20)),
           backgroundColor: Colors.transparent,
           elevation: 0,
-          iconTheme: const IconThemeData(color: Color(0xFF0A0E1A)),
-          bottom: const TabBar(
+          iconTheme: const IconThemeData(color: Colors.white),
+          bottom: TabBar(
             isScrollable: true,
-            labelColor: Color(0xFF0A0E1A),
-            unselectedLabelColor: Color(0x8A0A0E1A),
-            indicatorColor: Color(0xFF0A0E1A),
-            tabs: [
+            labelColor: Colors.white,
+            unselectedLabelColor: Colors.white38,
+            indicatorColor: const Color(0xFF4B9EFF),
+            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            tabs: const [
               Tab(text: 'Notes'),
               Tab(text: 'Recordings'),
               Tab(text: 'Uploads'),
@@ -444,9 +445,22 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
             }
             if (snapshot.hasError) {
               return Center(
-                child: Text('Something went wrong.\n${snapshot.error}',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: Colors.grey[600])),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 70, height: 70,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.04),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.delete_outline_rounded, size: 36, color: Colors.white.withOpacity(0.2)),
+                    ),
+                    const SizedBox(height: 16),
+                    Text('Nothing here yet',
+                        style: TextStyle(color: Colors.white.withOpacity(0.4), fontWeight: FontWeight.w700, fontSize: 15)),
+                  ],
+                ),
               );
             }
 
@@ -481,17 +495,18 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Color(0xFF0A0E1A).withOpacity(0.07),
+                      color: Colors.white.withOpacity(0.04),
                       borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.white10),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline_rounded, size: 15, color: Colors.grey[700]),
+                        Icon(Icons.info_outline_rounded, size: 15, color: Colors.white.withOpacity(0.4)),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'Items are permanently deleted after 30 days.',
-                            style: TextStyle(fontSize: 11, color: Colors.grey[700], height: 1.4),
+                            style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.4), height: 1.4),
                           ),
                         ),
                         if (docs.isNotEmpty)
@@ -530,17 +545,17 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Container(
-              width: 80,
-              height: 80,
+              width: 70,
+              height: 70,
               decoration: BoxDecoration(
-                color: Color(0xFF0A0E1A).withOpacity(0.06),
+                color: const Color(0xFF4B9EFF).withOpacity(0.06),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.description_outlined, size: 40, color: Colors.grey[400]),
+              child: Icon(Icons.delete_outline_rounded, size: 36, color: Colors.white.withOpacity(0.2)),
             ),
             const SizedBox(height: 16),
-            const Text('No deleted files here',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700, color: Color(0x8A0A0E1A))),
+            Text('No deleted items here',
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white.withOpacity(0.3))),
           ],
         ),
       );
@@ -563,15 +578,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Colors.white.withOpacity(0.04),
             borderRadius: BorderRadius.circular(18),
-            boxShadow: [
-              BoxShadow(
-                color: Color(0xFF0A0E1A).withOpacity(0.05),
-                blurRadius: 8,
-                offset: const Offset(0, 2),
-              ),
-            ],
+            border: Border.all(color: Colors.white.withOpacity(0.08)),
           ),
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -597,7 +606,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                         name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+                        style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: Colors.white),
                       ),
                       const SizedBox(height: 4),
                       Row(

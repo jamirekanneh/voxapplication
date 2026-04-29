@@ -3,9 +3,9 @@ import 'package:flutter_tts/flutter_tts.dart';
 import 'contact_us_page.dart';
 import 'floating_chat_bot.dart';
 
-const _kBgColor = Color(0xFFF0F4FF);
+const _kBgColor = Color(0xFF0A0E1A);
 const _kHeaderColor = Color(0xFF4B9EFF);
-const _kNavy = Color(0xFF1A1A2E);
+const _kNavy = Colors.white;
 
 class AskQuestionsPage extends StatefulWidget {
   const AskQuestionsPage({super.key});
@@ -120,9 +120,24 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
           'Go to Menu → Voice Commands → Add Command. Choose a phrase to say, select an action (like opening notes or running a macro), and optionally add parameters. Your custom commands sync across devices with your account.',
     },
     {
+      'q': 'What is the AI Study Buddy?',
+      'a':
+          'The AI Study Buddy is an interactive chat inside the document reader. You can ask it questions about what you are currently reading, get explanations of complex paragraphs, or ask for a quick summary of a specific section without leaving the page.',
+    },
+    {
+      'q': 'How do I use OpenDyslexic font or Bionic Reading?',
+      'a':
+          'Open the document reader and tap the Settings gear in the top bar. You can toggle "OpenDyslexic Font" for better readability or "Bionic Reading" to bold the starts of words, which helps with focus and reading speed.',
+    },
+    {
+      'q': 'What are Reading Streaks and Goals?',
+      'a':
+          'Streaks track how many consecutive days you have met your daily reading goal. You can set your daily target (e.g., 30 minutes) in the Statistics page. Meeting your goal keeps your streak alive and helps build a consistent study habit!',
+    },
+    {
       'q': 'What is the difference between guest and authenticated accounts?',
       'a':
-          'Guest accounts store data locally and temporarily. Authenticated accounts provide cloud backup, cross-device sync, custom command persistence, and access to advanced features like detailed analytics.',
+          'Guest accounts store data locally and temporarily. Authenticated accounts provide cloud backup, cross-device sync, custom command persistence, and access to advanced features like detailed analytics and streak tracking.',
     },
   ];
 
@@ -177,7 +192,7 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w900,
-                  color: _kNavy.withValues(alpha: 0.8),
+                  color: _kNavy.withOpacity(0.8),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -190,11 +205,12 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
                 itemBuilder: (context, index) {
                   return Container(
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: Colors.white.withOpacity(0.04),
                       borderRadius: BorderRadius.circular(16),
+                      border: Border.all(color: Colors.white.withOpacity(0.08)),
                       boxShadow: [
                         BoxShadow(
-                          color: _kNavy.withValues(alpha: 0.05),
+                          color: _kHeaderColor.withOpacity(0.02),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -230,7 +246,7 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
                               child: Text(
                                 faqs[index]['a']!,
                                 style: TextStyle(
-                                  color: Color(0xDD0A0E1A).withValues(alpha: 0.8),
+                                  color: Colors.white.withOpacity(0.7),
                                   height: 1.5,
                                 ),
                               ),
@@ -253,10 +269,11 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
                   );
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _kNavy,
+                  backgroundColor: _kHeaderColor,
                   foregroundColor: Colors.white,
                   minimumSize: const Size(double.infinity, 56),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  elevation: 0,
                 ),
                 icon: const Icon(Icons.mail_outline_rounded),
                 label: const Text('Still have a question? Contact Us'),

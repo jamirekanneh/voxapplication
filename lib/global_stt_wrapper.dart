@@ -43,6 +43,20 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     _pulseAnimation = Tween<double>(begin: 0.85, end: 1.0).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+
+    // Listen for assistant mode toggle
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<CustomCommandsProvider>().addListener(_onProviderChange);
+    });
+  }
+
+  void _onProviderChange() {
+    if (!mounted) return;
+    final assistantEnabled =
+        context.read<CustomCommandsProvider>().assistantModeEnabled;
+    if (assistantEnabled && !_isListening) {
+      _startListening();
+    }
   }
 
   @override
@@ -54,11 +68,13 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
   Future<void> _initSpeech() async {
     _speechAvailable = await _speech.initialize(
       onError: (e) {
-        if (mounted) setState(() => _isListening = false);
+        if (mounted) _updateListening(false);
+        // Auto-restart if assistant mode is on and it's not a fatal error
+        _checkAutoRestart();
       },
       onStatus: (status) {
         if (status == 'done' || status == 'notListening') {
-          if (mounted) setState(() => _isListening = false);
+          if (mounted) _updateListening(false);
           _handleResult();
         }
       },
@@ -74,8 +90,12 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
       await tts.togglePause(context.read<LanguageProvider>().currentLocale);
     }
 
+    // Force cancel any stuck session before starting
+    await _speech.stop();
+    await _speech.cancel();
+
+    _updateListening(true);
     setState(() {
-      _isListening = true;
       _lastWords = '';
     });
 
@@ -112,6 +132,34 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
       ttsService: ttsService,
       langProvider: langProvider,
     );
+
+    // If Assistant Mode is on, start listening again after a short delay
+    _checkAutoRestart();
+  }
+
+  void _updateListening(bool value) {
+    if (!mounted) return;
+    setState(() => _isListening = value);
+    context.read<CustomCommandsProvider>().setListening(value);
+  }
+
+  void _checkAutoRestart() {
+    if (!mounted) return;
+    final assistantEnabled =
+        context.read<CustomCommandsProvider>().assistantModeEnabled;
+    if (assistantEnabled && !_isListening) {
+      // Short cooldown to allow the previous session to fully cleanup
+      Future.delayed(const Duration(milliseconds: 500), () async {
+        if (!mounted) return;
+        final stillEnabled =
+            context.read<CustomCommandsProvider>().assistantModeEnabled;
+        if (stillEnabled && !_isListening) {
+          // Re-initialize if it's been a while to keep the engine fresh
+          await _initSpeech();
+          if (mounted) _startListening();
+        }
+      });
+    }
   }
 
   @override

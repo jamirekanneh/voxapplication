@@ -46,10 +46,20 @@ class AnalyticsService extends ChangeNotifier {
   Map<String, int>   _dictWords = {}; // word -> lookup count
   Map<String, int>   _fileOps   = {}; // operation -> count
   Map<String, int>   _voiceCmds = {}; // command -> usage count
+  Map<String, int>   _apiErrors = {}; // source -> count
+  Map<String, int>   _unmatchedCommands = {}; // text -> count
+  int                _ttsUsageCount = 0;
   Map<String, dynamic> _userPrefs = {}; // user preferences tracking
   DateTime?          _lastSync;
+  
+  // Streaks & Goals
+  int _dailyGoalMinutes = 30; // Default 30 mins
+  int _currentStreak = 0;
+  int _bestStreak = 0;
+  DateTime? _lastGoalDate; // Last day goal was met
+
   Timer?             _syncTimer;
-  static const int   _analyticsSchemaVersion = 1;
+  static const int   _analyticsSchemaVersion = 2; // Incremented version
 
   List<DateTime>     get opens     => List.unmodifiable(_opens);
   Map<String, int>   get featureMs => Map.unmodifiable(_featureMs);
@@ -57,8 +67,15 @@ class AnalyticsService extends ChangeNotifier {
   Map<String, int>   get dictWords => Map.unmodifiable(_dictWords);
   Map<String, int>   get fileOps   => Map.unmodifiable(_fileOps);
   Map<String, int>   get voiceCmds => Map.unmodifiable(_voiceCmds);
+  Map<String, int>   get apiErrors => Map.unmodifiable(_apiErrors);
+  Map<String, int>   get unmatchedCommands => Map.unmodifiable(_unmatchedCommands);
+  int                get ttsUsageCount => _ttsUsageCount;
   Map<String, dynamic> get userPrefs => Map.unmodifiable(_userPrefs);
   DateTime?          get lastSync => _lastSync;
+  int                get dailyGoalMinutes => _dailyGoalMinutes;
+  int                get currentStreak => _currentStreak;
+  int                get bestStreak => _bestStreak;
+  double             get todayGoalProgress => (todayTotalMs / (1000 * 60 * _dailyGoalMinutes)).clamp(0.0, 1.0);
 
   // ── Load all persisted data ───────────────────────────────
   Future<void> load() async {
@@ -101,6 +118,20 @@ class AnalyticsService extends ChangeNotifier {
           .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
     }
 
+    final ae = p.getString('vox_api_errors');
+    if (ae != null) {
+      _apiErrors = (jsonDecode(ae) as Map)
+          .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+    }
+
+    final uc = p.getString('vox_unmatched_cmds');
+    if (uc != null) {
+      _unmatchedCommands = (jsonDecode(uc) as Map)
+          .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+    }
+
+    _ttsUsageCount = p.getInt('vox_tts_usage') ?? 0;
+
     final up = p.getString(_kUserPrefs);
     if (up != null) {
       _userPrefs = jsonDecode(up) as Map<String, dynamic>;
@@ -111,12 +142,20 @@ class AnalyticsService extends ChangeNotifier {
       _lastSync = DateTime.tryParse(ls);
     }
 
+    _dailyGoalMinutes = p.getInt('vox_daily_goal_mins') ?? 30;
+    _currentStreak = p.getInt('vox_current_streak') ?? 0;
+    _bestStreak = p.getInt('vox_best_streak') ?? 0;
+    final lgd = p.getString('vox_last_goal_date');
+    if (lgd != null) _lastGoalDate = DateTime.tryParse(lgd);
+
+    _calculateStreak();
+
     _syncTimer ??= Timer.periodic(const Duration(hours: 4), (_) {
         autoSyncIfNeeded();
       });
 
     // run one immediate sync if there is outstanding data
-    await autoSyncIfNeeded();
+    autoSyncIfNeeded();
 
     notifyListeners();
   }
@@ -151,6 +190,30 @@ class AnalyticsService extends ChangeNotifier {
   Future<void> recordVoiceCommand(String command) async {
     _voiceCmds[command] = (_voiceCmds[command] ?? 0) + 1;
     await _persist(_kVoiceCmds, jsonEncode(_voiceCmds));
+    notifyListeners();
+  }
+
+  // ── Record API Error ───────────────────────────────────────
+  Future<void> recordApiError(String source, String error) async {
+    _apiErrors[source] = (_apiErrors[source] ?? 0) + 1;
+    await _persist('vox_api_errors', jsonEncode(_apiErrors));
+    notifyListeners();
+  }
+
+  // ── Record Unmatched Voice Command ────────────────────────
+  Future<void> recordUnmatchedCommand(String input) async {
+    final cleanInput = input.trim();
+    if (cleanInput.isEmpty) return;
+    _unmatchedCommands[cleanInput] = (_unmatchedCommands[cleanInput] ?? 0) + 1;
+    await _persist('vox_unmatched_cmds', jsonEncode(_unmatchedCommands));
+    notifyListeners();
+  }
+
+  // ── Record TTS Usage ───────────────────────────────────────
+  Future<void> recordTtsUsage() async {
+    _ttsUsageCount++;
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('vox_tts_usage', _ttsUsageCount);
     notifyListeners();
   }
 
@@ -200,6 +263,9 @@ class AnalyticsService extends ChangeNotifier {
         'totalDictLookups': _dictWords.values.fold(0, (a, b) => a + b),
         'totalFileOps': _fileOps.values.fold(0, (a, b) => a + b),
         'totalVoiceCmds': _voiceCmds.values.fold(0, (a, b) => a + b),
+        'totalApiErrors': _apiErrors.values.fold(0, (a, b) => a + b),
+        'totalUnmatched': _unmatchedCommands.values.fold(0, (a, b) => a + b),
+        'ttsUsage': _ttsUsageCount,
         'activeDays': _dailyMs.keys.where((k) {
           final d = DateTime.tryParse(k);
           return d != null && d.isAfter(DateTime.now().subtract(const Duration(days: 30)));
@@ -256,6 +322,63 @@ class AnalyticsService extends ChangeNotifier {
     _prune();
     await _persist(_kFeature, jsonEncode(_featureMs));
     await _persist(_kDaily,   jsonEncode(_dailyMs));
+    
+    _checkGoalReached();
+    notifyListeners();
+  }
+
+  void _checkGoalReached() async {
+    final todayKey = _dayKey(DateTime.now());
+    final todayMs = _dailyMs[todayKey] ?? 0;
+    final goalMs = _dailyGoalMinutes * 60 * 1000;
+
+    if (todayMs >= goalMs && (_lastGoalDate == null || _dayKey(_lastGoalDate!) != todayKey)) {
+      _lastGoalDate = DateTime.now();
+      _calculateStreak();
+      
+      final p = await SharedPreferences.getInstance();
+      await p.setString('vox_last_goal_date', _lastGoalDate!.toIso8601String());
+      await p.setInt('vox_current_streak', _currentStreak);
+      await p.setInt('vox_best_streak', _bestStreak);
+      
+      // Notify user!
+      // This would normally call NotificationService, but since we are in a singleton, 
+      // we can just notify listeners and let the UI handle the "Goal Reached" animation.
+      debugPrint('🎉 Daily Goal Reached! Streak: $_currentStreak');
+    }
+  }
+
+  void _calculateStreak() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    int streak = 0;
+    
+    // Iterate backwards from yesterday to find consecutive days where goal was met
+    for (int i = 0; ; i++) {
+      final date = today.subtract(Duration(days: i));
+      final key = _dayKey(date);
+      final ms = _dailyMs[key] ?? 0;
+      final goalMs = _dailyGoalMinutes * 60 * 1000;
+      
+      if (ms >= goalMs) {
+        streak++;
+      } else if (i == 0) {
+        // Today goal not met yet, streak might be from yesterday
+        continue;
+      } else {
+        break;
+      }
+    }
+    
+    _currentStreak = streak;
+    if (_currentStreak > _bestStreak) _bestStreak = _currentStreak;
+  }
+
+  Future<void> setDailyGoal(int minutes) async {
+    _dailyGoalMinutes = minutes;
+    final p = await SharedPreferences.getInstance();
+    await p.setInt('vox_daily_goal_mins', minutes);
+    _calculateStreak();
     notifyListeners();
   }
 

@@ -30,12 +30,22 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+      if (mounted) {
+        setState(() {
+          _isAnonymousUser = true;
+          _resolvedUid = null;
+        });
+      }
       return;
     }
 
     if (!user.isAnonymous) {
-      if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
+      if (mounted) {
+        setState(() {
+          _isAnonymousUser = false;
+          _resolvedUid = user.uid;
+        });
+      }
       _loadCommandsForUser(user.uid);
       return;
     }
@@ -44,7 +54,12 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
     final hasProfile = prefs.getBool('hasProfile') ?? false;
 
     if (!hasProfile) {
-      if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+      if (mounted) {
+        setState(() {
+          _isAnonymousUser = true;
+          _resolvedUid = null;
+        });
+      }
       return;
     }
 
@@ -54,7 +69,12 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
         .get();
 
     if (uidDoc.exists) {
-      if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = user.uid; });
+      if (mounted) {
+        setState(() {
+          _isAnonymousUser = false;
+          _resolvedUid = user.uid;
+        });
+      }
       _loadCommandsForUser(user.uid);
       return;
     }
@@ -70,13 +90,23 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
 
       if (query.docs.isNotEmpty) {
         final docUid = query.docs.first.id;
-        if (mounted) setState(() { _isAnonymousUser = false; _resolvedUid = docUid; });
+        if (mounted) {
+          setState(() {
+            _isAnonymousUser = false;
+            _resolvedUid = docUid;
+          });
+        }
         _loadCommandsForUser(docUid);
         return;
       }
     }
 
-    if (mounted) setState(() { _isAnonymousUser = true; _resolvedUid = null; });
+    if (mounted) {
+      setState(() {
+        _isAnonymousUser = true;
+        _resolvedUid = null;
+      });
+    }
   }
 
   // ─────────────────────────────────────────────
@@ -98,11 +128,13 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
       barrierDismissible: false,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.orange),
-          SizedBox(width: 8),
-          Text('Unsaved Data', style: TextStyle(fontWeight: FontWeight.w800)),
-        ]),
+        title: const Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Unsaved Data', style: TextStyle(fontWeight: FontWeight.w800)),
+          ],
+        ),
         content: const Text(
           'You\'re using a guest account. All voice commands will be lost when you close the app.\n\nCreate an account to save them.',
           style: TextStyle(fontSize: 14, height: 1.5),
@@ -110,15 +142,21 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Stay',
-                style: TextStyle(color: Color(0x8A0A0E1A), fontWeight: FontWeight.w700)),
+            child: const Text(
+              'Stay',
+              style: TextStyle(
+                color: Color(0x8A0A0E1A),
+                fontWeight: FontWeight.w700,
+              ),
+            ),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
               backgroundColor: Colors.orange,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10)),
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text('Leave Anyway'),
@@ -153,12 +191,26 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
             Text('Empty Commands?'),
           ],
         ),
-        content: const Text('All commands will be moved to the Recycle Bin and permanently deleted after 30 days. Are you sure?'),
+        content: const Text(
+          'All commands will be moved to the Recycle Bin and permanently deleted after 30 days. Are you sure?',
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Color(0x8A0A0E1A)))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Color(0x8A0A0E1A)),
+            ),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
             child: const Text('Delete All'),
           ),
         ],
@@ -172,8 +224,11 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
         final curUid = _resolvedUid ?? FirebaseAuth.instance.currentUser?.uid;
         if (curUid != null) {
           final batch = FirebaseFirestore.instance.batch();
-          final binCollection = FirebaseFirestore.instance.collection('users').doc(curUid).collection('deleted_library');
-          
+          final binCollection = FirebaseFirestore.instance
+              .collection('users')
+              .doc(curUid)
+              .collection('deleted_library');
+
           for (var cmd in provider.commands) {
             final newDocRef = binCollection.doc();
             batch.set(newDocRef, {
@@ -193,15 +248,25 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
           await batch.commit();
         }
       }
-      
+
       await provider.deleteAllCommands();
-      
+
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('All commands moved to Recycle Bin.'), backgroundColor: Color(0xFF333333)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('All commands moved to Recycle Bin.'),
+            backgroundColor: Color(0xFF333333),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete commands: $e'), backgroundColor: Colors.redAccent));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete commands: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
       }
     }
   }
@@ -220,7 +285,7 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
         if (await _confirmLeave() && mounted) Navigator.pop(context);
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFFF0F4FF),
+        backgroundColor: const Color(0xFF0A0E1A),
         body: Column(
           children: [
             // ── Header ──────────────────────────────────
@@ -232,89 +297,95 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
                 left: 20,
                 right: 20,
               ),
-              decoration: const BoxDecoration(
-                color: Color(0xFF4B9EFF),
-                borderRadius:
-                    BorderRadius.vertical(bottom: Radius.circular(32)),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0A0E1A),
+                border: Border(
+                  bottom: BorderSide(color: Colors.white.withOpacity(0.05)),
+                ),
               ),
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Semantics(
-                    label: 'Go back',
-                    button: true,
-                    child: GestureDetector(
-                      onTap: () async {
-                        if (await _confirmLeave() && mounted) {
-                          Navigator.pop(context);
-                        }
-                      },
-                      child: const Icon(
-                        Icons.arrow_back_ios_new_rounded,
-                        color: Color(0xFFF0F4FF),
-                        size: 20,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
+                      Semantics(
+                        label: 'Go back',
+                        button: true,
+                        child: GestureDetector(
+                          onTap: () async {
+                            if (await _confirmLeave() && mounted) {
+                              Navigator.pop(context);
+                            }
+                          },
+                          child: const Icon(
+                            Icons.arrow_back_ios_new_rounded,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                      ),
                       const Text(
-                        'Voice Commands',
+                        'Personalized Commands',
                         style: TextStyle(
-                          fontSize: 28,
+                          fontSize: 20,
                           fontWeight: FontWeight.w900,
-                          color: Color(0xFFF0F4FF),
+                          color: Colors.white,
                           letterSpacing: -0.5,
                         ),
                       ),
+                      const SizedBox(width: 20), // Balance the back button
                     ],
                   ),
-                  const SizedBox(height: 4),
                   const Text(
-                    'Double-tap anywhere to activate',
+                    'Hey Vox! Double-tap anywhere to listen.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Color(0xFFF0F4FF),
-                      fontWeight: FontWeight.w500,
+                      color: Color(0xFF4B9EFF),
+                      fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
                   // Voice feedback toggle
                   Semantics(
                     label:
                         'Voice feedback ${provider.voiceFeedbackEnabled ? "enabled" : "disabled"}',
                     toggled: provider.voiceFeedbackEnabled,
                     child: GestureDetector(
-                      onTap: () => provider
-                          .setVoiceFeedback(!provider.voiceFeedbackEnabled),
+                      onTap: () => provider.setVoiceFeedback(
+                        !provider.voiceFeedbackEnabled,
+                      ),
                       child: Container(
                         padding: const EdgeInsets.symmetric(
-                            horizontal: 16, vertical: 10),
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
                         decoration: BoxDecoration(
-                          color: Color(0xFF0A0E1A).withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(14),
+                          color: const Color(0xFF4B9EFF).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: const Color(0xFF4B9EFF).withOpacity(0.3),
+                          ),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             Icon(
                               provider.voiceFeedbackEnabled
-                                  ? Icons.volume_up_rounded
-                                  : Icons.volume_off_rounded,
-                              color: const Color(0xFFF0F4FF),
+                                  ? Icons.record_voice_over_rounded
+                                  : Icons.voice_over_off_rounded,
+                              color: const Color(0xFF4B9EFF),
                               size: 16,
                             ),
                             const SizedBox(width: 8),
                             Text(
                               provider.voiceFeedbackEnabled
-                                  ? 'Voice feedback: ON'
-                                  : 'Voice feedback: OFF',
+                                  ? 'Voice Responses: ON'
+                                  : 'Voice Responses: OFF',
                               style: const TextStyle(
-                                color: Color(0xFFF0F4FF),
-                                fontWeight: FontWeight.w700,
-                                fontSize: 13,
+                                color: Color(0xFF4B9EFF),
+                                fontWeight: FontWeight.w800,
+                                fontSize: 12,
                               ),
                             ),
                           ],
@@ -322,6 +393,7 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
                       ),
                     ),
                   ),
+                  const SizedBox(height: 10),
                 ],
               ),
             ),
@@ -332,26 +404,33 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
                 child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: Color(0xFF0A0E1A).withOpacity(0.06),
                     borderRadius: BorderRadius.circular(10),
-                    border:
-                        Border.all(color: Color(0xFF0A0E1A).withOpacity(0.1)),
+                    border: Border.all(
+                      color: Color(0xFF0A0E1A).withOpacity(0.1),
+                    ),
                   ),
                   child: const Row(
                     children: [
-                      Icon(Icons.info_outline,
-                          color: Color(0x8A0A0E1A), size: 15),
+                      Icon(
+                        Icons.info_outline,
+                        color: Color(0x8A0A0E1A),
+                        size: 15,
+                      ),
                       SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Guest mode — commands are temporary. Create an account to save them.',
                           style: TextStyle(
-                              color: Color(0x8A0A0E1A),
-                              fontSize: 11,
-                              height: 1.4),
+                            color: Color(0x8A0A0E1A),
+                            fontSize: 11,
+                            height: 1.4,
+                          ),
                         ),
                       ),
                     ],
@@ -365,49 +444,95 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
               child: _resolvedUid == null && !_isAnonymousUser
                   ? const Center(child: CircularProgressIndicator())
                   : provider.commands.isEmpty
-                      ? _buildEmptyState(context)
-                      : ListView.builder(
-                          padding: const EdgeInsets.all(16),
-                          itemCount: provider.commands.length,
-                          itemBuilder: (_, i) =>
-                              _CommandCard(command: provider.commands[i]),
-                        ),
+                  ? _buildEmptyState(context)
+                  : ListView.builder(
+                      padding: const EdgeInsets.all(16),
+                      itemCount: provider.commands.length,
+                      itemBuilder: (_, i) =>
+                          _CommandCard(command: provider.commands[i]),
+                    ),
             ),
           ],
         ),
 
-        // ── FAB ──────────────────────────────────────
+        // ── Google Assistant / Siri Style Orb ─────────────────
         floatingActionButton: Semantics(
           label: 'Add new voice command',
           button: true,
-          child: FloatingActionButton.extended(
-            backgroundColor: Color(0xFF0A0E1A),
-            foregroundColor: Colors.white,
-            onPressed: () => _showCommandSheet(context),
-            icon: const Icon(Icons.add),
-            label: const Text(
-              'Add Command',
-              style: TextStyle(fontWeight: FontWeight.w700),
+          child: GestureDetector(
+            onTap: () => _showCommandSheet(context),
+            child: Container(
+              margin: const EdgeInsets.only(bottom: 10),
+              width: 70,
+              height: 70,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: const LinearGradient(
+                  colors: [
+                    Color(0xFF4B9EFF),
+                    Color(0xFF9028F5),
+                    Color(0xFF4B9EFF),
+                  ],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: const Color(0xFF4B9EFF).withOpacity(0.4),
+                    blurRadius: 20,
+                    spreadRadius: 4,
+                  ),
+                  BoxShadow(
+                    color: const Color.fromARGB(
+                      255,
+                      25,
+                      17,
+                      67,
+                    ).withOpacity(0.3),
+                    blurRadius: 30,
+                    spreadRadius: 8,
+                  ),
+                ],
+              ),
+              child: const Icon(Icons.add, color: Colors.white, size: 32),
             ),
           ),
         ),
 
         bottomNavigationBar: BottomAppBar(
-          color: Color(0xFF141A29),
+          color: const Color(0xFF141A29),
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 8,
           child: SizedBox(
             height: 65,
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _navItem(context, Icons.home, 'Home',
-                    () => _guardedNav('/home')),
-                _navItem(context, Icons.note_alt_outlined, 'Notes',
-                    () => _guardedNav('/notes')),
+                _navItem(
+                  context,
+                  Icons.home,
+                  'Home',
+                  () => _guardedNav('/home'),
+                ),
+                _navItem(
+                  context,
+                  Icons.note_alt_outlined,
+                  'Notes',
+                  () => _guardedNav('/notes'),
+                ),
                 const SizedBox(width: 48),
-                _navItem(context, Icons.book, 'Dictionary',
-                    () => _guardedNav('/dictionary')),
-                _navItem(context, Icons.menu, 'Menu',
-                    () => _guardedNav('/menu')),
+                _navItem(
+                  context,
+                  Icons.book,
+                  'Dictionary',
+                  () => _guardedNav('/dictionary'),
+                ),
+                _navItem(
+                  context,
+                  Icons.menu,
+                  'Menu',
+                  () => _guardedNav('/menu'),
+                ),
               ],
             ),
           ),
@@ -427,7 +552,7 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF4B9EFF).withOpacity(0.3),
+                color: const Color(0xFF4B9EFF).withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
               child: const Icon(
@@ -438,18 +563,21 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
             ),
             const SizedBox(height: 20),
             const Text(
-              'No commands yet',
+              'No personalized commands',
               style: TextStyle(
-                fontSize: 20,
+                fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: Color(0xDD0A0E1A),
+                color: Colors.white,
               ),
             ),
             const SizedBox(height: 8),
-            const Text(
-              'Tap "Add Command" to create\nyour first voice command',
+            Text(
+              'Tap the glowing orb to create\nyour first voice command',
               textAlign: TextAlign.center,
-              style: TextStyle(color: Color(0x730A0E1A), fontSize: 14),
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.5),
+                fontSize: 13,
+              ),
             ),
           ],
         ),
@@ -457,8 +585,12 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
     );
   }
 
-  Widget _navItem(BuildContext context, IconData icon, String label,
-      VoidCallback onTap) {
+  Widget _navItem(
+    BuildContext context,
+    IconData icon,
+    String label,
+    VoidCallback onTap,
+  ) {
     return Semantics(
       label: label,
       button: true,
@@ -500,34 +632,30 @@ class _CommandCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: Colors.white.withOpacity(0.04),
           borderRadius: BorderRadius.circular(16),
-          boxShadow: [
-            BoxShadow(
-              color: Color(0xFF0A0E1A).withOpacity(0.04),
-              blurRadius: 8,
-              offset: const Offset(0, 2),
-            ),
-          ],
+          border: Border.all(color: Colors.white.withOpacity(0.08)),
         ),
         child: Column(
           children: [
             ListTile(
-              contentPadding:
-                  const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 6,
+              ),
               leading: Container(
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: command.isEnabled
-                      ? const Color(0xFF4B9EFF).withOpacity(0.2)
-                      : Colors.grey[100],
+                      ? const Color(0xFF4B9EFF).withOpacity(0.15)
+                      : Colors.white.withOpacity(0.05),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   command.action.icon,
                   color: command.isEnabled
                       ? const Color(0xFF4B9EFF)
-                      : Colors.grey[400],
+                      : Colors.white.withOpacity(0.3),
                   size: 22,
                 ),
               ),
@@ -536,7 +664,9 @@ class _CommandCard extends StatelessWidget {
                 style: TextStyle(
                   fontWeight: FontWeight.w800,
                   fontSize: 15,
-                  color: command.isEnabled ? Color(0xDD0A0E1A) : Color(0x610A0E1A),
+                  color: command.isEnabled
+                      ? Colors.white
+                      : Colors.white.withOpacity(0.4),
                   fontStyle: FontStyle.italic,
                 ),
               ),
@@ -549,8 +679,8 @@ class _CommandCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       color: command.isEnabled
-                          ? Color(0x8A0A0E1A)
-                          : Color(0x420A0E1A),
+                          ? Colors.white.withOpacity(0.7)
+                          : Colors.white.withOpacity(0.3),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -584,7 +714,7 @@ class _CommandCard extends StatelessWidget {
                               : Icons.toggle_off_rounded,
                           color: command.isEnabled
                               ? const Color(0xFF4B9EFF)
-                              : Colors.grey[400],
+                              : Colors.white.withOpacity(0.3),
                           size: 32,
                         ),
                       ),
@@ -596,10 +726,13 @@ class _CommandCard extends StatelessWidget {
                     child: GestureDetector(
                       onTap: () =>
                           _showCommandSheet(context, existing: command),
-                      child: const Padding(
-                        padding: EdgeInsets.all(6),
-                        child: Icon(Icons.edit_outlined,
-                            color: Color(0x730A0E1A), size: 20),
+                      child: Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: Icon(
+                          Icons.edit_outlined,
+                          color: Colors.white.withOpacity(0.5),
+                          size: 20,
+                        ),
                       ),
                     ),
                   ),
@@ -610,8 +743,11 @@ class _CommandCard extends StatelessWidget {
                       onTap: () => _confirmDelete(context, command),
                       child: const Padding(
                         padding: EdgeInsets.all(6),
-                        child: Icon(Icons.delete_outline_rounded,
-                            color: Colors.redAccent, size: 20),
+                        child: Icon(
+                          Icons.delete_outline_rounded,
+                          color: Colors.redAccent,
+                          size: 20,
+                        ),
                       ),
                     ),
                   ),
@@ -630,23 +766,34 @@ class _CommandCard extends StatelessWidget {
       builder: (ctx) => Semantics(
         label: 'Delete command confirmation dialog',
         child: AlertDialog(
+          backgroundColor: const Color(0xFF0A0E1A),
           shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20)),
-          title: const Text('Delete Command?',
-              style: TextStyle(fontWeight: FontWeight.w800)),
-          content: Text('Remove the command: "${command.phrase}"?\n\nThis item will be stored in the Recycle Bin and permanently deleted after 30 days.'),
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: Colors.white.withOpacity(0.1)),
+          ),
+          title: const Text(
+            'Delete Command?',
+            style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
+          ),
+          content: Text(
+            'Remove the command: "${command.phrase}"?\n\nThis item will be stored in the Recycle Bin and permanently deleted after 30 days.',
+            style: TextStyle(color: Colors.white.withOpacity(0.8)),
+          ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel',
-                  style: TextStyle(color: Color(0x8A0A0E1A))),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white.withOpacity(0.5)),
+              ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.redAccent,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(10)),
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
               onPressed: () async {
                 final curUid = FirebaseAuth.instance.currentUser?.uid;
@@ -656,18 +803,18 @@ class _CommandCard extends StatelessWidget {
                       .doc(curUid)
                       .collection('deleted_library')
                       .add({
-                    'fileName': 'Command: ${command.phrase}',
-                    'phrase': command.phrase,
-                    'action': command.action.name,
-                    'parameter': command.parameter,
-                    'isEnabled': command.isEnabled,
-                    'fileType': 'command',
-                    'sourceCollection': 'custom_commands',
-                    'commandId': command.id,
-                    'deletedAt': FieldValue.serverTimestamp(),
-                    'originalTimestamp': FieldValue.serverTimestamp(),
-                    'userId': curUid,
-                  });
+                        'fileName': 'Command: ${command.phrase}',
+                        'phrase': command.phrase,
+                        'action': command.action.name,
+                        'parameter': command.parameter,
+                        'isEnabled': command.isEnabled,
+                        'fileType': 'command',
+                        'sourceCollection': 'custom_commands',
+                        'commandId': command.id,
+                        'deletedAt': FieldValue.serverTimestamp(),
+                        'originalTimestamp': FieldValue.serverTimestamp(),
+                        'userId': curUid,
+                      });
                 }
                 if (ctx.mounted) {
                   ctx.read<CustomCommandsProvider>().deleteCommand(command.id);
@@ -690,7 +837,7 @@ void _showCommandSheet(BuildContext context, {CustomCommand? existing}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: Colors.white,
+    backgroundColor: const Color(0xFF0A0E1A),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
@@ -714,12 +861,13 @@ class _CommandSheetState extends State<_CommandSheet> {
   @override
   void initState() {
     super.initState();
-    _phraseController =
-        TextEditingController(text: widget.existing?.phrase ?? '');
-    _paramController =
-        TextEditingController(text: widget.existing?.parameter ?? '');
-    _selectedAction =
-        widget.existing?.action ?? CommandActionType.navigateHome;
+    _phraseController = TextEditingController(
+      text: widget.existing?.phrase ?? '',
+    );
+    _paramController = TextEditingController(
+      text: widget.existing?.parameter ?? '',
+    );
+    _selectedAction = widget.existing?.action ?? CommandActionType.navigateHome;
   }
 
   @override
@@ -748,18 +896,22 @@ class _CommandSheetState extends State<_CommandSheet> {
         : null;
 
     if (widget.existing != null) {
-      provider.updateCommand(widget.existing!.copyWith(
-        phrase: phrase,
-        action: _selectedAction,
-        parameter: param,
-      ));
+      provider.updateCommand(
+        widget.existing!.copyWith(
+          phrase: phrase,
+          action: _selectedAction,
+          parameter: param,
+        ),
+      );
     } else {
-      provider.addCommand(CustomCommand(
-        id: const Uuid().v4(),
-        phrase: phrase,
-        action: _selectedAction,
-        parameter: param,
-      ));
+      provider.addCommand(
+        CustomCommand(
+          id: const Uuid().v4(),
+          phrase: phrase,
+          action: _selectedAction,
+          parameter: param,
+        ),
+      );
     }
 
     Navigator.pop(context);
@@ -786,7 +938,7 @@ class _CommandSheetState extends State<_CommandSheet> {
                 width: 40,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Color(0x1F0A0E1A),
+                  color: Colors.white.withOpacity(0.2),
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
@@ -797,6 +949,7 @@ class _CommandSheetState extends State<_CommandSheet> {
               style: const TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
+                color: Colors.white,
                 letterSpacing: -0.5,
               ),
             ),
@@ -806,14 +959,30 @@ class _CommandSheetState extends State<_CommandSheet> {
               textField: true,
               child: TextField(
                 controller: _phraseController,
+                style: const TextStyle(color: Colors.white),
                 decoration: InputDecoration(
                   labelText: 'Phrase to say',
+                  labelStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
                   hintText: 'e.g. open my notes',
-                  prefixIcon: const Icon(Icons.mic_none_rounded),
+                  hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                  prefixIcon: Icon(
+                    Icons.mic_none_rounded,
+                    color: Colors.white.withOpacity(0.5),
+                  ),
                   border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(
+                      color: Colors.white.withOpacity(0.1),
+                    ),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(14),
+                    borderSide: BorderSide(
+                      color: Colors.white.withOpacity(0.1),
+                    ),
+                  ),
                   filled: true,
-                  fillColor: Colors.grey[50],
+                  fillColor: Colors.white.withOpacity(0.04),
                 ),
                 textCapitalization: TextCapitalization.none,
               ),
@@ -824,7 +993,7 @@ class _CommandSheetState extends State<_CommandSheet> {
               style: TextStyle(
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
-                color: Color(0x610A0E1A),
+                color: Colors.white54,
                 letterSpacing: 2,
               ),
             ),
@@ -833,9 +1002,9 @@ class _CommandSheetState extends State<_CommandSheet> {
               label: 'Select action for command',
               child: Container(
                 decoration: BoxDecoration(
-                  border: Border.all(color: Color(0x1F0A0E1A)),
+                  border: Border.all(color: Colors.white.withOpacity(0.08)),
                   borderRadius: BorderRadius.circular(14),
-                  color: Colors.grey[50],
+                  color: Colors.white.withOpacity(0.04),
                 ),
                 child: Column(
                   children: CommandActionType.values.map((action) {
@@ -845,11 +1014,12 @@ class _CommandSheetState extends State<_CommandSheet> {
                       selected: isSelected,
                       button: true,
                       child: GestureDetector(
-                        onTap: () =>
-                            setState(() => _selectedAction = action),
+                        onTap: () => setState(() => _selectedAction = action),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 12),
+                            horizontal: 16,
+                            vertical: 12,
+                          ),
                           decoration: BoxDecoration(
                             color: isSelected
                                 ? const Color(0xFF4B9EFF).withOpacity(0.15)
@@ -863,7 +1033,7 @@ class _CommandSheetState extends State<_CommandSheet> {
                                 size: 18,
                                 color: isSelected
                                     ? const Color(0xFF4B9EFF)
-                                    : Color(0x730A0E1A),
+                                    : Colors.white.withOpacity(0.5),
                               ),
                               const SizedBox(width: 12),
                               Expanded(
@@ -874,15 +1044,18 @@ class _CommandSheetState extends State<_CommandSheet> {
                                         ? FontWeight.w700
                                         : FontWeight.w500,
                                     color: isSelected
-                                        ? Color(0xDD0A0E1A)
-                                        : Color(0x8A0A0E1A),
+                                        ? Colors.white
+                                        : Colors.white.withOpacity(0.6),
                                     fontSize: 14,
                                   ),
                                 ),
                               ),
                               if (isSelected)
-                                const Icon(Icons.check_circle_rounded,
-                                    color: Color(0xFF4B9EFF), size: 18),
+                                const Icon(
+                                  Icons.check_circle_rounded,
+                                  color: Color(0xFF4B9EFF),
+                                  size: 18,
+                                ),
                             ],
                           ),
                         ),
@@ -899,17 +1072,32 @@ class _CommandSheetState extends State<_CommandSheet> {
                 textField: true,
                 child: TextField(
                   controller: _paramController,
+                  style: const TextStyle(color: Colors.white),
                   decoration: InputDecoration(
                     labelText: _selectedAction.parameterHint,
-                    hintText:
-                        _selectedAction == CommandActionType.searchNotes
-                            ? 'e.g. chemistry'
-                            : 'e.g. Biology Chapter 3',
-                    prefixIcon: const Icon(Icons.edit_note_rounded),
+                    labelStyle: TextStyle(color: Colors.white.withOpacity(0.5)),
+                    hintText: _selectedAction == CommandActionType.searchNotes
+                        ? 'e.g. chemistry'
+                        : 'e.g. Biology Chapter 3',
+                    hintStyle: TextStyle(color: Colors.white.withOpacity(0.3)),
+                    prefixIcon: Icon(
+                      Icons.edit_note_rounded,
+                      color: Colors.white.withOpacity(0.5),
+                    ),
                     border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: Colors.white.withOpacity(0.1),
+                      ),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(
+                        color: Colors.white.withOpacity(0.1),
+                      ),
+                    ),
                     filled: true,
-                    fillColor: Colors.grey[50],
+                    fillColor: Colors.white.withOpacity(0.04),
                   ),
                 ),
               ),
@@ -922,18 +1110,21 @@ class _CommandSheetState extends State<_CommandSheet> {
                 width: double.infinity,
                 child: ElevatedButton(
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF0A0E1A),
+                    backgroundColor: const Color(0xFF4B9EFF),
                     foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14)),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
                     elevation: 0,
                   ),
                   onPressed: _save,
                   child: Text(
                     isEditing ? 'Save Changes' : 'Add Command',
                     style: const TextStyle(
-                        fontWeight: FontWeight.w800, fontSize: 16),
+                      fontWeight: FontWeight.w800,
+                      fontSize: 16,
+                    ),
                   ),
                 ),
               ),

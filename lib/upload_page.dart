@@ -826,26 +826,26 @@ class _UploadPageState extends State<UploadPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: const Color(0xFF0A0E1A),
       appBar: AppBar(
         title: const Text(
           'Upload Files',
-          style: TextStyle(color: Color(0xFF0A0E1A)),
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF0A0E1A)),
+        iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: Center(
         child: _isUploading
             ? Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const CircularProgressIndicator(color: Color(0xFF0A0E1A)),
+                  const CircularProgressIndicator(color: Color(0xFF4B9EFF)),
                   const SizedBox(height: 16),
                   Text(
                     _statusMessage,
-                    style: const TextStyle(color: Color(0x8A0A0E1A)),
+                    style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontWeight: FontWeight.w600),
                   ),
                 ],
               )
@@ -860,15 +860,16 @@ class _UploadPageState extends State<UploadPage> {
                     const Icon(
                       Icons.drive_folder_upload,
                       size: 72,
-                      color: Color(0x610A0E1A),
+                      color: Colors.white12,
                     ),
                     const SizedBox(height: 18),
                     const Text(
                       'Upload a file or scan a\nphysical document with your camera',
                       style: TextStyle(
-                        color: Color(0x8A0A0E1A),
+                        color: Colors.white70,
                         fontSize: 15,
                         height: 1.5,
+                        fontWeight: FontWeight.w500,
                       ),
                       textAlign: TextAlign.center,
                     ),
@@ -888,25 +889,25 @@ class _UploadPageState extends State<UploadPage> {
                           margin: const EdgeInsets.only(top: 20),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: Color(0xFF0A0E1A).withOpacity(0.06),
+                            color: Colors.white.withOpacity(0.05),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: Color(0xFF0A0E1A).withOpacity(0.1),
+                              color: Colors.white.withOpacity(0.1),
                             ),
                           ),
-                          child: const Row(
+                          child: Row(
                             children: [
-                              Icon(
+                              const Icon(
                                 Icons.info_outline,
-                                color: Color(0x8A0A0E1A),
+                                color: Color(0xFF4B9EFF),
                                 size: 18,
                               ),
-                              SizedBox(width: 10),
+                              const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
                                   "You're browsing as a guest. Files will only be available until you close the app.",
                                   style: TextStyle(
-                                    color: Color(0x8A0A0E1A),
+                                    color: Colors.white.withOpacity(0.6),
                                     fontSize: 12,
                                     height: 1.5,
                                   ),
@@ -932,18 +933,19 @@ class _UploadPageState extends State<UploadPage> {
                             'CHOOSE FILE',
                             style: TextStyle(
                               fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.2,
                             ),
                           ),
                           style: ElevatedButton.styleFrom(
-                            backgroundColor: Color(0xFF0A0E1A),
-                            foregroundColor: const Color(0xFFF0F4FF),
-                            padding: const EdgeInsets.symmetric(vertical: 17),
+                            backgroundColor: const Color(0xFF4B9EFF),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 18),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(18),
                             ),
-                            elevation: 3,
+                            elevation: 8,
+                            shadowColor: const Color(0xFF4B9EFF).withOpacity(0.4),
                           ),
                         ),
                       ),
@@ -956,7 +958,7 @@ class _UploadPageState extends State<UploadPage> {
                       children: [
                         Expanded(
                           child: Divider(
-                            color: Color(0xFF0A0E1A).withOpacity(0.15),
+                            color: Colors.white.withOpacity(0.1),
                             thickness: 1,
                           ),
                         ),
@@ -965,16 +967,16 @@ class _UploadPageState extends State<UploadPage> {
                           child: Text(
                             'OR',
                             style: TextStyle(
-                              color: Color(0xFF0A0E1A).withOpacity(0.35),
-                              fontWeight: FontWeight.w700,
+                              color: Colors.white.withOpacity(0.3),
+                              fontWeight: FontWeight.w900,
                               fontSize: 12,
-                              letterSpacing: 1.5,
+                              letterSpacing: 2.0,
                             ),
                           ),
                         ),
                         Expanded(
                           child: Divider(
-                            color: Color(0xFF0A0E1A).withOpacity(0.15),
+                            color: Colors.white.withOpacity(0.1),
                             thickness: 1,
                           ),
                         ),
@@ -999,17 +1001,17 @@ class _UploadPageState extends State<UploadPage> {
                             'SCAN DOCUMENT',
                             style: TextStyle(
                               fontSize: 15,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 0.8,
+                              fontWeight: FontWeight.w900,
+                              letterSpacing: 1.2,
                             ),
                           ),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Color(0xFF0A0E1A),
-                            side: const BorderSide(
-                              color: Color(0xFF0A0E1A),
+                            foregroundColor: Colors.white,
+                            side: BorderSide(
+                              color: Colors.white.withOpacity(0.15),
                               width: 1.5,
                             ),
-                            padding: const EdgeInsets.symmetric(vertical: 17),
+                            padding: const EdgeInsets.symmetric(vertical: 18),
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(18),
                             ),
@@ -1024,8 +1026,9 @@ class _UploadPageState extends State<UploadPage> {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Color(0xFF0A0E1A).withOpacity(0.05),
+                        color: Colors.white.withOpacity(0.04),
                         borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: Colors.white.withOpacity(0.08)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1058,15 +1061,16 @@ class _UploadPageState extends State<UploadPage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 15, color: Color(0x610A0E1A)),
+        Icon(icon, size: 15, color: const Color(0xFF4B9EFF).withOpacity(0.6)),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             text,
-            style: const TextStyle(
-              color: Color(0x730A0E1A),
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.5),
               fontSize: 12,
               height: 1.4,
+              fontWeight: FontWeight.w500,
             ),
           ),
         ),

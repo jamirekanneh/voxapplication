@@ -601,7 +601,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
     final unsupported = langCode == null;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: const Color(0xFF0A0E1A),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -613,7 +613,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w900,
-                color: Color(0xDD0A0E1A),
+                color: Colors.white,
                 letterSpacing: 5,
               ),
             ),
@@ -621,7 +621,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: Color(0xFF0A0E1A),
+                color: const Color(0xFF4B9EFF),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -646,7 +646,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: Color(0xFF0A0E1A).withOpacity(0.08),
+                  color: Colors.white.withOpacity(0.08),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -654,7 +654,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   style: const TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: Color(0xDD0A0E1A),
+                    color: Colors.white70,
                   ),
                 ),
               ),
@@ -684,16 +684,20 @@ class _DictionaryPageState extends State<DictionaryPage> {
                           ? 'Not available in Chinese'
                           : 'Search any word…',
                       counterText: '',
-                      prefixIcon: const Icon(Icons.search, size: 20),
+                      prefixIcon: const Icon(Icons.search, size: 20, color: Colors.white54),
                       filled: true,
-                      fillColor: _isListening ? Colors.grey[200] : Colors.white,
+                      fillColor: _isListening ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.06),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 14,
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide.none,
+                        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(18),
+                        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
                       ),
                     ),
                     enabled: !unsupported,
@@ -711,15 +715,15 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       height: 48,
                       decoration: BoxDecoration(
                         color: _isListening
-                            ? Colors.red
-                            : Color(0xFF0A0E1A).withOpacity(0.08),
+                            ? Colors.red.withOpacity(0.8)
+                            : Colors.white.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Icon(
                         _isListening
                             ? Icons.stop_rounded
                             : Icons.mic_none_rounded,
-                        color: _isListening ? Colors.white : Color(0xDD0A0E1A),
+                        color: _isListening ? Colors.white : Colors.white70,
                         size: 22,
                       ),
                     ),
@@ -735,8 +739,11 @@ class _DictionaryPageState extends State<DictionaryPage> {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: unsupported ? Colors.grey[400] : Color(0xFF0A0E1A),
+                      color: unsupported ? Colors.grey[800] : const Color(0xFF4B9EFF),
                       borderRadius: BorderRadius.circular(14),
+                      boxShadow: unsupported ? [] : [
+                        BoxShadow(color: const Color(0xFF4B9EFF).withOpacity(0.3), blurRadius: 8)
+                      ],
                     ),
                     child: _loading
                         ? const Padding(

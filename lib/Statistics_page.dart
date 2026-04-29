@@ -21,9 +21,10 @@ class StatisticsPage extends StatefulWidget {
 class _StatisticsPageState extends State<StatisticsPage> {
   // ── Colour constants ─────────────────────────────────────
   static const Color _gold = Color(0xFF4B9EFF);
-  static const Color _cream = Color(0xFFF0F4FF);
-  static const Color _card = Color(0xFFE8E8E8);
-  static const Color _dark = Color(0xFF1A1A1A);
+  static const Color _cream = Color(0xFF0A0E1A);
+  static const Color _card = Color(0xFF141A29);
+  static const Color _accent = Color(0xFF4B9EFF);
+  static const Color _dark = Colors.white;
 
   static const List<Color> _barColors = [
     Color(0xFF4B9EFF),
@@ -65,8 +66,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
       } else if (savedEmail.isNotEmpty) {
         final query = await FirebaseFirestore.instance
             .collection('users')
-            .where('email',
-                isEqualTo: savedEmail)
+            .where('email', isEqualTo: savedEmail)
             .limit(1)
             .get();
         if (query.docs.isNotEmpty) {
@@ -98,25 +98,36 @@ class _StatisticsPageState extends State<StatisticsPage> {
           .collection('analytics')
           .doc('daily_stats')
           .get();
-      
+
       if (doc.exists) {
-        _firebaseData = doc.data();
+        setState(() {
+          _firebaseData = doc.data();
+        });
       } else {
-        // Force a sync if there's no data
-        await AnalyticsService.instance.syncToFirebase();
-        final doc2 = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(_uid)
-            .collection('analytics')
-            .doc('daily_stats')
-            .get();
-        if (doc2.exists) {
-          _firebaseData = doc2.data();
-        }
+        // Fallback to local service data if cloud doc is empty
+        _loadLocalData();
       }
     } catch (e) {
       debugPrint('Error fetching firebase analytics: $e');
+      _loadLocalData();
     }
+  }
+
+  void _loadLocalData() {
+    final service = AnalyticsService.instance;
+    setState(() {
+      _firebaseData = {
+        'totalOpens': service.opens.length,
+        'todayTimeMs': service.todayTotalMs,
+        'totalTimeMs': service.dailyMs.values.fold(0, (a, b) => a + (b)),
+        'totalVoiceCmds': service.totalVoiceCmds,
+        'totalFileOps': service.totalFileOps,
+        'featureUsage': service.featureMs,
+        'uniqueWords': service.uniqueWordsLookedUp,
+        'activeDays': service.dailyMs.length,
+        'schemaVersion': 1,
+      };
+    });
   }
 
   Future<void> _syncData() async {
@@ -160,6 +171,93 @@ class _StatisticsPageState extends State<StatisticsPage> {
     return '${s}s';
   }
 
+  List<Map<String, dynamic>> _generateDeveloperInsights() {
+    final service = AnalyticsService.instance;
+    final List<Map<String, dynamic>> insights = [];
+
+    // 1. Feature Discovery Insight
+    final featureUsage = service.featureMs;
+    if (featureUsage.isNotEmpty) {
+      final sorted = featureUsage.entries.toList()
+        ..sort((a, b) => a.value.compareTo(b.value));
+      final leastUsed = sorted.first;
+      if (leastUsed.value < 60000) {
+        // Less than 1 minute
+        insights.add({
+          'icon': Icons.visibility_off_rounded,
+          'title': 'Low Discovery: ${leastUsed.key}',
+          'desc':
+              'This feature has < 1min lifetime usage. Consider improving its UI discoverability or adding an onboarding tooltip.',
+          'color': Colors.orangeAccent,
+        });
+      }
+    }
+
+    // 2. Voice UI Health
+    final totalCmds = service.totalVoiceCmds;
+    final unmatched = service.unmatchedCommands.values.fold(0, (a, b) => a + b);
+    if (totalCmds > 0) {
+      final failRate = (unmatched / (totalCmds + unmatched)) * 100;
+      if (failRate > 20) {
+        insights.add({
+          'icon': Icons.mic_external_off_rounded,
+          'title': 'Voice Intent Gap (${failRate.round()}%)',
+          'desc':
+              'High unrecognized command rate detected. Recommend expanding NLP dataset or adding custom aliases for common failures.',
+          'color': Colors.redAccent,
+        });
+      }
+    }
+
+    // 3. API Reliability
+    final apiErrors = service.apiErrors.values.fold(0, (a, b) => a + b);
+    if (apiErrors > 0) {
+      insights.add({
+        'icon': Icons.cloud_off_rounded,
+        'title': 'API Instability Detected',
+        'desc':
+            '$apiErrors total Groq/Firebase failures recorded. Check network timeout settings or implement exponential backoff retry.',
+        'color': Colors.redAccent,
+      });
+    }
+
+    // 4. Conversion Opportunity
+    if (_isAnonymous) {
+      insights.add({
+        'icon': Icons.account_circle_outlined,
+        'title': 'Guest Conversion Risk',
+        'desc':
+            'Active user is in Guest Mode. Local-only data increases churn risk. Recommend non-intrusive Magic Link prompts.',
+        'color': _accent,
+      });
+    }
+
+    // 5. Performance / Scaling
+    final fileOps = service.totalFileOps;
+    if (fileOps > 50) {
+      insights.add({
+        'icon': Icons.storage_rounded,
+        'title': 'Storage Scaling Needs',
+        'desc':
+            'High frequency of file ops ($fileOps). Migration to a local SQLite cache for metadata is recommended for speed.',
+        'color': Colors.blueAccent,
+      });
+    }
+
+    // Fallback if no real data insights
+    if (insights.isEmpty) {
+      insights.add({
+        'icon': Icons.insights_rounded,
+        'title': 'Awaiting Data Points',
+        'desc':
+            'Continue using the app to generate developer-centric performance and engagement insights.',
+        'color': Colors.grey,
+      });
+    }
+
+    return insights;
+  }
+
   // ─────────────────────────────────────────────────────────
   //  BUILD
   // ─────────────────────────────────────────────────────────
@@ -175,51 +273,59 @@ class _StatisticsPageState extends State<StatisticsPage> {
             const Expanded(
               child: Center(child: CircularProgressIndicator(color: _gold)),
             )
-          else if (_isAnonymous)
-            Expanded(child: _buildGuestState())
           else
-            Expanded(child: _buildBody()),
+            Expanded(
+              child: SingleChildScrollView(
+                child: Column(
+                  children: [
+                    if (_isAnonymous) _buildGuestWarning(),
+                    _buildBody(),
+                  ],
+                ),
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildGuestState() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 32),
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildGuestWarning() {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _gold.withOpacity(0.06),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _gold.withOpacity(0.2)),
+      ),
+      child: Row(
         children: [
-          Icon(Icons.privacy_tip_outlined, color: Colors.grey[400], size: 60),
-          const SizedBox(height: 16),
-          const Text(
-            'Guest Usage',
-            style: TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w900,
-              color: _dark,
+          const Icon(Icons.privacy_tip_outlined, color: _gold, size: 20),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Guest Mode: No Cloud Sync',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'Stats are saved locally only. Create an account to backup your progress to the cloud.',
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Colors.white.withOpacity(0.5),
+                    height: 1.3,
+                  ),
+                ),
+              ],
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Analytics and statistics logging are fully disabled for guest accounts to ensure privacy.',
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 14,
-              color: Colors.grey[600],
-              height: 1.5,
-            ),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton(
-            onPressed: () => Navigator.pushReplacementNamed(context, '/login'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: _dark,
-              foregroundColor: _gold,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-            child: const Text('Log In / Sign Up', style: TextStyle(fontWeight: FontWeight.w800)),
           ),
         ],
       ),
@@ -250,7 +356,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
               width: 38,
               height: 38,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.25),
+                color: Colors.white.withOpacity(0.25),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: const Icon(
@@ -296,7 +402,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                     height: 38,
                     margin: const EdgeInsets.only(right: 8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.2),
+                      color: Colors.white.withOpacity(0.2),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: _syncing
@@ -305,7 +411,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
                             height: 16,
                             child: CircularProgressIndicator(
                               strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                Colors.white,
+                              ),
                             ),
                           )
                         : const Icon(
@@ -319,7 +427,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.2),
+                    color: Colors.white.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: const Icon(
@@ -339,37 +447,37 @@ class _StatisticsPageState extends State<StatisticsPage> {
   //  BODY
   // ─────────────────────────────────────────────────────────
   Widget _buildBody() {
-    if (_firebaseData == null) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.query_stats_rounded, color: Colors.grey[400], size: 60),
-            const SizedBox(height: 16),
-            Text('No cloud analytics found for this user', style: TextStyle(color: Colors.grey[600])),
-            const SizedBox(height: 16),
-            ElevatedButton(
-              onPressed: _syncData,
-              style: ElevatedButton.styleFrom(backgroundColor: _gold, foregroundColor: _dark),
-              child: const Text('Force Cloud Sync', style: TextStyle(fontWeight: FontWeight.w800)),
-            ),
-          ],
-        ),
-      );
-    }
+    final service = AnalyticsService.instance;
+    // If no data, use local data as default
+    final data =
+        _firebaseData ??
+        {
+          'totalOpens': service.opens.length,
+          'todayTimeMs': service.todayTotalMs,
+          'totalTimeMs': service.dailyMs.values.fold(0, (a, b) => a + (b)),
+          'totalVoiceCmds': service.totalVoiceCmds,
+          'totalFileOps': service.totalFileOps,
+          'featureUsage': service.featureMs,
+          'schemaVersion': 1,
+          'uniqueWords': service.uniqueWordsLookedUp,
+          'activeDays': service.dailyMs.length,
+        };
 
-    final data = _firebaseData!;
     final totalOpens = data['totalOpens'] as int? ?? 0;
     final todayTimeMs = data['todayTimeMs'] as int? ?? 0;
     final totalTimeMs = data['totalTimeMs'] as int? ?? 0;
     final uniqueCmds = data['uniqueVoiceCmds'] as int? ?? 0;
     final activeDays = data['activeDays'] as int? ?? 0;
-    
-    return SingleChildScrollView(
+
+    return Padding(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ─── 0. GOALS & STREAKS ───────────────────────────
+          _buildGoalAndStreak(service),
+          const SizedBox(height: 32),
+
           // ─── 1. FIREBASE ACTIVITY ─────────────────────────────
           _sectionLabel('User Activity Metrics'),
           const SizedBox(height: 12),
@@ -422,54 +530,146 @@ class _StatisticsPageState extends State<StatisticsPage> {
           // ─── 2. DEV ENGAGEMENT BREAKDOWN ─────────────────────────
           _sectionLabel('Cloud Activity Triggers'),
           const SizedBox(height: 12),
-          _featureAdoptionCard(data['featureUsage'] as Map<String, dynamic>? ?? {}),
+          _featureAdoptionCard(
+            data['featureUsage'] as Map<String, dynamic>? ?? {},
+          ),
 
           const SizedBox(height: 32),
 
-          // ─── 3. FIRESTORE DATABASE METRICS ─────────────────────
-          _sectionLabel('Firestore Event Logging'),
+          // ─── 3. DEVELOPER UPGRADE INSIGHTS ─────────────────────
+          _sectionLabel('Developer Intelligence Dashboard'),
           const SizedBox(height: 12),
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
               color: _card,
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Color(0x1F0A0E1A)),
+              border: Border.all(color: _accent.withOpacity(0.1)),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.2),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
             ),
             child: Column(
               children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Schema Version', style: TextStyle(color: _dark, fontWeight: FontWeight.w700)),
-                    Text('v${data['schemaVersion'] ?? 1}', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const Divider(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Today\'s Exec Time', style: TextStyle(color: _dark, fontWeight: FontWeight.w700)),
-                    Text(_fmt(todayTimeMs), style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const Divider(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Dictionary Entries', style: TextStyle(color: _dark, fontWeight: FontWeight.w700)),
-                    Text('${data['uniqueWords'] ?? 0}', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
-                  ],
-                ),
-                const Divider(),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('30-Day Retention Check', style: TextStyle(color: _dark, fontWeight: FontWeight.w700)),
-                    Text('$activeDays Active Days', style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
-                  ],
-                ),
+                ..._generateDeveloperInsights().asMap().entries.map((entry) {
+                  final insight = entry.value;
+                  final isLast =
+                      entry.key == _generateDeveloperInsights().length - 1;
+                  return Column(
+                    children: [
+                      _insightRow(
+                        insight['icon'] as IconData,
+                        insight['title'] as String,
+                        insight['desc'] as String,
+                        insight['color'] as Color,
+                      ),
+                      if (!isLast)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 12),
+                          child: Divider(color: Colors.white10, height: 1),
+                        ),
+                    ],
+                  );
+                }),
               ],
+            ),
+          ),
+          const SizedBox(height: 20),
+          _buildDevNote(),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDevNote() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.03),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: const Row(
+        children: [
+          Icon(Icons.terminal_rounded, color: Colors.grey, size: 16),
+          SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              'These insights are generated by analyzing local and cloud telemetry to guide technical debt reduction and feature roadmapping.',
+              style: TextStyle(
+                color: Colors.grey,
+                fontSize: 10,
+                fontStyle: FontStyle.italic,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _insightRow(
+    IconData icon,
+    String title,
+    String description,
+    Color color,
+  ) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: color, size: 24),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(
+                  color: color,
+                  fontWeight: FontWeight.w800,
+                  fontSize: 14,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                description,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  height: 1.4,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _statRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: TextStyle(
+              color: Colors.white.withOpacity(0.7),
+              fontWeight: FontWeight.w600,
+              fontSize: 13,
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w800,
+              fontSize: 13,
             ),
           ),
         ],
@@ -506,7 +706,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Color(0xFF0A0E1A).withValues(alpha: 0.05),
+            color: Color(0xFF0A0E1A).withOpacity(0.05),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -519,7 +719,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
             width: 34,
             height: 34,
             decoration: BoxDecoration(
-              color: _gold.withValues(alpha: 0.18),
+              color: _gold.withOpacity(0.18),
               borderRadius: BorderRadius.circular(10),
             ),
             child: Icon(icon, color: _gold, size: 18),
@@ -575,9 +775,12 @@ class _StatisticsPageState extends State<StatisticsPage> {
 
     final list = featureUsageMap.entries.toList()
       ..sort((a, b) => (b.value as num).compareTo(a.value as num));
-    
+
     final features = list.take(5).toList();
-    final totalTime = features.fold(0.0, (sum, entry) => sum + (entry.value as num).toDouble());
+    final totalTime = features.fold(
+      0.0,
+      (sum, entry) => sum + (entry.value as num).toDouble(),
+    );
 
     return Container(
       padding: const EdgeInsets.all(16),
@@ -586,7 +789,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Color(0xFF0A0E1A).withValues(alpha: 0.05),
+            color: Color(0xFF0A0E1A).withOpacity(0.05),
             blurRadius: 6,
             offset: const Offset(0, 2),
           ),
@@ -614,7 +817,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
             final rank = e.key;
             final name = e.value.key;
             final timeMs = (e.value.value as num).toInt();
-            final percentage = totalTime > 0 ? (timeMs / totalTime * 100).round() : 0;
+            final percentage = totalTime > 0
+                ? (timeMs / totalTime * 100).round()
+                : 0;
 
             final color = _barColors[rank.clamp(0, _barColors.length - 1)];
 
@@ -626,7 +831,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                     width: 24,
                     height: 24,
                     decoration: BoxDecoration(
-                      color: color.withValues(alpha: 0.1),
+                      color: color.withOpacity(0.1),
                       borderRadius: BorderRadius.circular(6),
                     ),
                     child: Center(
@@ -671,5 +876,187 @@ class _StatisticsPageState extends State<StatisticsPage> {
       ),
     );
   }
-}
 
+  Widget _buildGoalAndStreak(AnalyticsService service) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [_accent.withOpacity(0.15), _accent.withOpacity(0.05)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: _accent.withOpacity(0.2)),
+      ),
+      child: Row(
+        children: [
+          // Goal Progress Circle
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              SizedBox(
+                width: 80,
+                height: 80,
+                child: CircularProgressIndicator(
+                  value: service.todayGoalProgress,
+                  strokeWidth: 8,
+                  backgroundColor: Colors.white.withOpacity(0.05),
+                  valueColor: const AlwaysStoppedAnimation<Color>(_gold),
+                ),
+              ),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${(service.todayGoalProgress * 100).toInt()}%',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w900,
+                      fontSize: 16,
+                    ),
+                  ),
+                  const Text(
+                    'GOAL',
+                    style: TextStyle(
+                      color: Colors.white54,
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          const SizedBox(width: 24),
+          // Streak and Info
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(
+                      Icons.local_fire_department_rounded,
+                      color: Colors.orangeAccent,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 6),
+                    Text(
+                      '${service.currentStreak} Day Streak',
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                        fontSize: 18,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Goal: ${service.dailyGoalMinutes} mins / day',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                ),
+                const SizedBox(height: 12),
+                GestureDetector(
+                  onTap: () => _showGoalEditDialog(service),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 6,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: const Text(
+                      'Edit Daily Goal',
+                      style: TextStyle(
+                        color: _gold,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showGoalEditDialog(AnalyticsService service) {
+    int newGoal = service.dailyGoalMinutes;
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _card,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        title: const Text(
+          'Daily Reading Goal',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              'Set your daily target in minutes to stay consistent.',
+              style: TextStyle(color: Colors.white70, fontSize: 13),
+            ),
+            const SizedBox(height: 20),
+            StatefulBuilder(
+              builder: (ctx, setState) => Column(
+                children: [
+                  Text(
+                    '$newGoal Minutes',
+                    style: const TextStyle(
+                      color: _gold,
+                      fontSize: 24,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                  Slider(
+                    value: newGoal.toDouble(),
+                    min: 5,
+                    max: 120,
+                    divisions: 23,
+                    activeColor: _gold,
+                    onChanged: (v) => setState(() => newGoal = v.toInt()),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Colors.white54),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              service.setDailyGoal(newGoal);
+              Navigator.pop(ctx);
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: _gold,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+            child: const Text(
+              'Save Goal',
+              style: TextStyle(color: _cream, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}

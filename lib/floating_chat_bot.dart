@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:permission_handler/permission_handler.dart';
 import 'ai_service.dart';
+import 'tts_service.dart';
+import 'language_provider.dart';
 
 class FloatingBotWrapper extends StatefulWidget {
   final Widget child;
@@ -37,7 +39,7 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
   void _onPanEnd(DragEndDetails details) {
     final size = MediaQuery.of(context).size;
     final isLeftSide = position.dx + 30 < (size.width / 2); // 30 is half width
-    
+
     setState(() {
       isLeft = isLeftSide;
       final targetX = isLeftSide ? 0.0 : size.width - 60.0;
@@ -49,14 +51,12 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
 
   void _openChat() {
     final ctx = context;
-    if (ctx != null) {
-      showModalBottomSheet(
-        context: ctx,
-        isScrollControlled: true,
-        backgroundColor: Colors.transparent,
-        builder: (context) => const ChatBotBottomSheet(),
-      );
-    }
+    showModalBottomSheet(
+      context: ctx,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) => const ChatBotBottomSheet(),
+    );
   }
 
   @override
@@ -71,34 +71,63 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
             onPanUpdate: _onPanUpdate,
             onPanEnd: _onPanEnd,
             onTap: _openChat,
-                child: Material(
-                  color: Colors.transparent,
-                  child: Container(
-                    width: 60,
-                    height: 60,
-                    clipBehavior: Clip.hardEdge,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF0A0E1A),
-                      shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: const Color(0xFF0A0E1A).withOpacity(0.3),
-                          blurRadius: 12,
-                          offset: const Offset(0, 6),
+            child: Material(
+              color: Colors.transparent,
+              child: Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [Color(0xFF1A2E5E), Color(0xFF0A0E1A)],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFF4B9EFF).withOpacity(0.35),
+                      blurRadius: 16,
+                      spreadRadius: 1,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: const Color(0xFF4B9EFF).withOpacity(0.4),
+                    width: 1.5,
+                  ),
+                ),
+                child: Center(
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      // Glow ring
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF4B9EFF).withOpacity(0.1),
                         ),
-                      ],
-                    ),
-                    child: const Icon(
-                      Icons.help_outline_rounded,
-                      color: Colors.lightBlue,
-                      size: 32,
-                    ),
+                      ),
+                      // Question mark
+                      const Text(
+                        '?',
+                        style: TextStyle(
+                          color: Color(0xFF4B9EFF),
+                          fontSize: 26,
+                          fontWeight: FontWeight.w900,
+                          height: 1,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               ),
             ),
-          ],
-        );
+          ),
+        ),
+      ],
+    );
   }
 }
 
@@ -109,17 +138,32 @@ class ChatBotBottomSheet extends StatefulWidget {
   State<ChatBotBottomSheet> createState() => _ChatBotBottomSheetState();
 }
 
-class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> {
+class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTickerProviderStateMixin {
   final TextEditingController _controller = TextEditingController();
   final stt.SpeechToText _speech = stt.SpeechToText();
+  late AnimationController _pulseController;
   bool _isListening = false;
   final List<Map<String, String>> _messages = [
-    {'role': 'assistant', 'content': 'Hello! I am the Vox Assistant. How can I help you today?'}
+    {
+      'role': 'assistant',
+      'content': 'Hello! I am the Vox Assistant. How can I help you today?',
+    },
   ];
   bool _isLoading = false;
+  bool _voiceOutputEnabled = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1000),
+    )..repeat(reverse: true);
+  }
 
   @override
   void dispose() {
+    _pulseController.dispose();
     _speech.stop();
     _controller.dispose();
     super.dispose();
@@ -135,7 +179,9 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> {
         },
         onError: (error) {
           setState(() => _isListening = false);
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Speech error: ${error.errorMsg}')));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Speech error: ${error.errorMsg}')),
+          );
         },
       );
       if (available) {
@@ -145,13 +191,21 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> {
             setState(() {
               _controller.text = val.recognizedWords;
             });
-            if (val.hasConfidenceRating && val.confidence > 0 && val.finalResult) {
-               _sendMessage(); // Auto-send when final
+            if (val.hasConfidenceRating &&
+                val.confidence > 0 &&
+                val.finalResult) {
+              _sendMessage(); // Auto-send when final
             }
           },
         );
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Speech recognition not available. Check permissions.')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Speech recognition not available. Check permissions.',
+            ),
+          ),
+        );
       }
     } else {
       setState(() => _isListening = false);
@@ -181,11 +235,24 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> {
           _messages.add({'role': 'assistant', 'content': response});
           _isLoading = false;
         });
+        
+        if (_voiceOutputEnabled) {
+          final locale = context.read<LanguageProvider>().currentLocale;
+          // Use a small delay to ensure UI has updated
+          Future.delayed(const Duration(milliseconds: 300), () {
+            if (mounted) {
+              context.read<TtsService>().play('Assistant', response, locale);
+            }
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
         setState(() {
-          _messages.add({'role': 'assistant', 'content': 'Sorry, I encountered an error: $e'});
+          _messages.add({
+            'role': 'assistant',
+            'content': 'Sorry, I encountered an error: $e',
+          });
           _isLoading = false;
         });
       }
@@ -202,10 +269,10 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> {
         height: MediaQuery.of(context).size.height * 0.7,
         padding: const EdgeInsets.all(16),
         decoration: const BoxDecoration(
-          color: Colors.white,
+          color: Color(0xFF0A0E1A),
           borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(20),
-            topRight: Radius.circular(20),
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
           ),
         ),
         child: Column(
@@ -215,15 +282,54 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> {
               children: [
                 const Text(
                   'Vox Assistant',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: Colors.white,
+                  ),
                 ),
-                IconButton(
-                  icon: const Icon(Icons.close),
-                  onPressed: () => Navigator.pop(context),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        _voiceOutputEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
+                        color: _voiceOutputEnabled ? const Color(0xFF4B9EFF) : Colors.white54,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _voiceOutputEnabled = !_voiceOutputEnabled;
+                        });
+                        if (!_voiceOutputEnabled) {
+                          context.read<TtsService>().stop();
+                        }
+                      },
+                      tooltip: 'Toggle Voice Output',
+                    ),
+                    Consumer<TtsService>(
+                      builder: (context, tts, _) {
+                        if (tts.isPlaying && tts.title == 'Assistant') {
+                          return IconButton(
+                            icon: const Icon(Icons.stop_circle_rounded, color: Colors.redAccent),
+                            onPressed: () => tts.stop(),
+                            tooltip: 'Stop Voice Output',
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close, color: Colors.white70),
+                      onPressed: () {
+                        context.read<TtsService>().stop();
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ],
                 ),
               ],
             ),
-            const Divider(),
+            Divider(color: Colors.white.withOpacity(0.1)),
             Expanded(
               child: ListView.builder(
                 itemCount: _messages.length,
@@ -231,59 +337,110 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> {
                   final msg = _messages[index];
                   final isUser = msg['role'] == 'user';
                   return Align(
-                    alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
+                    alignment: isUser
+                        ? Alignment.centerRight
+                        : Alignment.centerLeft,
                     child: Container(
                       margin: const EdgeInsets.symmetric(vertical: 4),
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: isUser ? Colors.blue[100] : Colors.grey[200],
-                        borderRadius: BorderRadius.circular(12),
+                        color: isUser
+                            ? const Color(0xFF4B9EFF).withOpacity(0.1)
+                            : Colors.white.withOpacity(0.04),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: isUser
+                              ? const Color(0xFF4B9EFF).withOpacity(0.3)
+                              : Colors.white.withOpacity(0.08),
+                        ),
                       ),
                       child: Text(
                         msg['content'] ?? '',
-                        style: const TextStyle(fontSize: 16),
+                        style: const TextStyle(
+                          fontSize: 15,
+                          color: Colors.white,
+                          height: 1.4,
+                        ),
                       ),
                     ),
                   );
                 },
               ),
             ),
-            if (_isLoading) 
+            if (_isLoading)
               const Padding(
-                padding: EdgeInsets.all(8.0), 
+                padding: EdgeInsets.all(8.0),
                 child: CircularProgressIndicator(),
               ),
             Row(
               children: [
-                CircleAvatar(
-                  backgroundColor: _isListening ? Colors.red : Colors.grey[200],
-                  child: IconButton(
-                    icon: Icon(
-                      _isListening ? Icons.mic : Icons.mic_none,
-                      color: _isListening ? Colors.white : Colors.black87,
-                    ),
-                    onPressed: _listen,
-                  ),
+                AnimatedBuilder(
+                  animation: _pulseController,
+                  builder: (context, child) {
+                    return Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: _isListening
+                            ? [
+                                BoxShadow(
+                                  color: Colors.redAccent.withOpacity(0.4 * _pulseController.value),
+                                  blurRadius: 12 * _pulseController.value,
+                                  spreadRadius: 8 * _pulseController.value,
+                                )
+                              ]
+                            : [],
+                      ),
+                      child: CircleAvatar(
+                        backgroundColor: _isListening
+                            ? Colors.redAccent
+                            : Colors.white.withOpacity(0.05),
+                        child: IconButton(
+                          icon: Icon(
+                            _isListening ? Icons.mic : Icons.mic_none,
+                            color: _isListening
+                                ? Colors.white
+                                : const Color(0xFF4B9EFF),
+                          ),
+                          onPressed: _listen,
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _controller,
+                    style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
-                      hintText: _isListening ? 'Listening...' : 'Ask something...',
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(20),
+                      hintText: _isListening
+                          ? 'Listening...'
+                          : 'Ask something...',
+                      hintStyle: TextStyle(
+                        color: Colors.white.withOpacity(0.3),
                       ),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                      filled: true,
+                      fillColor: Colors.white.withOpacity(0.05),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(25),
+                        borderSide: BorderSide.none,
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                      ),
                     ),
                     onSubmitted: (_) => _sendMessage(),
                   ),
                 ),
                 const SizedBox(width: 8),
                 CircleAvatar(
-                  backgroundColor: Colors.blueAccent,
+                  backgroundColor: const Color(0xFF4B9EFF),
                   child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white),
+                    icon: const Icon(
+                      Icons.send_rounded,
+                      color: Colors.white,
+                      size: 20,
+                    ),
                     onPressed: _sendMessage,
                   ),
                 ),
@@ -295,4 +452,3 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> {
     );
   }
 }
-

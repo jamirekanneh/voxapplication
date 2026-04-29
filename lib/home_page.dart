@@ -11,6 +11,7 @@ import 'reader_page.dart';
 import 'mini_player_bar.dart';
 import 'temp_library_provider.dart';
 import 'ai_result_page.dart';
+import 'custom_commands_provider.dart';
 
 class VoxHomePage extends StatefulWidget {
   const VoxHomePage({super.key});
@@ -40,6 +41,83 @@ class _VoxHomePageState extends State<VoxHomePage> {
   void initState() {
     super.initState();
     _resolveUser();
+
+    // Wire assistant commands after first frame so context is ready
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _registerAssistantHandler();
+    });
+  }
+
+  void _registerAssistantHandler() {
+    final provider = context.read<CustomCommandsProvider>();
+    provider.onCommand = (command) {
+      if (!mounted) return;
+
+      switch (command.type) {
+        case AssistantCommandType.navigate:
+          if (command.route != null) {
+            Navigator.pushNamed(context, command.route!);
+          }
+          break;
+
+        case AssistantCommandType.search:
+          setState(() {
+            _searchQuery = command.payload!.toLowerCase();
+            _searchController.text = command.payload!;
+          });
+          _showAssistantFeedback('Searching for "${command.payload}"');
+          break;
+
+        case AssistantCommandType.openFile:
+          // Filter library to match and auto-open first result
+          setState(() {
+            _searchQuery = command.payload!.toLowerCase();
+            _searchController.text = command.payload!;
+          });
+          _showAssistantFeedback('Opening "${command.payload}"');
+          break;
+
+        case AssistantCommandType.stopAssistant:
+          provider.setAssistantMode(false);
+          _showAssistantFeedback('Assistant off');
+          break;
+      }
+    };
+  }
+
+  void _showAssistantFeedback(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(Icons.graphic_eq_rounded,
+                color: Color(0xFF4B9EFF), size: 16),
+            const SizedBox(width: 8),
+            Text(message, style: const TextStyle(color: Colors.white)),
+          ],
+        ),
+        backgroundColor: const Color(0xFF141A29),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+        margin: const EdgeInsets.only(bottom: 90, left: 20, right: 20),
+      ),
+    );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    if (args != null && args.containsKey('searchQuery')) {
+      final query = args['searchQuery'] as String;
+      if (query.isNotEmpty) {
+        setState(() {
+          _searchQuery = query.toLowerCase();
+          _searchController.text = query;
+        });
+      }
+    }
   }
 
   @override
@@ -648,24 +726,39 @@ class _VoxHomePageState extends State<VoxHomePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        backgroundColor: const Color(0xFF0A0E1A),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: Colors.white.withOpacity(0.1)),
+        ),
         title: const Row(
           children: [
             Icon(Icons.delete_outline, color: Colors.redAccent),
             SizedBox(width: 8),
-            Text('Delete Selected?'),
+            Text('Delete Selected?', style: TextStyle(color: Colors.white)),
           ],
         ),
-        content: Text('$count file${count == 1 ? '' : 's'} will be moved to the Recycle Bin and permanently deleted after 30 days.'),
+        content: Text(
+          '$count file${count == 1 ? '' : 's'} will be moved to the Recycle Bin and permanently deleted after 30 days.',
+          style: TextStyle(color: Colors.white.withOpacity(0.7)),
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Color(0x8A0A0E1A)))),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.5))),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.redAccent, foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.redAccent,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
             child: Text('Delete $count'),
           ),
         ],
       ),
+
     );
     if (confirmed != true) return;
 
@@ -726,7 +819,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
     final lang = context.watch<LanguageProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: const Color(0xFF0A0E1A), // Vox Dark Navy
       resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Padding(
@@ -790,7 +883,13 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   children: [
                     Row(
                       children: [
-                        const Text("Vox", style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold)),
+                        const Text("Vox",
+                            style: TextStyle(
+                                fontSize: 36,
+                                fontWeight: FontWeight.w900,
+                                color: Colors.white,
+                                letterSpacing: 2)),
+                        const SizedBox(width: 12),
                       ],
                     ),
                     SizedBox(
@@ -804,7 +903,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         decoration: InputDecoration(
                           hintText: lang.t('search_hint'),
                           counterText: '',
-                          prefixIcon: const Icon(Icons.search, size: 18),
+                          prefixIcon: const Icon(Icons.search, size: 18, color: Colors.white54),
                           suffixIcon: GestureDetector(
                             onTap: _listen,
                             child: Icon(
@@ -816,11 +915,76 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             ),
                           ),
                           filled: true,
-                          fillColor: Colors.white.withOpacity(0.8),
+                          fillColor: Colors.white.withOpacity(0.08),
+                          hoverColor: Colors.white.withOpacity(0.12),
                           contentPadding: EdgeInsets.zero,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(20),
                             borderSide: BorderSide.none,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Consumer<CustomCommandsProvider>(
+                      builder: (context, provider, _) => Tooltip(
+                        message: 'Assistant Mode (Voice Activated)',
+                        child: GestureDetector(
+                          onTap: () => provider
+                              .setAssistantMode(!provider.assistantModeEnabled),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: provider.assistantModeEnabled
+                                  ? const Color(0xFF4B9EFF).withOpacity(0.15)
+                                  : Colors.white.withOpacity(0.05),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                  color: provider.assistantModeEnabled
+                                      ? const Color(0xFF4B9EFF)
+                                      : Colors.white.withOpacity(0.1)),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  provider.isListening
+                                      ? Icons.graphic_eq_rounded
+                                      : provider.assistantModeEnabled
+                                          ? Icons.mic_rounded
+                                          : Icons.mic_none_rounded,
+                                  color: provider.assistantModeEnabled
+                                      ? const Color(0xFF4B9EFF)
+                                      : Colors.white54,
+                                  size: 14,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  'Assistant',
+                                  style: TextStyle(
+                                    color: provider.assistantModeEnabled
+                                        ? const Color(0xFF4B9EFF)
+                                        : Colors.white54,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                if (provider.assistantModeEnabled) ...[
+                                  const SizedBox(width: 6),
+                                  Container(
+                                    width: 6,
+                                    height: 6,
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFF4B9EFF),
+                                      shape: BoxShape.circle,
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -831,14 +995,15 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   lang.t('library'),
                   style: const TextStyle(
                     fontSize: 18,
-                    color: Color(0xFF9A9A3E),
-                    fontWeight: FontWeight.bold,
+                    color: Color(0xFF4B9EFF), // Vox Blue instead of yellow
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 1.2,
                   ),
                 ),
                 const SizedBox(height: 10),
                 Text(
                   lang.t('tap_hint'),
-                  style: TextStyle(color: Colors.grey[600], fontSize: 11),
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
                 ),
               ],
 
@@ -846,24 +1011,21 @@ class _VoxHomePageState extends State<VoxHomePage> {
               if (_isAnonymousUser) ...[
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Color(0xFF0A0E1A).withOpacity(0.06),
+                    color: Colors.white.withOpacity(0.05),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Color(0xFF0A0E1A).withOpacity(0.1)),
+                    border: Border.all(color: Colors.white.withOpacity(0.1)),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
-                      Icon(Icons.info_outline, color: Color(0x8A0A0E1A), size: 15),
-                      SizedBox(width: 8),
+                      const Icon(Icons.info_outline, color: Color(0xFF4B9EFF), size: 15),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           'Guest mode — files are temporary. Create an account to save them.',
                           style: TextStyle(
-                            color: Color(0x8A0A0E1A),
+                            color: Colors.white.withOpacity(0.6),
                             fontSize: 11,
                             height: 1.4,
                           ),
@@ -892,17 +1054,17 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         margin: const EdgeInsets.only(right: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                         decoration: BoxDecoration(
-                          color: isSelected ? Color(0xFF0A0E1A) : Colors.white.withOpacity(0.5),
+                          color: isSelected ? const Color(0xFF4B9EFF) : Colors.white.withOpacity(0.05),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: isSelected ? Colors.transparent : Color(0x1F0A0E1A)),
+                          border: Border.all(color: isSelected ? Colors.transparent : Colors.white.withOpacity(0.1)),
                         ),
                         child: Center(
                           child: Text(
                             folder,
                             style: TextStyle(
-                              color: isSelected ? const Color(0xFFF0F4FF) : Color(0xDD0A0E1A),
+                              color: isSelected ? Colors.white : Colors.white.withOpacity(0.6),
                               fontSize: 12,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                              fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
                             ),
                           ),
                         ),
@@ -1088,13 +1250,21 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         if (docs.isEmpty) {
                           _visibleIds = [];
                           return Center(
-                            child: Text(
-                              lang.t('no_files'),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                color: Colors.grey[600],
-                                fontSize: 14,
-                              ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 70, height: 70,
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF4B9EFF).withOpacity(0.06),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(Icons.folder_off_outlined, size: 36, color: Colors.white.withOpacity(0.2)),
+                                ),
+                                const SizedBox(height: 16),
+                                Text(lang.t('no_files'),
+                                    style: TextStyle(color: Colors.white.withOpacity(0.4), fontWeight: FontWeight.w700, fontSize: 15)),
+                              ],
                             ),
                           );
                         }
@@ -1198,13 +1368,14 @@ class _VoxHomePageState extends State<VoxHomePage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          backgroundColor: const Color(0xFFF0F4FF),
+          backgroundColor: const Color(0xFF0A0E1A),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: Colors.white.withOpacity(0.1)),
           ),
           title: const Text(
             'How many questions?',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1222,21 +1393,15 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 min: 5,
                 max: 20,
                 divisions: 15,
-                activeColor: Color(0xFF0A0E1A),
-                inactiveColor: Colors.grey[300],
+                activeColor: const Color(0xFF4B9EFF),
+                inactiveColor: Colors.white.withOpacity(0.1),
                 onChanged: (v) => setDialogState(() => selected = v.round()),
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    '5',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
-                  Text(
-                    '20',
-                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                  ),
+                  Text('5', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12)),
+                  Text('20', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12)),
                 ],
               ),
             ],
@@ -1244,21 +1409,18 @@ class _VoxHomePageState extends State<VoxHomePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Color(0x8A0A0E1A)),
-              ),
+              child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.5))),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, selected),
               style: ElevatedButton.styleFrom(
-                backgroundColor: Color(0xFF0A0E1A),
-                foregroundColor: const Color(0xFFF0F4FF),
+                backgroundColor: const Color(0xFF4B9EFF),
+                foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Generate'),
+              child: const Text('Generate', style: TextStyle(fontWeight: FontWeight.bold)),
             ),
           ],
         ),
@@ -1297,28 +1459,31 @@ class _VoxHomePageState extends State<VoxHomePage> {
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF4B9EFF).withOpacity(0.18) : const Color(0xFFE0E0E0),
+            color: isSelected ? const Color(0xFF4B9EFF).withOpacity(0.12) : Colors.white.withOpacity(0.04),
             borderRadius: BorderRadius.circular(14),
-            border: isSelected ? Border.all(color: const Color(0xFF4B9EFF), width: 2.5) : null,
-            boxShadow: [
+            border: Border.all(
+              color: isSelected ? const Color(0xFF4B9EFF) : Colors.white.withOpacity(0.08),
+              width: isSelected ? 2.0 : 1.0,
+            ),
+            boxShadow: isSelected ? [
               BoxShadow(
-                color: Color(0xFF0A0E1A).withOpacity(0.07),
-                blurRadius: 5,
-                offset: const Offset(0, 3),
+                color: const Color(0xFF4B9EFF).withOpacity(0.1),
+                blurRadius: 12,
+                spreadRadius: 2,
               ),
-            ],
+            ] : [],
           ),
-          padding: const EdgeInsets.fromLTRB(8, 8, 8, 6),
+          padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
                 title,
-                style: const TextStyle(
-                  color: Color(0xDD0A0E1A),
+                style: TextStyle(
+                  color: Colors.white.withOpacity(isSelected ? 1.0 : 0.7),
                   fontSize: 10,
-                  fontWeight: FontWeight.w700,
+                  fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
                   height: 1.2,
                 ),
                 maxLines: 2,
@@ -1326,7 +1491,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
               ),
               Align(
                 alignment: Alignment.bottomRight,
-                child: Icon(iconData, size: 28, color: iconColor),
+                child: Icon(iconData, size: 24, color: iconColor.withOpacity(0.9)),
               ),
             ],
           ),
@@ -1363,13 +1528,14 @@ class _VoxHomePageState extends State<VoxHomePage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color, size: 24),
+          Icon(icon, color: color == const Color(0xFF0A0E1A) ? Colors.white54 : color, size: 24),
           Text(
             label,
             style: TextStyle(
-              color: color,
+              color: color == const Color(0xFF0A0E1A) ? Colors.white54 : color,
               fontSize: 9,
-              fontWeight: FontWeight.bold,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
             ),
           ),
         ],

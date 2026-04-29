@@ -5,6 +5,28 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 // ─────────────────────────────────────────────
+//  ASSISTANT COMMANDS
+// ─────────────────────────────────────────────
+enum AssistantCommandType {
+  navigate,
+  search,
+  openFile,
+  stopAssistant,
+}
+
+class AssistantCommand {
+  final AssistantCommandType type;
+  final String? route;
+  final String? payload;
+
+  AssistantCommand({
+    required this.type,
+    this.route,
+    this.payload,
+  });
+}
+
+// ─────────────────────────────────────────────
 //  ACTION TYPES
 // ─────────────────────────────────────────────
 enum CommandActionType {
@@ -19,6 +41,8 @@ enum CommandActionType {
   ttsSlowDown,
   searchNotes,
   openNote,
+  searchLibrary,
+  openAssessments,
   macroSequence,
 }
 
@@ -47,6 +71,10 @@ extension CommandActionTypeLabel on CommandActionType {
         return 'Search Notes';
       case CommandActionType.openNote:
         return 'Open Specific Note';
+      case CommandActionType.searchLibrary:
+        return 'Search Library';
+      case CommandActionType.openAssessments:
+        return 'Open Saved Assessments';
       case CommandActionType.macroSequence:
         return 'Run Macro Sequence';
     }
@@ -76,6 +104,10 @@ extension CommandActionTypeLabel on CommandActionType {
         return Icons.search_outlined;
       case CommandActionType.openNote:
         return Icons.file_open_outlined;
+      case CommandActionType.searchLibrary:
+        return Icons.library_books_outlined;
+      case CommandActionType.openAssessments:
+        return Icons.assignment_turned_in_outlined;
       case CommandActionType.macroSequence:
         return Icons.timeline_rounded;
     }
@@ -84,6 +116,7 @@ extension CommandActionTypeLabel on CommandActionType {
   bool get requiresParameter {
     return this == CommandActionType.searchNotes ||
         this == CommandActionType.openNote ||
+        this == CommandActionType.searchLibrary ||
         this == CommandActionType.macroSequence;
   }
 
@@ -93,6 +126,10 @@ extension CommandActionTypeLabel on CommandActionType {
         return 'Keyword to search for';
       case CommandActionType.openNote:
         return 'Note name to open';
+      case CommandActionType.searchLibrary:
+        return 'Library keyword to search for';
+      case CommandActionType.openAssessments:
+        return '';
       case CommandActionType.macroSequence:
         return 'Macro steps (one per line, e.g. open notes)';
       default:
@@ -135,12 +172,12 @@ class CustomCommand {
   }
 
   Map<String, dynamic> toJson() => {
-        'id': id,
-        'phrase': phrase,
-        'action': action.name,
-        'parameter': parameter,
-        'isEnabled': isEnabled,
-      };
+    'id': id,
+    'phrase': phrase,
+    'action': action.name,
+    'parameter': parameter,
+    'isEnabled': isEnabled,
+  };
 
   factory CustomCommand.fromJson(Map<String, dynamic> json) {
     return CustomCommand(
@@ -167,10 +204,18 @@ class CustomCommandsProvider extends ChangeNotifier {
   bool _voiceFeedbackEnabled = true;
   String? _currentUserId;
 
+  /// Callback for high-level assistant actions (e.g. navigation, search)
+  void Function(AssistantCommand)? onCommand;
+
   // FIX: track whether _load() has completed so GlobalSttWrapper
   // doesn't call match() against an empty list on first launch.
   bool _isLoaded = false;
+  bool _assistantModeEnabled = false;
+  bool _isListening = false;
+
   bool get isLoaded => _isLoaded;
+  bool get assistantModeEnabled => _assistantModeEnabled;
+  bool get isListening => _isListening;
 
   List<CustomCommand> get commands => List.unmodifiable(_commands);
   List<CustomCommand> get enabledCommands =>
@@ -185,6 +230,7 @@ class CustomCommandsProvider extends ChangeNotifier {
   Future<void> _load() async {
     final prefs = await SharedPreferences.getInstance();
     _voiceFeedbackEnabled = prefs.getBool(_feedbackKey) ?? true;
+    _assistantModeEnabled = prefs.getBool('assistant_mode_enabled') ?? false;
     // For initial load, don't load commands - wait for loadCommandsForUser
     _isLoaded = true;
     notifyListeners();
@@ -246,6 +292,19 @@ class CustomCommandsProvider extends ChangeNotifier {
     await prefs.setBool(_feedbackKey, enabled);
   }
 
+  Future<void> setAssistantMode(bool enabled) async {
+    _assistantModeEnabled = enabled;
+    notifyListeners();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('assistant_mode_enabled', enabled);
+  }
+
+  void setListening(bool value) {
+    if (_isListening == value) return;
+    _isListening = value;
+    notifyListeners();
+  }
+
   // ── Load commands for specific user ──────────────────
   Future<void> loadCommandsForUser(String uid) async {
     _currentUserId = uid;
@@ -278,6 +337,14 @@ class CustomCommandsProvider extends ChangeNotifier {
           _commands = [];
         }
       }
+
+      if (_commands.isEmpty) {
+        _addDefaultCommands();
+        if (_currentUserId != null) {
+          await _saveForUser(_currentUserId!);
+        }
+      }
+
       _isLoaded = true;
       notifyListeners();
     } catch (e) {
@@ -294,26 +361,25 @@ class CustomCommandsProvider extends ChangeNotifier {
     if (user != null && !user.isAnonymous) {
       // Save to Firestore for authenticated users
       final batch = FirebaseFirestore.instance.batch();
-      
+
       // Delete existing commands
       final existing = await FirebaseFirestore.instance
           .collection('custom_commands')
           .where('userId', isEqualTo: uid)
           .get();
-      
+
       for (final doc in existing.docs) {
         batch.delete(doc.reference);
       }
-      
+
       // Add new commands
       for (final command in _commands) {
-        final docRef = FirebaseFirestore.instance.collection('custom_commands').doc();
-        batch.set(docRef, {
-          ...command.toJson(),
-          'userId': uid,
-        });
+        final docRef = FirebaseFirestore.instance
+            .collection('custom_commands')
+            .doc();
+        batch.set(docRef, {...command.toJson(), 'userId': uid});
       }
-      
+
       await batch.commit();
     } else {
       // Save to SharedPreferences for anonymous users
@@ -325,6 +391,41 @@ class CustomCommandsProvider extends ChangeNotifier {
     }
   }
 
+  void _addDefaultCommands() {
+    _commands = [
+      CustomCommand(
+        id: '${DateTime.now().millisecondsSinceEpoch}1',
+        phrase: 'turn to menu page',
+        action: CommandActionType.navigateMenu,
+      ),
+      CustomCommand(
+        id: '${DateTime.now().millisecondsSinceEpoch}2',
+        phrase: 'search library for',
+        action: CommandActionType.searchLibrary,
+      ),
+      CustomCommand(
+        id: '${DateTime.now().millisecondsSinceEpoch}3',
+        phrase: 'open and read this assessment',
+        action: CommandActionType.openAssessments,
+      ),
+      CustomCommand(
+        id: '${DateTime.now().millisecondsSinceEpoch}4',
+        phrase: 'go home',
+        action: CommandActionType.navigateHome,
+      ),
+      CustomCommand(
+        id: '${DateTime.now().millisecondsSinceEpoch}5',
+        phrase: 'open notes',
+        action: CommandActionType.navigateNotes,
+      ),
+      CustomCommand(
+        id: '${DateTime.now().millisecondsSinceEpoch}6',
+        phrase: 'search notes for',
+        action: CommandActionType.searchNotes,
+      ),
+    ];
+  }
+
   // ── Matching ──────────────────────────────────
   /// Returns the best matching command for [spokenText], or null if none found.
   CustomCommand? match(String spokenText) {
@@ -333,10 +434,27 @@ class CustomCommandsProvider extends ChangeNotifier {
     double bestScore = 0.4; // minimum threshold
 
     for (final cmd in enabledCommands) {
-      final score = _score(input, _normalize(cmd.phrase));
+      final phrase = _normalize(cmd.phrase);
+      double score = _score(input, phrase);
+
       if (score > bestScore) {
         bestScore = score;
         best = cmd;
+
+        // Dynamic parameter extraction
+        if (cmd.action.requiresParameter) {
+          // If the input starts with or contains the phrase,
+          // extract whatever comes after the phrase as the parameter.
+          if (input.contains(phrase)) {
+            final parts = input.split(phrase);
+            if (parts.length > 1) {
+              final param = parts.last.trim();
+              if (param.isNotEmpty) {
+                best = cmd.copyWith(parameter: param);
+              }
+            }
+          }
+        }
       }
     }
     return best;

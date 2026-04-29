@@ -10,6 +10,7 @@ class AiResultPage extends StatefulWidget {
   final String documentContent;
   final String mode; // 'summary' | 'flashcards'
   final int cardCount; // how many flashcards to generate
+  final String source; // 'Home' | 'Notes' — origin of the document
 
   const AiResultPage({
     super.key,
@@ -17,6 +18,7 @@ class AiResultPage extends StatefulWidget {
     required this.documentContent,
     required this.mode,
     this.cardCount = 10,
+    this.source = 'Home',
   });
 
   @override
@@ -135,11 +137,12 @@ class _AiResultPageState extends State<AiResultPage> {
         }
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() {
           _error = e.toString();
           _loading = false;
         });
+      }
     }
   }
 
@@ -147,10 +150,12 @@ class _AiResultPageState extends State<AiResultPage> {
   Future<void> _saveAssessment() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please log in to save assessments.')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please log in to save assessments.')),
+      );
       return;
     }
-    
+
     if (_flashcards == null || _flashcards!.isEmpty) return;
 
     final result = await showDialog<String>(
@@ -158,13 +163,22 @@ class _AiResultPageState extends State<AiResultPage> {
       builder: (ctx) {
         final ctrl = TextEditingController(text: widget.documentTitle);
         return AlertDialog(
-          backgroundColor: const Color(0xFFF0F4FF),
-          title: const Text('Save Q&A Generator'),
+          backgroundColor: const Color(0xFF161B2E),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
+          ),
+          title: const Text(
+            'Save Assessment',
+            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+          ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('Enter Chapter or Document Name:', style: TextStyle(fontSize: 13, color: Color(0xAA0A0E1A))),
+              const Text(
+                'Enter Chapter or Document Name:',
+                style: TextStyle(fontSize: 13, color: Color(0xAA0A0E1A)),
+              ),
               const SizedBox(height: 8),
               TextField(
                 controller: ctrl,
@@ -176,10 +190,16 @@ class _AiResultPageState extends State<AiResultPage> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, null), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, null),
+              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+            ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
-              style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0A0E1A), foregroundColor: Colors.white),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0A0E1A),
+                foregroundColor: Colors.white,
+              ),
               child: const Text('Save'),
             ),
           ],
@@ -190,20 +210,31 @@ class _AiResultPageState extends State<AiResultPage> {
     if (result == null || result.isEmpty) return;
 
     setState(() => _loading = true);
-    
+
     try {
-      final data = _flashcards!.map((f) => {'question': f.question, 'answer': f.answer}).toList();
+      final data = _flashcards!
+          .map((f) => {'question': f.question, 'answer': f.answer})
+          .toList();
       await FirebaseFirestore.instance.collection('assessments').add({
         'userId': user.uid,
         'userEmail': user.email,
         'documentTitle': result,
+        'source': widget.source,
         'createdAt': FieldValue.serverTimestamp(),
         'questions': data,
       });
-      
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Saved successfully!')));
-    } catch(e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error saving: $e')));
+
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Saved successfully!')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error saving: $e')));
+      }
     } finally {
       if (mounted) setState(() => _loading = false);
     }
@@ -222,7 +253,7 @@ class _AiResultPageState extends State<AiResultPage> {
         decoration: BoxDecoration(
           color: _isSpeaking
               ? const Color(0xFF4B9EFF)
-              : Color(0xFF0A0E1A).withOpacity(0.08),
+              : Colors.white.withOpacity(0.08),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -261,11 +292,11 @@ class _AiResultPageState extends State<AiResultPage> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: _autoReadEnabled
-              ? Colors.green.withOpacity(0.15)
-              : Colors.grey[200],
+              ? const Color(0xFF4B9EFF).withOpacity(0.15)
+              : Colors.white.withOpacity(0.05),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: _autoReadEnabled ? Colors.green : Colors.transparent,
+            color: _autoReadEnabled ? const Color(0xFF4B9EFF) : Colors.white10,
           ),
         ),
         child: Row(
@@ -282,7 +313,9 @@ class _AiResultPageState extends State<AiResultPage> {
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: _autoReadEnabled ? Colors.green : Colors.grey[500],
+                color: _autoReadEnabled
+                    ? const Color(0xFF4B9EFF)
+                    : Colors.white38,
               ),
             ),
           ],
@@ -321,7 +354,7 @@ class _AiResultPageState extends State<AiResultPage> {
                     style: const TextStyle(
                       fontSize: 15,
                       height: 1.55,
-                      color: Color(0xDD0A0E1A),
+                      color: Colors.white,
                     ),
                   ),
                 ),
@@ -332,7 +365,7 @@ class _AiResultPageState extends State<AiResultPage> {
                     style: const TextStyle(
                       fontSize: 15,
                       height: 1.65,
-                      color: Color(0xDD0A0E1A),
+                      color: Colors.white70,
                     ),
                   ),
                 ),
@@ -359,7 +392,7 @@ class _AiResultPageState extends State<AiResultPage> {
               Text(
                 'Card ${_currentCard + 1} of ${cards.length}',
                 style: TextStyle(
-                  color: Colors.grey[600],
+                  color: Colors.white.withOpacity(0.5),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -382,7 +415,7 @@ class _AiResultPageState extends State<AiResultPage> {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: (_currentCard + 1) / cards.length,
-              backgroundColor: Colors.grey[200],
+              backgroundColor: Colors.white.withOpacity(0.05),
               valueColor: const AlwaysStoppedAnimation<Color>(
                 Color(0xFF4B9EFF),
               ),
@@ -412,7 +445,9 @@ class _AiResultPageState extends State<AiResultPage> {
                 margin: const EdgeInsets.symmetric(horizontal: 20),
                 padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
-                  color: isFlipped ? const Color(0xFF1A1A1A) : Colors.white,
+                  color: isFlipped
+                      ? const Color(0xFF161B2E)
+                      : Colors.white.withOpacity(0.04),
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
@@ -424,7 +459,7 @@ class _AiResultPageState extends State<AiResultPage> {
                   border: Border.all(
                     color: isFlipped
                         ? const Color(0xFF4B9EFF).withOpacity(0.4)
-                        : Colors.grey.withOpacity(0.15),
+                        : Colors.white.withOpacity(0.08),
                   ),
                 ),
                 child: Column(
@@ -438,7 +473,7 @@ class _AiResultPageState extends State<AiResultPage> {
                       decoration: BoxDecoration(
                         color: isFlipped
                             ? const Color(0xFF4B9EFF).withOpacity(0.15)
-                            : Colors.grey[100],
+                            : Colors.white.withOpacity(0.05),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -460,8 +495,8 @@ class _AiResultPageState extends State<AiResultPage> {
                       style: TextStyle(
                         fontSize: 17,
                         height: 1.6,
-                        fontWeight: FontWeight.w600,
-                        color: isFlipped ? Colors.white : Color(0xDD0A0E1A),
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -508,11 +543,11 @@ class _AiResultPageState extends State<AiResultPage> {
                         }
                       : null,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Color(0xFF0A0E1A),
+                    foregroundColor: Colors.white,
                     side: BorderSide(
                       color: _currentCard > 0
-                          ? Color(0xFF0A0E1A)
-                          : Colors.grey[300]!,
+                          ? Colors.white.withOpacity(0.2)
+                          : Colors.white.withOpacity(0.05),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -545,13 +580,13 @@ class _AiResultPageState extends State<AiResultPage> {
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Color(0xFF0A0E1A),
-                    foregroundColor: const Color(0xFFF0F4FF),
+                    backgroundColor: const Color(0xFF4B9EFF),
+                    foregroundColor: Colors.white,
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    disabledBackgroundColor: Colors.grey[300],
+                    disabledBackgroundColor: Colors.white.withOpacity(0.05),
                   ),
                   child: const Text(
                     'Next →',
@@ -573,7 +608,7 @@ class _AiResultPageState extends State<AiResultPage> {
     final title = isSummary ? 'Summary' : 'Assessment';
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF),
+      backgroundColor: const Color(0xFF0A0E1A),
       body: SafeArea(
         child: Column(
           children: [
@@ -587,7 +622,11 @@ class _AiResultPageState extends State<AiResultPage> {
                       _stopSpeaking();
                       Navigator.pop(context);
                     },
-                    child: const Icon(Icons.keyboard_arrow_down, size: 32),
+                    child: const Icon(
+                      Icons.keyboard_arrow_down,
+                      size: 32,
+                      color: Colors.white,
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
@@ -597,15 +636,16 @@ class _AiResultPageState extends State<AiResultPage> {
                         Text(
                           title,
                           style: const TextStyle(
-                            fontWeight: FontWeight.bold,
+                            fontWeight: FontWeight.w900,
                             fontSize: 17,
+                            color: Colors.white,
                           ),
                         ),
                         Text(
                           widget.documentTitle,
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.grey[600],
+                            color: Colors.white.withOpacity(0.5),
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -619,58 +659,107 @@ class _AiResultPageState extends State<AiResultPage> {
                   if (!_loading && _error == null && isSummary)
                     _buildSpeakerButton(),
                   const SizedBox(width: 6),
-                  
+
                   // Save button (assessments only)
                   if (!_loading && _error == null && !isSummary)
                     GestureDetector(
                       onTap: _saveAssessment,
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
-                          color: Colors.green.withOpacity(0.15),
+                          color: const Color(0xFF4B9EFF).withOpacity(0.12),
                           borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: const Color(0xFF4B9EFF).withOpacity(0.3),
+                          ),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.bookmark_add_outlined, size: 16, color: Colors.green),
+                            Icon(
+                              Icons.bookmark_add_outlined,
+                              size: 16,
+                              color: Color(0xFF4B9EFF),
+                            ),
                             SizedBox(width: 4),
-                            Text('Save', style: TextStyle(color: Colors.green, fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text(
+                              'Save',
+                              style: TextStyle(
+                                color: Color(0xFF4B9EFF),
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ),
                   const SizedBox(width: 6),
-                  
+
                   // Download PDF button
                   if (!_loading && _error == null)
                     GestureDetector(
                       onTap: () {
                         if (isSummary && _summary != null) {
-                          PdfService.exportSummaryPdf(context, widget.documentTitle, _summary!);
+                          PdfService.exportSummaryPdf(
+                            context,
+                            widget.documentTitle,
+                            _summary!,
+                          );
                         } else if (!isSummary && _flashcards != null) {
-                          final qList = _flashcards!.map((f) => {'question': f.question, 'answer': f.answer}).toList();
-                          PdfService.exportAssessmentPdf(context, widget.documentTitle, qList);
+                          final qList = _flashcards!
+                              .map(
+                                (f) => {
+                                  'question': f.question,
+                                  'answer': f.answer,
+                                },
+                              )
+                              .toList();
+                          PdfService.exportAssessmentPdf(
+                            context,
+                            widget.documentTitle,
+                            qList,
+                          );
                         }
                       },
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
-                          color: Colors.blue.withOpacity(0.15),
+                          color: Colors.white.withOpacity(0.06),
                           borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.08),
+                          ),
                         ),
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.picture_as_pdf_outlined, size: 16, color: Colors.blue),
+                            Icon(
+                              Icons.picture_as_pdf_outlined,
+                              size: 16,
+                              color: Colors.blue,
+                            ),
                             SizedBox(width: 4),
-                            Text('PDF', style: TextStyle(color: Colors.blue, fontSize: 11, fontWeight: FontWeight.bold)),
+                            Text(
+                              'PDF',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
                           ],
                         ),
                       ),
                     ),
                   const SizedBox(width: 6),
-                  
+
                   // Retry
                   if (!_loading)
                     GestureDetector(
@@ -678,17 +767,21 @@ class _AiResultPageState extends State<AiResultPage> {
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Color(0xFF0A0E1A).withOpacity(0.08),
+                          color: Colors.white.withOpacity(0.06),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Icon(Icons.refresh, size: 20),
+                        child: const Icon(
+                          Icons.refresh,
+                          size: 20,
+                          color: Colors.white70,
+                        ),
                       ),
                     ),
                 ],
               ),
             ),
 
-            const Divider(height: 1, color: Color(0x1F0A0E1A)),
+            const Divider(height: 1, color: Colors.white10),
 
             // Body
             Expanded(
@@ -697,13 +790,15 @@ class _AiResultPageState extends State<AiResultPage> {
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const CircularProgressIndicator(color: Color(0xFF0A0E1A)),
+                          const CircularProgressIndicator(
+                            color: Color(0xFF4B9EFF),
+                          ),
                           const SizedBox(height: 16),
                           Text(
                             isSummary
                                 ? 'Generating summary...'
                                 : 'Creating ${widget.cardCount} questions...',
-                            style: const TextStyle(color: Color(0x8A0A0E1A)),
+                            style: const TextStyle(color: Colors.white54),
                           ),
                         ],
                       ),
