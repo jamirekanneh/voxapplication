@@ -942,7 +942,7 @@ class _ReaderPageState extends State<ReaderPage> {
               ),
             ),
             const SizedBox(width: 8),
-            // Assessment button
+            // Q&A Generator button
             GestureDetector(
               onTap: () => _openAiPage('flashcards'),
               child: Container(
@@ -964,7 +964,7 @@ class _ReaderPageState extends State<ReaderPage> {
                     ),
                     SizedBox(width: 5),
                     Text(
-                      'Assessment',
+                      'Q&A Generator',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 11,

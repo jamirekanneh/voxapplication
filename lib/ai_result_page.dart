@@ -151,7 +151,7 @@ class _AiResultPageState extends State<AiResultPage> {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please log in to save assessments.')),
+        const SnackBar(content: Text('Please log in to save Q&A.')),
       );
       return;
     }
@@ -168,7 +168,7 @@ class _AiResultPageState extends State<AiResultPage> {
             borderRadius: BorderRadius.circular(24),
           ),
           title: const Text(
-            'Save Assessment',
+            'Save Q&A',
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
           ),
           content: Column(
@@ -605,7 +605,7 @@ class _AiResultPageState extends State<AiResultPage> {
   @override
   Widget build(BuildContext context) {
     final isSummary = widget.mode == 'summary';
-    final title = isSummary ? 'Summary' : 'Assessment';
+    final title = isSummary ? 'Summary' : 'Q&A Generator';
 
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E1A),
@@ -660,7 +660,7 @@ class _AiResultPageState extends State<AiResultPage> {
                     _buildSpeakerButton(),
                   const SizedBox(width: 6),
 
-                  // Save button (assessments only)
+                  // Save button (Q&A only)
                   if (!_loading && _error == null && !isSummary)
                     GestureDetector(
                       onTap: _saveAssessment,

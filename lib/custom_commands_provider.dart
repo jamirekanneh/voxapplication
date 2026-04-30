@@ -74,7 +74,7 @@ extension CommandActionTypeLabel on CommandActionType {
       case CommandActionType.searchLibrary:
         return 'Search Library';
       case CommandActionType.openAssessments:
-        return 'Open Saved Assessments';
+        return 'Open Saved Q&A';
       case CommandActionType.macroSequence:
         return 'Run Macro Sequence';
     }

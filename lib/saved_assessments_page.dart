@@ -29,7 +29,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
       context,
       MaterialPageRoute(
         builder: (_) => AssessmentViewerScreen(
-          title: data['documentTitle'] ?? 'Saved Assessment',
+          title: data['documentTitle'] ?? 'Saved Q&A',
           flashcards: flashcards,
         ),
       ),
@@ -43,7 +43,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
         backgroundColor: const Color(0xFF161B2E),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text(
-          'Delete Assessment?',
+          'Delete Q&A?',
           style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
         ),
         content: Text(
@@ -65,7 +65,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: const Text('Assessment deleted.'),
+                    content: const Text('Q&A deleted.'),
                     backgroundColor: const Color(0xFF1E2540),
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
@@ -180,7 +180,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
           elevation: 0,
           iconTheme: const IconThemeData(color: Colors.white),
           title: const Text(
-            'Saved Assessments',
+            'Saved Q&A',
             style: TextStyle(
                 color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20),
           ),
@@ -209,7 +209,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               ),
               const SizedBox(height: 8),
               Text(
-                'Please sign in to view your\nsaved assessments.',
+                'Please sign in to view your\nsaved Q&A.',
                 textAlign: TextAlign.center,
                 style: TextStyle(color: Colors.white.withValues(alpha: 0.5), height: 1.5),
               ),
@@ -240,7 +240,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Saved Assessments',
+                          'Saved Q&A',
                           style: TextStyle(
                             color: Colors.white,
                             fontWeight: FontWeight.w900,
@@ -308,7 +308,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                   if (snapshot.hasError) {
                     return Center(
                       child: Text(
-                        'Error loading assessments: ${snapshot.error}',
+                        'Error loading saved Q&A: ${snapshot.error}',
                         style: const TextStyle(color: Colors.white70),
                       ),
                     );
@@ -348,7 +348,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                       final data =
                           docs[index].data() as Map<String, dynamic>;
                       final title =
-                          data['documentTitle'] ?? 'Untitled Assessment';
+                          data['documentTitle'] ?? 'Untitled Q&A';
                       final questions =
                           (data['questions'] as List?)?.length ?? 0;
                       final source =
@@ -495,7 +495,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
             ),
             const SizedBox(height: 20),
             const Text(
-              'No assessments yet',
+              'No saved Q&A yet',
               style: TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w900,
@@ -503,7 +503,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
             ),
             const SizedBox(height: 10),
             Text(
-              'Generate a Q&A Assessment from any document in Home or note in Notes, then tap Save.',
+              'Generate a Q&A set from any document in Home or note in Notes, then tap Save.',
               textAlign: TextAlign.center,
               style: TextStyle(
                   color: Colors.white.withValues(alpha: 0.45),
@@ -525,7 +525,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               color: Colors.white.withValues(alpha: 0.2), size: 48),
           const SizedBox(height: 16),
           Text(
-            'No $_filter assessments',
+            'No $_filter Q&A',
             style: const TextStyle(
                 color: Colors.white60, fontWeight: FontWeight.w700),
           ),

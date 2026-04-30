@@ -48,7 +48,7 @@ class PdfService {
               child: pw.Text(title, style: pw.TextStyle(fontSize: 24, fontWeight: pw.FontWeight.bold)),
             ),
             pw.Paragraph(
-              text: 'AI Generated Assessment - ${questions.length} Questions\n\n',
+              text: 'AI Generated Q&A - ${questions.length} Questions\n\n',
               style: pw.TextStyle(fontSize: 12, color: PdfColors.grey700),
             ),
           ];
@@ -73,7 +73,7 @@ class PdfService {
       ),
     );
 
-    await _savePdfAndNotify(context, pdf, 'Assessment_$title');
+    await _savePdfAndNotify(context, pdf, 'QnA_$title');
   }
 
   static Future<void> _savePdfAndNotify(BuildContext context, pw.Document pdf, String fileNameBase) async {

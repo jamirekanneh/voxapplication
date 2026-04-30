@@ -740,7 +740,7 @@ class _MenuPageState extends State<MenuPage> {
                   if (_hasProfile) ...[
                     _buildMenuItem(
                       icon: Icons.bookmarks_outlined,
-                      title: 'Saved Assessments',
+                      title: 'Saved Q&A',
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(

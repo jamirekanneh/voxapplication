@@ -1170,7 +1170,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                               ),
                               const SizedBox(width: 8),
                               _aiChip(
-                                label: 'Assessment',
+                                label: 'Q&A Generator',
                                 icon: Icons.style_outlined,
                                 dark: false,
                                 onTap: () async {

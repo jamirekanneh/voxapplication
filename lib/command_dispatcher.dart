@@ -21,7 +21,7 @@ const Map<String, Map<String, String>> _feedback = {
     'searchNotes': 'Searching notes',
     'openNote': 'Opening note',
     'searchLibrary': 'Searching library',
-    'openAssessments': 'Opening saved assessments',
+    'openAssessments': 'Opening saved Q&A',
     'noMatch': 'Command not recognized',
   },
   'Spanish': {

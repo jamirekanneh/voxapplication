@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'analytics_service.dart';
 
 // ignore: uri_does_not_exist
@@ -75,6 +76,43 @@ class AiService {
     }
   }
 
+  static Future<String> _callNlpAssistant(String userMessage) async {
+    final apiUrl = dotenv.env['NLP_API_URL']?.trim() ?? '';
+    final apiKey = dotenv.env['NLP_API_KEY']?.trim() ?? '';
+
+    if (apiUrl.isEmpty) {
+      throw Exception('NLP API is not configured. Missing NLP_API_URL.');
+    }
+
+    final response = await http
+        .post(
+          Uri.parse(apiUrl),
+          headers: {
+            'Content-Type': 'application/json',
+            if (apiKey.isNotEmpty) 'Authorization': 'Bearer $apiKey',
+          },
+          body: jsonEncode({
+            'message': userMessage,
+            'assistant': 'vox',
+          }),
+        )
+        .timeout(const Duration(seconds: 30));
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('NLP API error ${response.statusCode}: ${response.body}');
+    }
+
+    final data = jsonDecode(response.body);
+    if (data is Map<String, dynamic>) {
+      final text = (data['reply'] ?? data['response'] ?? data['text'] ?? '')
+          .toString()
+          .trim();
+      if (text.isNotEmpty) return text;
+    }
+
+    throw Exception('NLP API returned an empty response.');
+  }
+
   /// Summarizes the document and returns plain-text summary.
   static Future<String> summarize(String documentText) {
     const system =
@@ -89,7 +127,7 @@ class AiService {
 
   /// Assistant for generic questions.
   static Future<String> askAssistant(String userMessage) {
-    const system =
+    const fallbackSystem =
         'You are Vox Assistant, an AI helper for the Vox app. '
         'You MUST give accurate answers based on these facts about the app: '
         '1) Sign In: The app uses passwordless Magic Link via email. '
@@ -100,7 +138,10 @@ class AiService {
         '6) Reading Goals: Users can set a daily reading target (minutes) in the Statistics page and track their Learning Streak. '
         '7) Voice Commands: Global hands-free control via STT. '
         'Please keep answers very friendly, concise, and do not invent new features not mentioned here.';
-    return _callGroq(system, userMessage);
+
+    return _callNlpAssistant(userMessage).catchError((_) {
+      return _callGroq(fallbackSystem, userMessage);
+    });
   }
 
   /// Generates [count] flashcards — different every time due to random seed in prompt.
@@ -145,17 +186,7 @@ class AiService {
 
   /// Provides guidance on how to use the Vox app.
   static Future<String> helpUser(String userQuery) {
-    const system =
-        'You are the Vox App Assistant, a premium AI guide for the Vox Application. '
-        'The Vox app features include:\n'
-        '- AI Study Buddy: Chat with your documents in real-time while listening.\n'
-        '- Accessibility: OpenDyslexic font and Bionic Reading focus mode in the reader settings.\n'
-        '- Dictionary: Search for General, Medical, and Technical terms.\n'
-        '- Notes/Library: Organize documents, summarize them, and create AI flashcards.\n'
-        '- Statistics: Track your daily reading goals and learning streaks.\n'
-        '- Voice Commands: Control everything hands-free.\n'
-        'Keep your responses modern, concise, and helpful. Use a friendly yet professional tone.';
-    return _callGroq(system, userQuery);
+    return askAssistant(userQuery);
   }
 }
 

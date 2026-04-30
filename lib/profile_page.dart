@@ -1,4 +1,5 @@
-﻿import 'dart:convert';
+import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -36,6 +37,8 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage>
     with SingleTickerProviderStateMixin {
+  static const int _linkResendCooldownSeconds = 60;
+  static const int _tooManyRequestsCooldownSeconds = 15 * 60;
   bool _isEditing = false;
   bool _isSaving = false;
 
@@ -46,6 +49,8 @@ class _ProfilePageState extends State<ProfilePage>
   // Anonymous flow stages
   String _anonStage = 'join'; // 'join' | 'returning' | 'awaiting_link'
   bool _anonLoading = false;
+  int _resendCooldownSeconds = 0;
+  Timer? _resendTimer;
 
   // Spinning ring for awaiting_link
   late AnimationController _rotateController;
@@ -64,6 +69,7 @@ class _ProfilePageState extends State<ProfilePage>
 
   @override
   void dispose() {
+    _resendTimer?.cancel();
     _nameController.dispose();
     _emailController.dispose();
     _rotateController.dispose();
@@ -193,7 +199,12 @@ class _ProfilePageState extends State<ProfilePage>
   Future<void> _sendMagicLink() async {
     setState(() => _anonLoading = true);
     try {
-      final email = _emailController.text.trim();
+      final email = _emailController.text.trim().toLowerCase();
+      final cooldown = await _remainingMagicLinkCooldown(email);
+      if (cooldown > 0) {
+        _showSnack('Please wait ${cooldown}s before resending the link.');
+        return;
+      }
       final acs = ActionCodeSettings(
         url: 'https://the-vox-application.firebaseapp.com/verify?email=$email',
         handleCodeInApp: true,
@@ -207,8 +218,26 @@ class _ProfilePageState extends State<ProfilePage>
       );
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString('pendingEmailLink', email);
+      await _setMagicLinkCooldown(email, _linkResendCooldownSeconds);
+      _syncResendCooldown();
       if (!mounted) return;
       setState(() => _anonStage = 'awaiting_link');
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'too-many-requests') {
+        final email = _emailController.text.trim().toLowerCase();
+        if (email.isNotEmpty) {
+          await _setMagicLinkCooldown(
+            email,
+            _tooManyRequestsCooldownSeconds,
+          );
+          _syncResendCooldown();
+        }
+        _showSnack(
+          'Too many verification attempts from this device. Please wait 15 minutes and try again.',
+        );
+      } else {
+        _showSnack('Magic Link Error (${e.code}): ${e.message}');
+      }
     } catch (e) {
       String errorMessage = "Error sending link: $e";
       if (e is FirebaseAuthException) {
@@ -218,6 +247,48 @@ class _ProfilePageState extends State<ProfilePage>
     } finally {
       if (mounted) setState(() => _anonLoading = false);
     }
+  }
+
+  String _magicLinkCooldownKey(String email) =>
+      'magicLinkCooldownUntil:${email.toLowerCase()}';
+
+  Future<int> _remainingMagicLinkCooldown(String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    final until = prefs.getInt(_magicLinkCooldownKey(email)) ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final remainingMs = until - now;
+    if (remainingMs <= 0) return 0;
+    return (remainingMs / 1000).ceil();
+  }
+
+  Future<void> _setMagicLinkCooldown(String email, int seconds) async {
+    final prefs = await SharedPreferences.getInstance();
+    final until = DateTime.now().millisecondsSinceEpoch + (seconds * 1000);
+    await prefs.setInt(_magicLinkCooldownKey(email), until);
+  }
+
+  Future<void> _syncResendCooldown() async {
+    final email = _emailController.text.trim().toLowerCase();
+    if (email.isEmpty) return;
+    final remaining = await _remainingMagicLinkCooldown(email);
+    if (!mounted) return;
+
+    _resendTimer?.cancel();
+    setState(() => _resendCooldownSeconds = remaining);
+
+    if (remaining <= 0) return;
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_resendCooldownSeconds <= 1) {
+        timer.cancel();
+        setState(() => _resendCooldownSeconds = 0);
+      } else {
+        setState(() => _resendCooldownSeconds -= 1);
+      }
+    });
   }
 
   void _showSnack(String msg) {
@@ -1002,14 +1073,24 @@ class _ProfilePageState extends State<ProfilePage>
           const SizedBox(height: 48),
           Center(
             child: TextButton(
-              onPressed: _anonLoading ? null : _sendMagicLink,
-              child: const Text("Resend link",
-                  style: TextStyle(
-                    color: Color(0xFF4B9EFF),
-                    fontWeight: FontWeight.w600,
-                    decoration: TextDecoration.underline,
-                    decorationColor: Color(0xFF4B9EFF),
-                  )),
+              onPressed: (_anonLoading || _resendCooldownSeconds > 0)
+                  ? null
+                  : _sendMagicLink,
+              child: Text(
+                _resendCooldownSeconds > 0
+                    ? 'Resend in ${_resendCooldownSeconds}s'
+                    : 'Resend link',
+                style: TextStyle(
+                  color: _resendCooldownSeconds > 0
+                      ? Colors.white38
+                      : const Color(0xFF4B9EFF),
+                  fontWeight: FontWeight.w600,
+                  decoration: _resendCooldownSeconds > 0
+                      ? TextDecoration.none
+                      : TextDecoration.underline,
+                  decorationColor: const Color(0xFF4B9EFF),
+                ),
+              ),
             ),
           ),
 

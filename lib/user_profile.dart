@@ -34,6 +34,8 @@ class UserProfilePage extends StatefulWidget {
 
 class _UserProfilePageState extends State<UserProfilePage>
     with WidgetsBindingObserver {
+  static const int _linkResendCooldownSeconds = 60;
+  static const int _tooManyRequestsCooldownSeconds = 15 * 60;
   // 'form' | 'returning' | 'awaiting_link' | 'verifying'
   String _stage = 'form';
   bool _isEditingMode = false;
@@ -48,6 +50,8 @@ class _UserProfilePageState extends State<UserProfilePage>
   bool _googleLoading = false;
   bool _isSwitchingEmail = false;
   bool _canSwitchEmail = false;
+  int _resendCooldownSeconds = 0;
+  Timer? _resendTimer;
   String? _currentEmail;
   String? _currentName;
   String? _currentPhotoBase64;
@@ -75,6 +79,7 @@ class _UserProfilePageState extends State<UserProfilePage>
 
   @override
   void dispose() {
+    _resendTimer?.cancel();
     _linkSubscription?.cancel();
     _nameController.dispose();
     _emailController.dispose();
@@ -85,6 +90,7 @@ class _UserProfilePageState extends State<UserProfilePage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed && _stage == 'awaiting_link') {
+      _syncResendCooldown();
       _checkVerificationStatus();
     }
   }
@@ -382,9 +388,18 @@ class _UserProfilePageState extends State<UserProfilePage>
       final email = _emailController.text.trim();
       final name = _nameController.text.trim();
       final photo = _base64Image ?? '';
+      final normalizedEmail = email.toLowerCase();
+
+      final cooldown = await _remainingMagicLinkCooldown(normalizedEmail);
+      if (cooldown > 0) {
+        _showSnack(
+          'Please wait ${cooldown}s before requesting another link.',
+        );
+        return;
+      }
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('pendingEmailLink', email);
+      await prefs.setString('pendingEmailLink', normalizedEmail);
       await prefs.setString('pendingName', name);
       await prefs.setString('pendingPhoto', photo);
       await prefs.setBool('pendingIsFreshStart', isFreshStart);
@@ -398,17 +413,82 @@ class _UserProfilePageState extends State<UserProfilePage>
       );
 
       await FirebaseAuth.instance.sendSignInLinkToEmail(
-        email: email,
+        email: normalizedEmail,
         actionCodeSettings: actionCodeSettings,
       );
 
+      await _setMagicLinkCooldown(
+        normalizedEmail,
+        _linkResendCooldownSeconds,
+      );
+      _syncResendCooldown();
+
       if (mounted) setState(() => _stage = 'awaiting_link');
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'too-many-requests') {
+        final email = _emailController.text.trim().toLowerCase();
+        if (email.isNotEmpty) {
+          await _setMagicLinkCooldown(
+            email,
+            _tooManyRequestsCooldownSeconds,
+          );
+          _syncResendCooldown();
+        }
+        _showSnack(
+          'Too many verification attempts from this device. Please wait 15 minutes, then try again.',
+        );
+      } else {
+        _showSnack('Error sending link: ${e.message ?? e.code}');
+      }
     } catch (e) {
       debugPrint('Magic Link Error: $e');
       _showSnack('Error sending link: $e');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  String _magicLinkCooldownKey(String email) =>
+      'magicLinkCooldownUntil:${email.toLowerCase()}';
+
+  Future<int> _remainingMagicLinkCooldown(String email) async {
+    final prefs = await SharedPreferences.getInstance();
+    final until = prefs.getInt(_magicLinkCooldownKey(email)) ?? 0;
+    final now = DateTime.now().millisecondsSinceEpoch;
+    final remainingMs = until - now;
+    if (remainingMs <= 0) return 0;
+    return (remainingMs / 1000).ceil();
+  }
+
+  Future<void> _setMagicLinkCooldown(String email, int seconds) async {
+    final prefs = await SharedPreferences.getInstance();
+    final until =
+        DateTime.now().millisecondsSinceEpoch + (seconds * 1000);
+    await prefs.setInt(_magicLinkCooldownKey(email), until);
+  }
+
+  Future<void> _syncResendCooldown() async {
+    final email = _emailController.text.trim().toLowerCase();
+    if (email.isEmpty) return;
+    final remaining = await _remainingMagicLinkCooldown(email);
+    if (!mounted) return;
+
+    _resendTimer?.cancel();
+    setState(() => _resendCooldownSeconds = remaining);
+
+    if (remaining <= 0) return;
+    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_resendCooldownSeconds <= 1) {
+        timer.cancel();
+        setState(() => _resendCooldownSeconds = 0);
+      } else {
+        setState(() => _resendCooldownSeconds -= 1);
+      }
+    });
   }
 
   Future<void> _onStartFreshTapped() async {
@@ -614,11 +694,16 @@ class _UserProfilePageState extends State<UserProfilePage>
     if (mounted) setState(() => _googleLoading = true);
     try {
       UserCredential? result;
+      final existingUser = FirebaseAuth.instance.currentUser;
 
       if (kIsWeb) {
         final googleProvider = GoogleAuthProvider()
           ..setCustomParameters({'prompt': 'select_account'});
-        result = await FirebaseAuth.instance.signInWithPopup(googleProvider);
+        if (existingUser != null && existingUser.isAnonymous) {
+          result = await existingUser.linkWithPopup(googleProvider);
+        } else {
+          result = await FirebaseAuth.instance.signInWithPopup(googleProvider);
+        }
       } else {
         final googleUser = await _googleSignIn.signIn();
         if (googleUser == null) return; // user cancelled
@@ -628,7 +713,11 @@ class _UserProfilePageState extends State<UserProfilePage>
           accessToken: googleAuth.accessToken,
           idToken: googleAuth.idToken,
         );
-        result = await FirebaseAuth.instance.signInWithCredential(credential);
+        if (existingUser != null && existingUser.isAnonymous) {
+          result = await existingUser.linkWithCredential(credential);
+        } else {
+          result = await FirebaseAuth.instance.signInWithCredential(credential);
+        }
       }
 
       final user = result.user;
@@ -794,9 +883,12 @@ class _UserProfilePageState extends State<UserProfilePage>
             'awaiting_link' => _AwaitingLinkView(
                 key: const ValueKey('awaiting_link'),
                 email: _emailController.text.trim(),
-                onResend: () => _sendMagicLink(),
+                onResend: _resendCooldownSeconds > 0
+                    ? null
+                    : () => _sendMagicLink(),
                 onVerified: _onMagicLinkVerified,
                 isLoading: _isLoading,
+                resendCooldownSeconds: _resendCooldownSeconds,
               ),
             'verifying' => const _VerifyingView(key: ValueKey('verifying')),
             _ => const SizedBox.shrink(),
@@ -994,9 +1086,10 @@ class _VerifyingView extends StatelessWidget {
 
 class _AwaitingLinkView extends StatelessWidget {
   final String email;
-  final VoidCallback onResend;
+  final VoidCallback? onResend;
   final VoidCallback onVerified;
   final bool isLoading;
+  final int resendCooldownSeconds;
 
   const _AwaitingLinkView({
     super.key,
@@ -1004,6 +1097,7 @@ class _AwaitingLinkView extends StatelessWidget {
     required this.onResend,
     required this.onVerified,
     required this.isLoading,
+    required this.resendCooldownSeconds,
   });
 
   @override
@@ -1054,9 +1148,15 @@ class _AwaitingLinkView extends StatelessWidget {
                 const SizedBox(height: 16),
                 TextButton(
                   onPressed: onResend,
-                  child: const Text(
-                    'Resend email',
-                    style: TextStyle(color: VoxColors.blue),
+                  child: Text(
+                    resendCooldownSeconds > 0
+                        ? 'Resend in ${resendCooldownSeconds}s'
+                        : 'Resend email',
+                    style: TextStyle(
+                      color: onResend == null
+                          ? Colors.white38
+                          : VoxColors.blue,
+                    ),
                   ),
                 ),
               ],
