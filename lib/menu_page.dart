@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -38,7 +38,7 @@ class _MenuPageState extends State<MenuPage> {
   bool _loadingProfile = true;
   bool _isOffline = false;
 
-  /// The actual Firestore document UID — may differ from Firebase Auth UID
+  /// The actual Firestore document UID â€” may differ from Firebase Auth UID
   /// for anonymous-auth users whose profile was saved under a specific doc ID.
   String? _resolvedUid;
 
@@ -55,13 +55,13 @@ class _MenuPageState extends State<MenuPage> {
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  LOAD PROFILE
   //  Priority:
-  //  1. Firebase Auth user → look up Firestore by UID
-  //  2. If anonymous Auth user → try Firestore by email from SharedPrefs
-  //  3. If no match → treat as guest
-  // ─────────────────────────────────────────────
+  //  1. Firebase Auth user â†’ look up Firestore by UID
+  //  2. If anonymous Auth user â†’ try Firestore by email from SharedPrefs
+  //  3. If no match â†’ treat as guest
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _loadProfile() async {
     if (!mounted) return;
     setState(() {
@@ -75,7 +75,7 @@ class _MenuPageState extends State<MenuPage> {
       final savedEmail = prefs.getString('userEmail') ?? '';
       final hasProfilePref = prefs.getBool('hasProfile') ?? false;
 
-      // ── No auth user at all ──────────────────────
+      // â”€â”€ No auth user at all â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       if (user == null) {
         if (mounted) {
           setState(() {
@@ -89,7 +89,7 @@ class _MenuPageState extends State<MenuPage> {
 
       _isFirebaseAnonymous = user.isAnonymous;
 
-      // ── Real (non-anonymous) Firebase Auth user ──
+      // â”€â”€ Real (non-anonymous) Firebase Auth user â”€â”€
       if (!user.isAnonymous) {
         final doc = await FirebaseFirestore.instance
             .collection('users')
@@ -111,7 +111,7 @@ class _MenuPageState extends State<MenuPage> {
         return;
       }
 
-      // ── Anonymous Firebase Auth user ─────────────
+      // â”€â”€ Anonymous Firebase Auth user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       // Check if they filled in the profile form (saved under anonymous UID)
       if (hasProfilePref) {
         // First try by UID (new user who just signed up)
@@ -159,7 +159,7 @@ class _MenuPageState extends State<MenuPage> {
           }
         }
 
-        // hasProfile pref was set but no Firestore doc found — use saved name
+        // hasProfile pref was set but no Firestore doc found â€” use saved name
         final savedName = prefs.getString('userName') ?? '';
         if (savedName.isNotEmpty && mounted) {
           setState(() {
@@ -170,7 +170,7 @@ class _MenuPageState extends State<MenuPage> {
         }
       }
 
-      // Pure guest — no profile
+      // Pure guest â€” no profile
       if (mounted) {
         setState(() {
           _hasProfile = false;
@@ -193,9 +193,9 @@ class _MenuPageState extends State<MenuPage> {
     if (mounted) setState(() => _loadingProfile = false);
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  AVATAR
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildAvatar({double radius = 34}) {
     // Photo from base64
     if (_base64Image != null) {
@@ -230,9 +230,9 @@ class _MenuPageState extends State<MenuPage> {
     );
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  LANGUAGE PICKER
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _showLanguagePicker(BuildContext context, LanguageProvider lang) {
     showModalBottomSheet(
       context: context,
@@ -289,12 +289,12 @@ class _MenuPageState extends State<MenuPage> {
                             decoration: BoxDecoration(
                               color: lang.selectedLanguage == l
                                   ? const Color(0xFF4B9EFF)
-                                  : Colors.white.withOpacity(0.04),
+                                  : Colors.white.withValues(alpha: 0.04),
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: lang.selectedLanguage == l
                                     ? const Color(0xFF4B9EFF)
-                                    : Colors.white.withOpacity(0.08),
+                                    : Colors.white.withValues(alpha: 0.08),
                               ),
                             ),
                             child: Row(
@@ -330,9 +330,9 @@ class _MenuPageState extends State<MenuPage> {
     );
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  LOGOUT
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _handleLogout(BuildContext context, LanguageProvider lang) {
     showDialog(
       context: context,
@@ -351,9 +351,9 @@ class _MenuPageState extends State<MenuPage> {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF5252).withOpacity(0.1),
+                  color: const Color(0xFFFF5252).withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFFFF5252).withOpacity(0.2)),
+                  border: Border.all(color: const Color(0xFFFF5252).withValues(alpha: 0.2)),
                 ),
                 child: const Text(
                   "LOGOUT",
@@ -378,7 +378,7 @@ class _MenuPageState extends State<MenuPage> {
               const SizedBox(height: 12),
               Text(
                 lang.t('logout_body'),
-                style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 14),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 14),
               ),
               const SizedBox(height: 28),
               Row(
@@ -388,7 +388,7 @@ class _MenuPageState extends State<MenuPage> {
                       onPressed: () => Navigator.pop(ctx),
                       style: OutlinedButton.styleFrom(
                         foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                        side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -436,9 +436,9 @@ class _MenuPageState extends State<MenuPage> {
     );
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  OPEN PROFILE PAGE
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _openProfile(BuildContext context) async {
     await Navigator.push(
       context,
@@ -457,9 +457,9 @@ class _MenuPageState extends State<MenuPage> {
     _loadProfile();
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  HELPERS
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildMenuItem({
     required IconData icon,
     required String title,
@@ -473,10 +473,10 @@ class _MenuPageState extends State<MenuPage> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: isDanger ? const Color(0xFFFF5252).withOpacity(0.1) : Colors.white.withOpacity(0.04),
+          color: isDanger ? const Color(0xFFFF5252).withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isDanger ? const Color(0xFFFF5252).withOpacity(0.2) : Colors.white.withOpacity(0.08),
+            color: isDanger ? const Color(0xFFFF5252).withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.08),
           ),
         ),
         child: Row(
@@ -500,12 +500,12 @@ class _MenuPageState extends State<MenuPage> {
             if (trailing != null)
               Text(
                 trailing,
-                style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12),
               )
             else
               Icon(
                 isDanger ? Icons.logout : Icons.chevron_right,
-                color: isDanger ? const Color(0xFFFF5252).withOpacity(0.5) : Colors.white24,
+                color: isDanger ? const Color(0xFFFF5252).withValues(alpha: 0.5) : Colors.white24,
                 size: 18,
               ),
           ],
@@ -522,16 +522,16 @@ class _MenuPageState extends State<MenuPage> {
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w800,
-          color: Colors.white.withOpacity(0.3),
+          color: Colors.white.withValues(alpha: 0.3),
           letterSpacing: 2,
         ),
       ),
     );
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  BUILD
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
@@ -541,7 +541,7 @@ class _MenuPageState extends State<MenuPage> {
         backgroundColor: const Color(0xFF0A0E1A),
         body: Column(
         children: [
-          // ── Header ──────────────────────────────────
+          // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           Container(
             width: double.infinity,
             padding: EdgeInsets.only(
@@ -577,7 +577,7 @@ class _MenuPageState extends State<MenuPage> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Color(0xFF0A0E1A).withOpacity(0.2),
+                      color: Color(0xFF0A0E1A).withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Row(
@@ -590,7 +590,7 @@ class _MenuPageState extends State<MenuPage> {
                         ),
                         SizedBox(width: 6),
                         Text(
-                          "Offline — showing cached data",
+                          "Offline â€” showing cached data",
                           style: TextStyle(
                             color: Color(0xFFF0F4FF),
                             fontSize: 11,
@@ -610,7 +610,7 @@ class _MenuPageState extends State<MenuPage> {
                           height: 72,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                           ),
                         )
                       : Stack(
@@ -653,7 +653,7 @@ class _MenuPageState extends State<MenuPage> {
                         width: 100,
                         height: 14,
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.3),
+                          color: Colors.white.withValues(alpha: 0.3),
                           borderRadius: BorderRadius.circular(6),
                         ),
                       )
@@ -676,7 +676,7 @@ class _MenuPageState extends State<MenuPage> {
                     child: Text(
                       _email,
                       style: TextStyle(
-                        color: Colors.white.withOpacity(0.6),
+                        color: Colors.white.withValues(alpha: 0.6),
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
@@ -693,7 +693,7 @@ class _MenuPageState extends State<MenuPage> {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: Color(0xFF0A0E1A).withOpacity(0.15),
+                      color: Color(0xFF0A0E1A).withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
@@ -709,7 +709,7 @@ class _MenuPageState extends State<MenuPage> {
             ),
           ),
 
-          // ── Menu Items ───────────────────────────────
+          // â”€â”€ Menu Items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           Expanded(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(16),
@@ -811,7 +811,7 @@ class _MenuPageState extends State<MenuPage> {
                     ),
                   ],
 
-                  // Logout — show for any user that has a verified account
+                  // Logout â€” show for any user that has a verified account
                   if (_hasProfile || !_isFirebaseAnonymous) ...[
                     const SizedBox(height: 4),
                     _buildMenuItem(
@@ -896,3 +896,4 @@ class _MenuPageState extends State<MenuPage> {
     );
   }
 }
+

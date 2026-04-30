@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'tts_service.dart';
 import 'language_provider.dart';
@@ -46,7 +46,7 @@ class MiniPlayerBar extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Color(0xFF0A0E1A).withOpacity(0.25),
+                color: Color(0xFF0A0E1A).withValues(alpha: 0.25),
                 blurRadius: 8,
                 offset: const Offset(0, -2),
               ),
@@ -187,3 +187,4 @@ class MiniPlayerBar extends StatelessWidget {
     );
   }
 }
+

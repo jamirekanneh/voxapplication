@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'ai_service.dart';
@@ -13,7 +13,7 @@ class SavedAssessmentsPage extends StatefulWidget {
 class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
   final User? currentUser = FirebaseAuth.instance.currentUser;
 
-  // ── Source filter ('All' | 'Home' | 'Notes') ────────────────────────
+  // â”€â”€ Source filter ('All' | 'Home' | 'Notes') â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   String _filter = 'All';
 
   void _openAssessment(Map<String, dynamic> data) async {
@@ -76,7 +76,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF5252).withOpacity(0.85),
+              backgroundColor: const Color(0xFFFF5252).withValues(alpha: 0.85),
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
               elevation: 0,
@@ -89,20 +89,20 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
     );
   }
 
-  // ── Source badge ─────────────────────────────────────────────────────
+  // â”€â”€ Source badge â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _sourceBadge(String source) {
     final isHome = source == 'Home';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: isHome
-            ? const Color(0xFF4B9EFF).withOpacity(0.12)
-            : const Color(0xFF9B59B6).withOpacity(0.12),
+            ? const Color(0xFF4B9EFF).withValues(alpha: 0.12)
+            : const Color(0xFF9B59B6).withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: isHome
-              ? const Color(0xFF4B9EFF).withOpacity(0.3)
-              : const Color(0xFF9B59B6).withOpacity(0.3),
+              ? const Color(0xFF4B9EFF).withValues(alpha: 0.3)
+              : const Color(0xFF9B59B6).withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -130,7 +130,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
     );
   }
 
-  // ── Filter chip ──────────────────────────────────────────────────────
+  // â”€â”€ Filter chip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _filterChip(String label, IconData icon) {
     final selected = _filter == label;
     return GestureDetector(
@@ -141,12 +141,12 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
         decoration: BoxDecoration(
           color: selected
               ? const Color(0xFF4B9EFF)
-              : Colors.white.withOpacity(0.05),
+              : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: selected
                 ? const Color(0xFF4B9EFF)
-                : Colors.white.withOpacity(0.1),
+                : Colors.white.withValues(alpha: 0.1),
           ),
         ),
         child: Row(
@@ -193,7 +193,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4B9EFF).withOpacity(0.1),
+                  color: const Color(0xFF4B9EFF).withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.lock_outline_rounded,
@@ -211,7 +211,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               Text(
                 'Please sign in to view your\nsaved assessments.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withOpacity(0.5), height: 1.5),
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.5), height: 1.5),
               ),
             ],
           ),
@@ -225,7 +225,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ── Top bar ───────────────────────────────────────────────
+            // â”€â”€ Top bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 8, 16, 0),
               child: Row(
@@ -260,10 +260,10 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4B9EFF).withOpacity(0.1),
+                      color: const Color(0xFF4B9EFF).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                          color: const Color(0xFF4B9EFF).withOpacity(0.2)),
+                          color: const Color(0xFF4B9EFF).withValues(alpha: 0.2)),
                     ),
                     child: const Icon(Icons.bookmarks_outlined,
                         color: Color(0xFF4B9EFF), size: 18),
@@ -274,7 +274,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
 
             const SizedBox(height: 12),
 
-            // ── Filter chips ──────────────────────────────────────────
+            // â”€â”€ Filter chips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Row(
@@ -291,7 +291,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
             const SizedBox(height: 16),
             const Divider(height: 1, color: Colors.white10),
 
-            // ── List ──────────────────────────────────────────────────
+            // â”€â”€ List â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Expanded(
               child: StreamBuilder<QuerySnapshot>(
                 stream: FirebaseFirestore.instance
@@ -357,17 +357,17 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                           (data['createdAt'] as Timestamp?)?.toDate();
                       final dateStr = timestamp != null
                           ? '${timestamp.day}/${timestamp.month}/${timestamp.year}'
-                          : '—';
+                          : 'â€”';
 
                       return GestureDetector(
                         onTap: () => _openAssessment(data),
                         child: Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.04),
+                            color: Colors.white.withValues(alpha: 0.04),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                                color: Colors.white.withOpacity(0.08)),
+                                color: Colors.white.withValues(alpha: 0.08)),
                           ),
                           child: Padding(
                             padding: const EdgeInsets.all(14),
@@ -379,7 +379,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                                   height: 46,
                                   decoration: BoxDecoration(
                                     color: const Color(0xFF4B9EFF)
-                                        .withOpacity(0.12),
+                                        .withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: const Icon(Icons.style_outlined,
@@ -421,28 +421,28 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                                           Icon(Icons.quiz_outlined,
                                               size: 11,
                                               color: Colors.white
-                                                  .withOpacity(0.4)),
+                                                  .withValues(alpha: 0.4)),
                                           const SizedBox(width: 4),
                                           Text(
                                             '$questions question${questions == 1 ? '' : 's'}',
                                             style: TextStyle(
                                               fontSize: 11,
                                               color: Colors.white
-                                                  .withOpacity(0.45),
+                                                  .withValues(alpha: 0.45),
                                             ),
                                           ),
                                           const SizedBox(width: 10),
                                           Icon(Icons.calendar_today_outlined,
                                               size: 11,
                                               color: Colors.white
-                                                  .withOpacity(0.4)),
+                                                  .withValues(alpha: 0.4)),
                                           const SizedBox(width: 4),
                                           Text(
                                             dateStr,
                                             style: TextStyle(
                                               fontSize: 11,
                                               color: Colors.white
-                                                  .withOpacity(0.45),
+                                                  .withValues(alpha: 0.45),
                                             ),
                                           ),
                                         ],
@@ -487,7 +487,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: const Color(0xFF4B9EFF).withOpacity(0.08),
+                color: const Color(0xFF4B9EFF).withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.bookmarks_outlined,
@@ -506,7 +506,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               'Generate a Q&A Assessment from any document in Home or note in Notes, then tap Save.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: Colors.white.withOpacity(0.45),
+                  color: Colors.white.withValues(alpha: 0.45),
                   fontSize: 13,
                   height: 1.6),
             ),
@@ -522,7 +522,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.filter_list_off_rounded,
-              color: Colors.white.withOpacity(0.2), size: 48),
+              color: Colors.white.withValues(alpha: 0.2), size: 48),
           const SizedBox(height: 16),
           Text(
             'No $_filter assessments',
@@ -535,7 +535,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
   }
 }
 
-// ── Lightweight Assessment Viewer ────────────────────────────────────────────
+// â”€â”€ Lightweight Assessment Viewer â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class AssessmentViewerScreen extends StatefulWidget {
   final String title;
   final List<Flashcard> flashcards;
@@ -584,7 +584,7 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // ── Header ────────────────────────────────────────────────
+            // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Padding(
               padding: const EdgeInsets.fromLTRB(4, 8, 16, 0),
               child: Row(
@@ -620,14 +620,14 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
               ),
             ),
 
-            // ── Progress bar ──────────────────────────────────────────
+            // â”€â”€ Progress bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: (_currentCard + 1) / total,
-                  backgroundColor: Colors.white.withOpacity(0.05),
+                  backgroundColor: Colors.white.withValues(alpha: 0.05),
                   valueColor:
                       const AlwaysStoppedAnimation<Color>(Color(0xFF4B9EFF)),
                   minHeight: 3,
@@ -638,13 +638,13 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
             const Divider(height: 1, color: Colors.white10),
             const SizedBox(height: 8),
 
-            // ── Tap hint ─────────────────────────────────────────────
+            // â”€â”€ Tap hint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Text(
               'Tap card to reveal answer',
-              style: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 11),
+              style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 11),
             ),
 
-            // ── Flashcard ─────────────────────────────────────────────
+            // â”€â”€ Flashcard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(20, 12, 20, 12),
@@ -662,18 +662,18 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                       decoration: BoxDecoration(
                         color: isFlipped
                             ? const Color(0xFF161B2E)
-                            : Colors.white.withOpacity(0.04),
+                            : Colors.white.withValues(alpha: 0.04),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
                           color: isFlipped
-                              ? const Color(0xFF4B9EFF).withOpacity(0.35)
-                              : Colors.white.withOpacity(0.08),
+                              ? const Color(0xFF4B9EFF).withValues(alpha: 0.35)
+                              : Colors.white.withValues(alpha: 0.08),
                         ),
                         boxShadow: [
                           if (isFlipped)
                             BoxShadow(
                               color:
-                                  const Color(0xFF4B9EFF).withOpacity(0.08),
+                                  const Color(0xFF4B9EFF).withValues(alpha: 0.08),
                               blurRadius: 24,
                               offset: const Offset(0, 8),
                             ),
@@ -688,8 +688,8 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                                 horizontal: 14, vertical: 5),
                             decoration: BoxDecoration(
                               color: isFlipped
-                                  ? const Color(0xFF4B9EFF).withOpacity(0.15)
-                                  : Colors.white.withOpacity(0.05),
+                                  ? const Color(0xFF4B9EFF).withValues(alpha: 0.15)
+                                  : Colors.white.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
@@ -731,7 +731,7 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
               ),
             ),
 
-            // ── Navigation ────────────────────────────────────────────
+            // â”€â”€ Navigation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Padding(
               padding: const EdgeInsets.fromLTRB(20, 0, 20, 28),
               child: Row(
@@ -748,14 +748,14 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         side: BorderSide(
                           color: _currentCard > 0
-                              ? Colors.white.withOpacity(0.18)
-                              : Colors.white.withOpacity(0.05),
+                              ? Colors.white.withValues(alpha: 0.18)
+                              : Colors.white.withValues(alpha: 0.05),
                         ),
                         foregroundColor: Colors.white70,
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14)),
                       ),
-                      child: const Text('← Previous',
+                      child: const Text('â† Previous',
                           style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
@@ -775,10 +775,10 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14)),
                         disabledBackgroundColor:
-                            Colors.white.withOpacity(0.05),
+                            Colors.white.withValues(alpha: 0.05),
                         elevation: 0,
                       ),
-                      child: const Text('Next →',
+                      child: const Text('Next â†’',
                           style: TextStyle(fontWeight: FontWeight.w900)),
                     ),
                   ),
@@ -791,3 +791,4 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
     );
   }
 }
+

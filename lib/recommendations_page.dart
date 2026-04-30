@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -106,10 +106,10 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             backgroundColor: const Color(0xFF0A0E1A),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
-              side: BorderSide(color: Colors.white.withOpacity(0.1)),
+              side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
             ),
             title: const Text('Thank You!', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-            content: Text('Your recommendation and $_rating-star rating have been submitted successfully.', style: TextStyle(color: Colors.white.withOpacity(0.8))),
+            content: Text('Your recommendation and $_rating-star rating have been submitted successfully.', style: TextStyle(color: Colors.white.withValues(alpha: 0.8))),
             actions: [
               ElevatedButton(
                 onPressed: () {
@@ -170,7 +170,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             const SizedBox(height: 8),
             Text(
               'Your feedback helps us improve\nand build features you\'ll love.',
-              style: TextStyle(fontSize: 14, color: Colors.white.withOpacity(0.5), height: 1.5),
+              style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.5), height: 1.5),
             ),
             const SizedBox(height: 32),
 
@@ -178,16 +178,16 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.04),
+                color: Colors.white.withValues(alpha: 0.04),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.08)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   const Text('Rate Vox Features', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
                   const SizedBox(height: 8),
-                  Text('How would you rate your experience so far?', style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.5))),
+                  Text('How would you rate your experience so far?', style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.5))),
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -199,11 +199,11 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: _rating > index ? const Color(0xFF4B9EFF).withOpacity(0.15) : Colors.transparent,
+                            color: _rating > index ? const Color(0xFF4B9EFF).withValues(alpha: 0.15) : Colors.transparent,
                           ),
                           child: Icon(
                             _rating > index ? Icons.star_rounded : Icons.star_outline_rounded,
-                            color: _rating > index ? const Color(0xFF4B9EFF) : Colors.white.withOpacity(0.3),
+                            color: _rating > index ? const Color(0xFF4B9EFF) : Colors.white.withValues(alpha: 0.3),
                             size: 32,
                           ),
                         ),
@@ -219,9 +219,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.04),
+                color: Colors.white.withValues(alpha: 0.04),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withOpacity(0.08)),
+                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -234,13 +234,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Text('What can we improve or add next?', style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.5))),
+                  Text('What can we improve or add next?', style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.5))),
                   const SizedBox(height: 16),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.2),
+                      color: Colors.black.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                     ),
                     child: TextField(
                       controller: _controller,
@@ -250,7 +250,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
                         hintText: 'Write your recommendation here...',
-                        hintStyle: TextStyle(color: Colors.white.withOpacity(0.3), fontSize: 14),
+                        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 14),
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.all(16),
                         counterText: '',
@@ -267,17 +267,17 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                                   width: 36,
                                   height: 36,
                                   decoration: BoxDecoration(
-                                    color: _isListening ? Colors.red.withOpacity(0.9) : Colors.white.withOpacity(0.05),
+                                    color: _isListening ? Colors.red.withValues(alpha: 0.9) : Colors.white.withValues(alpha: 0.05),
                                     shape: BoxShape.circle,
                                     border: Border.all(
-                                      color: _isListening ? Colors.red : Colors.white.withOpacity(0.15),
+                                      color: _isListening ? Colors.red : Colors.white.withValues(alpha: 0.15),
                                       width: 1.5,
                                     ),
                                   ),
                                   child: Icon(
                                     _isListening ? Icons.stop_rounded : Icons.mic_none_rounded,
                                     size: 18,
-                                    color: _isListening ? Colors.white : Colors.white.withOpacity(0.6),
+                                    color: _isListening ? Colors.white : Colors.white.withValues(alpha: 0.6),
                                   ),
                                 ),
                               ),
@@ -290,7 +290,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerRight,
-                    child: Text('$_charCount/1000', style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.4))),
+                    child: Text('$_charCount/1000', style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.4))),
                   ),
                 ],
               ),
@@ -302,9 +302,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFF4B9EFF).withOpacity(0.08),
+                color: const Color(0xFF4B9EFF).withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF4B9EFF).withOpacity(0.2)),
+                border: Border.all(color: const Color(0xFF4B9EFF).withValues(alpha: 0.2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -329,7 +329,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             Center(
               child: Text(
                 'This is optional. You can skip and do it later.',
-                style: TextStyle(fontSize: 12, color: Colors.white.withOpacity(0.4)),
+                style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4)),
               ),
             ),
             
@@ -343,8 +343,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF4B9EFF),
                   foregroundColor: Colors.white,
-                  disabledBackgroundColor: const Color(0xFF4B9EFF).withOpacity(0.3),
-                  disabledForegroundColor: Colors.white.withOpacity(0.5),
+                  disabledBackgroundColor: const Color(0xFF4B9EFF).withValues(alpha: 0.3),
+                  disabledForegroundColor: Colors.white.withValues(alpha: 0.5),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                   elevation: 0,
                 ),
@@ -362,8 +362,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
               child: OutlinedButton(
                 onPressed: () => Navigator.pop(context),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white.withOpacity(0.8),
-                  side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                  foregroundColor: Colors.white.withValues(alpha: 0.8),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
                   shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                 ),
                 child: const Text('Skip', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -388,10 +388,11 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             child: Icon(Icons.circle, size: 6, color: Color(0xFF4B9EFF)),
           ),
           Expanded(
-            child: Text(text, style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.8), height: 1.4)),
+            child: Text(text, style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.8), height: 1.4)),
           ),
         ],
       ),
     );
   }
 }
+

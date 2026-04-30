@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
@@ -37,7 +37,7 @@ class _ReaderPageState extends State<ReaderPage> {
   bool _autoSpeed = false;
   String _commandFeedback = '';
 
-  // Pinned highlight — set when user says "highlight text"
+  // Pinned highlight â€” set when user says "highlight text"
   bool _hasPinnedHighlight = false;
   int _pinnedStart = 0;
   int _pinnedEnd = 0;
@@ -65,15 +65,15 @@ class _ReaderPageState extends State<ReaderPage> {
   ];
 
   static const _commandList = [
-    ['▶', 'play / resume', 'Resume reading'],
-    ['⏸', 'pause / wait', 'Pause reading'],
-    ['⏩', 'forward / skip', 'Skip +10 seconds'],
-    ['⏪', 'back / rewind', 'Go back −10 seconds'],
-    ['⚡', 'faster / speed up', 'Increase speed'],
-    ['🐢', 'slower / slow down', 'Decrease speed'],
-    ['🔄', 'restart / beginning', 'Start from beginning'],
-    ['🛑', 'stop / exit', 'Close reader'],
-    ['🔆', 'highlight / mark', 'Highlight last sentence'],
+    ['â–¶', 'play / resume', 'Resume reading'],
+    ['â¸', 'pause / wait', 'Pause reading'],
+    ['â©', 'forward / skip', 'Skip +10 seconds'],
+    ['âª', 'back / rewind', 'Go back âˆ’10 seconds'],
+    ['âš¡', 'faster / speed up', 'Increase speed'],
+    ['ðŸ¢', 'slower / slow down', 'Decrease speed'],
+    ['ðŸ”„', 'restart / beginning', 'Start from beginning'],
+    ['ðŸ›‘', 'stop / exit', 'Close reader'],
+    ['ðŸ”†', 'highlight / mark', 'Highlight last sentence'],
   ];
 
   @override
@@ -116,7 +116,7 @@ class _ReaderPageState extends State<ReaderPage> {
     super.dispose();
   }
 
-  // ── Init STT ──────────────────────────────────────────
+  // â”€â”€ Init STT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _initSpeech() async {
     final status = await Permission.microphone.request();
     if (!status.isGranted) return;
@@ -151,7 +151,7 @@ class _ReaderPageState extends State<ReaderPage> {
     }
   }
 
-  /// Debounced restart — prevents tight restart loops
+  /// Debounced restart â€” prevents tight restart loops
   void _scheduleRestart() {
     final now = DateTime.now();
     // Minimum 500ms between restarts
@@ -164,7 +164,7 @@ class _ReaderPageState extends State<ReaderPage> {
     });
   }
 
-  // ── Continuous listening (always-on) ──────────────────
+  // â”€â”€ Continuous listening (always-on) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _startAlwaysOnListening() async {
     if (!mounted || !_speechReady || _isListening || _commandProcessing) return;
     _lastRestartTime = DateTime.now();
@@ -178,7 +178,7 @@ class _ReaderPageState extends State<ReaderPage> {
 
       await _speech.listen(
         localeId: 'en_US',
-        // 60s window — engine auto-chunks; onStatus 'done' restarts it
+        // 60s window â€” engine auto-chunks; onStatus 'done' restarts it
         listenFor: const Duration(seconds: 60),
         // Wait 2.5s of silence before considering the utterance done
         pauseFor: const Duration(seconds: 2, milliseconds: 500),
@@ -247,7 +247,7 @@ class _ReaderPageState extends State<ReaderPage> {
     return parts.length <= 3 && highConf.any((k) => words.contains(k));
   }
 
-  // ── Toggle always-on listening ─────────────────────────
+  // â”€â”€ Toggle always-on listening â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _toggleAlwaysOn() {
     setState(() => _alwaysOnEnabled = !_alwaysOnEnabled);
     if (_alwaysOnEnabled) {
@@ -266,21 +266,21 @@ class _ReaderPageState extends State<ReaderPage> {
   ) {
     if (!mounted) return;
 
-    String feedback = '❓ Not recognised';
+    String feedback = 'â“ Not recognised';
     VoidCallback? action;
 
     if (_has(words, ['play', 'resume', 'continue', 'start reading', 'go'])) {
-      feedback = '▶ Playing';
+      feedback = 'â–¶ Playing';
       action = () {
         if (!tts.isPlaying) tts.togglePause(locale);
       };
     } else if (_has(words, ['pause', 'stop reading', 'wait', 'hold on'])) {
-      feedback = '⏸ Paused';
+      feedback = 'â¸ Paused';
       action = () {
         if (tts.isPlaying) tts.togglePause(locale);
       };
     } else if (_has(words, ['forward', 'skip', 'next', 'skip ahead'])) {
-      feedback = '⏩ +10 seconds';
+      feedback = 'â© +10 seconds';
       action = () => tts.seekForward(10, locale);
     } else if (_has(words, [
       'back',
@@ -289,7 +289,7 @@ class _ReaderPageState extends State<ReaderPage> {
       'go back',
       'previous',
     ])) {
-      feedback = '⏪ −10 seconds';
+      feedback = 'âª âˆ’10 seconds';
       action = () => tts.seekBackward(10, locale);
     } else if (_has(words, [
       'faster',
@@ -297,7 +297,7 @@ class _ReaderPageState extends State<ReaderPage> {
       'increase speed',
       'go faster',
     ])) {
-      feedback = '⚡ Speed up';
+      feedback = 'âš¡ Speed up';
       action = () =>
           tts.setRate((tts.speechRate + 0.2).clamp(0.1, 2.0), locale);
     } else if (_has(words, [
@@ -306,14 +306,14 @@ class _ReaderPageState extends State<ReaderPage> {
       'decrease speed',
       'go slower',
     ])) {
-      feedback = '🐢 Slower';
+      feedback = 'ðŸ¢ Slower';
       action = () =>
           tts.setRate((tts.speechRate - 0.2).clamp(0.1, 2.0), locale);
     } else if (_has(words, ['restart', 'start over', 'from the beginning'])) {
-      feedback = '🔄 Restarted';
+      feedback = 'ðŸ”„ Restarted';
       action = () => tts.restart(locale);
     } else if (_has(words, ['stop', 'close', 'exit', 'quit reader'])) {
-      feedback = '🛑 Stopped';
+      feedback = 'ðŸ›‘ Stopped';
       action = () {
         tts.stop();
         if (mounted) Navigator.pop(context);
@@ -324,7 +324,7 @@ class _ReaderPageState extends State<ReaderPage> {
       'highlight that',
       'mark text',
     ])) {
-      feedback = '🔆 Sentence highlighted';
+      feedback = 'ðŸ”† Sentence highlighted';
       action = () {
         setState(() {
           _hasPinnedHighlight = true;
@@ -375,7 +375,7 @@ class _ReaderPageState extends State<ReaderPage> {
   bool _has(String words, List<String> keywords) =>
       keywords.any((k) => words.contains(k));
 
-  // ── Open AI page ──────────────────────────────
+  // â”€â”€ Open AI page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _openAiPage(String mode) async {
     final tts = context.read<TtsService>();
     final locale = context.read<LanguageProvider>().ttsLocale;
@@ -477,18 +477,18 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Helpers ───────────────────────────────────────────
+  // â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   String _flagFromLocale(String locale) {
     const flags = {
-      'en': '🇺🇸',
-      'es': '🇪🇸',
-      'fr': '🇫🇷',
-      'ar': '🇸🇦',
-      'tr': '🇹🇷',
-      'zh': '🇨🇳',
+      'en': 'ðŸ‡ºðŸ‡¸',
+      'es': 'ðŸ‡ªðŸ‡¸',
+      'fr': 'ðŸ‡«ðŸ‡·',
+      'ar': 'ðŸ‡¸ðŸ‡¦',
+      'tr': 'ðŸ‡¹ðŸ‡·',
+      'zh': 'ðŸ‡¨ðŸ‡³',
     };
     final prefix = locale.split('-').first.split('_').first.toLowerCase();
-    return flags[prefix] ?? '🌐';
+    return flags[prefix] ?? 'ðŸŒ';
   }
 
   String _speedLabel(double rate) {
@@ -519,7 +519,7 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Highlighted text ──────────────────────────
+  // â”€â”€ Highlighted text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildHighlightedText(TtsService tts) {
     final text = tts.content ?? '';
     if (text.isEmpty) {
@@ -604,12 +604,12 @@ class _ReaderPageState extends State<ReaderPage> {
         text: text,
         style: isHighlighted
             ? TextStyle(
-                backgroundColor: const Color(0xFF4B9EFF).withOpacity(0.2),
+                backgroundColor: const Color(0xFF4B9EFF).withValues(alpha: 0.2),
                 color: const Color(0xFF4B9EFF),
                 fontWeight: FontWeight.w900,
                 decoration: TextDecoration.underline,
                 decorationThickness: 2,
-                decorationColor: const Color(0xFF4B9EFF).withOpacity(0.5),
+                decorationColor: const Color(0xFF4B9EFF).withValues(alpha: 0.5),
               )
             : null,
       );
@@ -630,7 +630,7 @@ class _ReaderPageState extends State<ReaderPage> {
                 fontWeight: FontWeight.w900,
                 color: isHighlighted ? const Color(0xFF4B9EFF) : Colors.white,
                 backgroundColor: isHighlighted
-                    ? const Color(0xFF4B9EFF).withOpacity(0.2)
+                    ? const Color(0xFF4B9EFF).withValues(alpha: 0.2)
                     : null,
               ),
             ),
@@ -639,10 +639,10 @@ class _ReaderPageState extends State<ReaderPage> {
               style: TextStyle(
                 fontWeight: FontWeight.w300,
                 color: isHighlighted
-                    ? const Color(0xFF4B9EFF).withOpacity(0.8)
+                    ? const Color(0xFF4B9EFF).withValues(alpha: 0.8)
                     : Colors.white70,
                 backgroundColor: isHighlighted
-                    ? const Color(0xFF4B9EFF).withOpacity(0.2)
+                    ? const Color(0xFF4B9EFF).withValues(alpha: 0.2)
                     : null,
               ),
             ),
@@ -652,7 +652,7 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Study Buddy Chat ────────────────────────────
+  // â”€â”€ Study Buddy Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _showStudyBuddySheet() {
     showModalBottomSheet(
       context: context,
@@ -728,13 +728,13 @@ class _ReaderPageState extends State<ReaderPage> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: isUser
-                              ? const Color(0xFF4B9EFF).withOpacity(0.1)
-                              : Colors.white.withOpacity(0.05),
+                              ? const Color(0xFF4B9EFF).withValues(alpha: 0.1)
+                              : Colors.white.withValues(alpha: 0.05),
                           borderRadius: BorderRadius.circular(16),
                           border: Border.all(
                             color: isUser
-                                ? const Color(0xFF4B9EFF).withOpacity(0.3)
-                                : Colors.white.withOpacity(0.1),
+                                ? const Color(0xFF4B9EFF).withValues(alpha: 0.3)
+                                : Colors.white.withValues(alpha: 0.1),
                           ),
                         ),
                         constraints: BoxConstraints(
@@ -765,7 +765,7 @@ class _ReaderPageState extends State<ReaderPage> {
                           hintText: 'Ask about this document...',
                           hintStyle: const TextStyle(color: Colors.white38),
                           filled: true,
-                          fillColor: Colors.white.withOpacity(0.05),
+                          fillColor: Colors.white.withValues(alpha: 0.05),
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(25),
                             borderSide: BorderSide.none,
@@ -882,15 +882,15 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── AI Tools bar ──────────────────────────────
+  // â”€â”€ AI Tools bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildAiBar() {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
+        color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
@@ -916,9 +916,9 @@ class _ReaderPageState extends State<ReaderPage> {
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.06),
+                  color: Colors.white.withValues(alpha: 0.06),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.1)),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
@@ -985,9 +985,9 @@ class _ReaderPageState extends State<ReaderPage> {
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.purple.withOpacity(0.15),
+                  color: Colors.purple.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.purple.withOpacity(0.3)),
+                  border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
@@ -1024,7 +1024,7 @@ class _ReaderPageState extends State<ReaderPage> {
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withOpacity(0.15),
+                  color: Colors.blue.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Row(
@@ -1089,7 +1089,7 @@ class _ReaderPageState extends State<ReaderPage> {
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.15),
+                  color: Colors.orange.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: const Row(
@@ -1115,7 +1115,7 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Commands panel ─────────────────────────────────────
+  // â”€â”€ Commands panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildCommandsPanel() {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
@@ -1123,7 +1123,7 @@ class _ReaderPageState extends State<ReaderPage> {
       decoration: BoxDecoration(
         color: const Color(0xFF161B2E),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.08)),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1177,20 +1177,20 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Mic bar ────────────────────────────────────────────
+  // â”€â”€ Mic bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildMicBar() {
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: _isListening
-            ? Color(0xFF4B9EFF).withOpacity(0.1)
-            : Colors.white.withOpacity(0.04),
+            ? Color(0xFF4B9EFF).withValues(alpha: 0.1)
+            : Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(14),
         border: Border.all(
           color: _isListening
               ? const Color(0xFF4B9EFF)
-              : Colors.white.withOpacity(0.08),
+              : Colors.white.withValues(alpha: 0.08),
           width: 1.5,
         ),
       ),
@@ -1295,7 +1295,7 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Speed panel ────────────────────────────────────────
+  // â”€â”€ Speed panel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildSpeedPanel(TtsService tts, String locale) {
     final rate = tts.speechRate;
     final wordCount = widget.content.split(RegExp(r'\s+')).length;
@@ -1434,7 +1434,7 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Playback bar ───────────────────────────────────────
+  // â”€â”€ Playback bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildPlaybackBar(TtsService tts, String locale) {
     final flag = _flagFromLocale(locale);
     final rate = tts.speechRate;
@@ -1523,7 +1523,7 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Build ──────────────────────────────────────────────
+  // â”€â”€ Build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
     final tts = context.watch<TtsService>();
@@ -1603,7 +1603,7 @@ class _ReaderPageState extends State<ReaderPage> {
               ),
             ),
 
-            // ── AI Tools bar (always visible) ──────────
+            // â”€â”€ AI Tools bar (always visible) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             _buildAiBar(),
 
             // Commands panel (collapsible)
@@ -1633,3 +1633,4 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 }
+

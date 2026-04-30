@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'ai_service.dart';
 
 class DraggableAiAssistant extends StatefulWidget {
@@ -122,7 +122,7 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF4B9EFF).withOpacity(0.4),
+              color: const Color(0xFF4B9EFF).withValues(alpha: 0.4),
               blurRadius: 15,
               spreadRadius: 2,
             ),
@@ -153,12 +153,12 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Color(0xFF0A0E1A).withOpacity(0.2),
+            color: Color(0xFF0A0E1A).withValues(alpha: 0.2),
             blurRadius: 20,
             spreadRadius: 5,
           ),
         ],
-        border: Border.all(color: const Color(0xFF4B9EFF).withOpacity(0.5)),
+        border: Border.all(color: const Color(0xFF4B9EFF).withValues(alpha: 0.5)),
       ),
       child: Column(
         children: [
@@ -282,3 +282,4 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
     );
   }
 }
+

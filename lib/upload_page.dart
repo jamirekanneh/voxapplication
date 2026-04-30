@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -34,9 +34,9 @@ class _UploadPageState extends State<UploadPage> {
   bool _resolvedIsGuest = true;
   bool _resolveAttempted = false;
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  RESOLVE USER
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _resolveUser() async {
     if (_resolveAttempted) return;
     _resolveAttempted = true;
@@ -99,9 +99,9 @@ class _UploadPageState extends State<UploadPage> {
     if (!micStatus.isGranted) await Permission.microphone.request();
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  SHARED: save content then open reader
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _saveAndOpenReader({
     required String fileName,
     required String fileType,
@@ -144,7 +144,7 @@ class _UploadPageState extends State<UploadPage> {
         ? '"$fileName" added temporarily. Create an account to save it.'
         : fileContent.isNotEmpty
         ? '"$fileName" saved & reading started!'
-        : '"$fileName" saved — text could not be extracted from this format.';
+        : '"$fileName" saved â€” text could not be extracted from this format.';
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -178,9 +178,9 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  FILE VALIDATION
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   bool _isValidFile(PlatformFile file, String extension) {
     // Define allowed file types and their size limits
     const allowedTypes = {
@@ -256,9 +256,9 @@ class _UploadPageState extends State<UploadPage> {
     return true;
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  PICK & UPLOAD FILE
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _pickAnyFile() async {
     await _requestPermissionsIfNeeded();
     await _resolveUser();
@@ -348,7 +348,7 @@ class _UploadPageState extends State<UploadPage> {
 
       fileContent = fileContent.trim().replaceAll(RegExp(r'\n{3,}'), '\n\n');
       debugPrint(
-        '📄 Extracted ${fileContent.length} chars from $fileName ($extension)',
+        'ðŸ“„ Extracted ${fileContent.length} chars from $fileName ($extension)',
       );
 
       await _saveAndOpenReader(
@@ -371,9 +371,9 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  SCAN DOCUMENT  (camera → ML Kit OCR → save & read)
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  SCAN DOCUMENT  (camera â†’ ML Kit OCR â†’ save & read)
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _scanDocument() async {
     await _requestPermissionsIfNeeded();
     await _resolveUser();
@@ -464,7 +464,7 @@ class _UploadPageState extends State<UploadPage> {
               ctx,
               icon: Icons.document_scanner_rounded,
               title: 'Multi-Page',
-              subtitle: 'Take several photos — merged into one document',
+              subtitle: 'Take several photos â€” merged into one document',
               value: 'multi',
             ),
           ],
@@ -594,7 +594,7 @@ class _UploadPageState extends State<UploadPage> {
       }
 
       debugPrint(
-        '📷 Scanned ${scanned.length} chars, ${images.length} page(s)',
+        'ðŸ“· Scanned ${scanned.length} chars, ${images.length} page(s)',
       );
 
       final now = DateTime.now();
@@ -646,7 +646,7 @@ class _UploadPageState extends State<UploadPage> {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: const Color(0xFF4B9EFF).withOpacity(0.15),
+                color: const Color(0xFF4B9EFF).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: const Color(0xFF4B9EFF), size: 24),
@@ -679,9 +679,9 @@ class _UploadPageState extends State<UploadPage> {
     );
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  TEXT EXTRACTORS
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   Future<String> _extractPdfText(List<int> bytes) async {
     try {
@@ -820,9 +820,9 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  BUILD
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -880,7 +880,7 @@ class _UploadPageState extends State<UploadPage> {
                       textAlign: TextAlign.center,
                     ),
 
-                    // ── Guest notice ──────────────────────────
+                    // â”€â”€ Guest notice â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     FutureBuilder<bool>(
                       future: _isGuestAsync(),
                       builder: (context, snap) {
@@ -889,10 +889,10 @@ class _UploadPageState extends State<UploadPage> {
                           margin: const EdgeInsets.only(top: 20),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                             borderRadius: BorderRadius.circular(14),
                             border: Border.all(
-                              color: Colors.white.withOpacity(0.1),
+                              color: Colors.white.withValues(alpha: 0.1),
                             ),
                           ),
                           child: Row(
@@ -907,7 +907,7 @@ class _UploadPageState extends State<UploadPage> {
                                 child: Text(
                                   "You're browsing as a guest. Files will only be available until you close the app.",
                                   style: TextStyle(
-                                    color: Colors.white.withOpacity(0.6),
+                                    color: Colors.white.withValues(alpha: 0.6),
                                     fontSize: 12,
                                     height: 1.5,
                                   ),
@@ -921,7 +921,7 @@ class _UploadPageState extends State<UploadPage> {
 
                     const SizedBox(height: 36),
 
-                    // ── CHOOSE FILE ───────────────────────────
+                    // â”€â”€ CHOOSE FILE â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     Semantics(
                       label: 'Choose a file to upload and read aloud',
                       child: SizedBox(
@@ -945,7 +945,7 @@ class _UploadPageState extends State<UploadPage> {
                               borderRadius: BorderRadius.circular(18),
                             ),
                             elevation: 8,
-                            shadowColor: const Color(0xFF4B9EFF).withOpacity(0.4),
+                            shadowColor: const Color(0xFF4B9EFF).withValues(alpha: 0.4),
                           ),
                         ),
                       ),
@@ -953,12 +953,12 @@ class _UploadPageState extends State<UploadPage> {
 
                     const SizedBox(height: 16),
 
-                    // ── OR divider ────────────────────────────
+                    // â”€â”€ OR divider â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     Row(
                       children: [
                         Expanded(
                           child: Divider(
-                            color: Colors.white.withOpacity(0.1),
+                            color: Colors.white.withValues(alpha: 0.1),
                             thickness: 1,
                           ),
                         ),
@@ -967,7 +967,7 @@ class _UploadPageState extends State<UploadPage> {
                           child: Text(
                             'OR',
                             style: TextStyle(
-                              color: Colors.white.withOpacity(0.3),
+                              color: Colors.white.withValues(alpha: 0.3),
                               fontWeight: FontWeight.w900,
                               fontSize: 12,
                               letterSpacing: 2.0,
@@ -976,7 +976,7 @@ class _UploadPageState extends State<UploadPage> {
                         ),
                         Expanded(
                           child: Divider(
-                            color: Colors.white.withOpacity(0.1),
+                            color: Colors.white.withValues(alpha: 0.1),
                             thickness: 1,
                           ),
                         ),
@@ -985,7 +985,7 @@ class _UploadPageState extends State<UploadPage> {
 
                     const SizedBox(height: 16),
 
-                    // ── SCAN DOCUMENT ─────────────────────────
+                    // â”€â”€ SCAN DOCUMENT â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     Semantics(
                       label:
                           'Scan a physical document with your camera and read aloud',
@@ -1008,7 +1008,7 @@ class _UploadPageState extends State<UploadPage> {
                           style: OutlinedButton.styleFrom(
                             foregroundColor: Colors.white,
                             side: BorderSide(
-                              color: Colors.white.withOpacity(0.15),
+                              color: Colors.white.withValues(alpha: 0.15),
                               width: 1.5,
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 18),
@@ -1022,13 +1022,13 @@ class _UploadPageState extends State<UploadPage> {
 
                     const SizedBox(height: 24),
 
-                    // ── Scanning tips ─────────────────────────
+                    // â”€â”€ Scanning tips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.04),
+                        color: Colors.white.withValues(alpha: 0.04),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white.withOpacity(0.08)),
+                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1061,13 +1061,13 @@ class _UploadPageState extends State<UploadPage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 15, color: const Color(0xFF4B9EFF).withOpacity(0.6)),
+        Icon(icon, size: 15, color: const Color(0xFF4B9EFF).withValues(alpha: 0.6)),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             text,
             style: TextStyle(
-              color: Colors.white.withOpacity(0.5),
+              color: Colors.white.withValues(alpha: 0.5),
               fontSize: 12,
               height: 1.4,
               fontWeight: FontWeight.w500,
@@ -1086,3 +1086,4 @@ class _UploadPageState extends State<UploadPage> {
     return !(prefs.getBool('hasProfile') ?? false);
   }
 }
+

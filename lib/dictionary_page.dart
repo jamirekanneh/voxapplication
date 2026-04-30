@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
@@ -8,7 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'language_provider.dart';
 import 'analytics_service.dart';
 
-// ── API language codes for dictionaryapi.dev ──────────
+// â”€â”€ API language codes for dictionaryapi.dev â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const Map<String, String?> _apiLangCode = {
   'English': 'en',
   'Spanish': 'es',
@@ -18,10 +18,10 @@ const Map<String, String?> _apiLangCode = {
   'Chinese': null,
 };
 
-// MW Medical API key — get free from dictionaryapi.com
+// MW Medical API key â€” get free from dictionaryapi.com
 const String _mwMedicalKey = 'YOUR_MW_MEDICAL_API_KEY';
 
-// ── Source label shown on result card ────────────────
+// â”€â”€ Source label shown on result card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 enum _ResultSource { general, medical, cs, notFound }
 
 extension _SourceInfo on _ResultSource {
@@ -41,11 +41,11 @@ extension _SourceInfo on _ResultSource {
   String get emoji {
     switch (this) {
       case _ResultSource.general:
-        return '🌐';
+        return 'ðŸŒ';
       case _ResultSource.medical:
-        return '🏥';
+        return 'ðŸ¥';
       case _ResultSource.cs:
-        return '💻';
+        return 'ðŸ’»';
       case _ResultSource.notFound:
         return '';
     }
@@ -82,9 +82,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  VOICE SEARCH
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _startVoiceSearch(String? langCode) async {
     if (_isListening) {
       await _speech.stop();
@@ -154,15 +154,15 @@ class _DictionaryPageState extends State<DictionaryPage> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  MAIN SEARCH — smart routing
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  MAIN SEARCH â€” smart routing
   //
   //  Strategy:
   //  1. Fire general + medical requests in parallel
-  //  2. If general returns good definitions → use it
-  //  3. If general returns nothing / weak → prefer medical if it found it
-  //  4. If both fail → show error with suggestions
-  // ─────────────────────────────────────────────
+  //  2. If general returns good definitions â†’ use it
+  //  3. If general returns nothing / weak â†’ prefer medical if it found it
+  //  4. If both fail â†’ show error with suggestions
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _search(String? langCode) async {
     final word = _searchController.text.trim().toLowerCase();
     if (word.isEmpty) return;
@@ -185,7 +185,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
     _focusNode.unfocus();
 
     try {
-      // ── Fire both lookups simultaneously ──────────────
+      // â”€â”€ Fire both lookups simultaneously â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
       final futures = await Future.wait([
         _fetchGeneral(word, langCode ?? 'en'),
         _fetchMedical(word),
@@ -342,9 +342,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  FETCH — General (dictionaryapi.dev)
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  FETCH â€” General (dictionaryapi.dev)
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<Map<String, dynamic>?> _fetchGeneral(
     String word,
     String langCode,
@@ -362,9 +362,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
     return null;
   }
 
-  // ─────────────────────────────────────────────
-  //  FETCH — Merriam-Webster Medical
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  FETCH â€” Merriam-Webster Medical
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<Map<String, dynamic>?> _fetchMedical(String word) async {
     if (_mwMedicalKey == 'YOUR_MW_MEDICAL_API_KEY') return null;
     try {
@@ -382,9 +382,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
     return null;
   }
 
-  // ─────────────────────────────────────────────
-  //  FETCH — Technical (Wikipedia)
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  FETCH â€” Technical (Wikipedia)
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<Map<String, dynamic>?> _fetchCS(String word) async {
     try {
       final uri = Uri.parse(
@@ -417,9 +417,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
     return null;
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  HELPERS
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   int _countDefinitions(Map<String, dynamic>? result) {
     if (result == null) return 0;
     int count = 0;
@@ -435,7 +435,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
     return 'No results found for "$word".\n\nCheck the spelling or try a related term.';
   }
 
-  // ── Parse MW response into shared result format ───────
+  // â”€â”€ Parse MW response into shared result format â”€â”€â”€â”€â”€â”€â”€
   Map<String, dynamic> _parseMerriamWebster(
     Map<String, dynamic> entry,
     String word,
@@ -591,9 +591,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
     return ants.take(8).toList();
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  BUILD
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
@@ -646,7 +646,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.08),
+                  color: Colors.white.withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
@@ -665,7 +665,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
       body: Column(
         children: [
-          // ── Search bar ──────────────────────────────────
+          // â”€â”€ Search bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           Padding(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
             child: Row(
@@ -682,22 +682,22 @@ class _DictionaryPageState extends State<DictionaryPage> {
                           ? 'Listening...'
                           : unsupported
                           ? 'Not available in Chinese'
-                          : 'Search any word…',
+                          : 'Search any wordâ€¦',
                       counterText: '',
                       prefixIcon: const Icon(Icons.search, size: 20, color: Colors.white54),
                       filled: true,
-                      fillColor: _isListening ? Colors.white.withOpacity(0.12) : Colors.white.withOpacity(0.06),
+                      fillColor: _isListening ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.06),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 14,
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                       ),
                     ),
                     enabled: !unsupported,
@@ -715,8 +715,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       height: 48,
                       decoration: BoxDecoration(
                         color: _isListening
-                            ? Colors.red.withOpacity(0.8)
-                            : Colors.white.withOpacity(0.08),
+                            ? Colors.red.withValues(alpha: 0.8)
+                            : Colors.white.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Icon(
@@ -742,7 +742,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       color: unsupported ? Colors.grey[800] : const Color(0xFF4B9EFF),
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: unsupported ? [] : [
-                        BoxShadow(color: const Color(0xFF4B9EFF).withOpacity(0.3), blurRadius: 8)
+                        BoxShadow(color: const Color(0xFF4B9EFF).withValues(alpha: 0.3), blurRadius: 8)
                       ],
                     ),
                     child: _loading
@@ -764,7 +764,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
             ),
           ),
 
-          // ── Listening indicator ─────────────────────────
+          // â”€â”€ Listening indicator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           if (_isListening)
             Padding(
               padding: const EdgeInsets.only(top: 8),
@@ -781,7 +781,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    'Listening in ${lang.selectedLanguage} — say a word',
+                    'Listening in ${lang.selectedLanguage} â€” say a word',
                     style: TextStyle(
                       color: Colors.grey[600],
                       fontSize: 12,
@@ -794,7 +794,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
           const SizedBox(height: 10),
 
-          // ── Body ────────────────────────────────────────
+          // â”€â”€ Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           if (unsupported)
             Expanded(
               child: Center(
@@ -803,7 +803,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Text('🈚', style: TextStyle(fontSize: 48)),
+                      const Text('ðŸˆš', style: TextStyle(fontSize: 48)),
                       const SizedBox(height: 16),
                       const Text(
                         'Chinese dictionary\nnot available yet',
@@ -860,7 +860,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('📖', style: TextStyle(fontSize: 48)),
+                    const Text('ðŸ“–', style: TextStyle(fontSize: 48)),
                     const SizedBox(height: 12),
                     const Text(
                       'VOX Dictionary',
@@ -924,7 +924,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // ── Word card ────────────────────────────
+                    // â”€â”€ Word card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     Container(
                       width: double.infinity,
                       padding: const EdgeInsets.all(20),
@@ -960,7 +960,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                       decoration: BoxDecoration(
                                         color: const Color(
                                           0xFF4B9EFF,
-                                        ).withOpacity(0.2),
+                                        ).withValues(alpha: 0.2),
                                         borderRadius: BorderRadius.circular(6),
                                       ),
                                       child: Text(
@@ -975,7 +975,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                   ],
                                 ),
                               ),
-                              // Audio button — auto-plays for accessibility
+                              // Audio button â€” auto-plays for accessibility
                               if (_audioUrl != null)
                                 GestureDetector(
                                   onTap: _playAudio,
@@ -1012,7 +1012,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                     ),
                     const SizedBox(height: 14),
 
-                    // ── Origin ───────────────────────────────
+                    // â”€â”€ Origin â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if (_origin.isNotEmpty) ...[
                       _sectionCard(
                         icon: Icons.history_edu_rounded,
@@ -1029,7 +1029,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       const SizedBox(height: 10),
                     ],
 
-                    // ── Meanings ─────────────────────────────
+                    // â”€â”€ Meanings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     ..._meanings.map((meaning) {
                       final pos = meaning['partOfSpeech'] as String? ?? '';
                       final defs =
@@ -1096,7 +1096,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       );
                     }),
 
-                    // ── Synonyms ─────────────────────────────
+                    // â”€â”€ Synonyms â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if (_getSynonyms().isNotEmpty) ...[
                       _sectionCard(
                         icon: Icons.compare_arrows_rounded,
@@ -1119,7 +1119,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                     decoration: BoxDecoration(
                                       color: const Color(
                                         0xFF4B9EFF,
-                                      ).withOpacity(0.3),
+                                      ).withValues(alpha: 0.3),
                                       borderRadius: BorderRadius.circular(20),
                                       border: Border.all(
                                         color: const Color(0xFF4B9EFF),
@@ -1143,7 +1143,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       const SizedBox(height: 10),
                     ],
 
-                    // ── Antonyms ─────────────────────────────
+                    // â”€â”€ Antonyms â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if (_getAntonyms().isNotEmpty)
                       _sectionCard(
                         icon: Icons.swap_horiz_rounded,
@@ -1310,3 +1310,4 @@ class _DictionaryPageState extends State<DictionaryPage> {
     );
   }
 }
+

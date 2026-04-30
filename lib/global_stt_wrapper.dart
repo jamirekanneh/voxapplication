@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'custom_commands_provider.dart';
@@ -6,11 +6,11 @@ import 'command_dispatcher.dart';
 import 'tts_service.dart';
 import 'language_provider.dart';
 
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  GLOBAL STT WRAPPER
 //  Wrap your MaterialApp child with this widget.
-//  Double-tap anywhere → starts listening → matches commands.
-// ─────────────────────────────────────────────
+//  Double-tap anywhere â†’ starts listening â†’ matches commands.
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class GlobalSttWrapper extends StatefulWidget {
   final Widget child;
 
@@ -108,7 +108,7 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
       listenFor: const Duration(seconds: 8),
       pauseFor: const Duration(seconds: 2),
       partialResults:
-          true, // FIX: was false — ensures _lastWords is set before onStatus fires
+          true, // FIX: was false - ensures _lastWords is set before onStatus fires
     );
   }
 
@@ -192,11 +192,11 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
                             vertical: 14,
                           ),
                           decoration: BoxDecoration(
-                            color: Color(0xFF0A0E1A).withOpacity(0.82),
+                            color: Color(0xFF0A0E1A).withValues(alpha: 0.82),
                             borderRadius: BorderRadius.circular(40),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF4B9EFF).withOpacity(0.3),
+                                color: const Color(0xFF4B9EFF).withValues(alpha: 0.3),
                                 blurRadius: 20,
                                 spreadRadius: 2,
                               ),
@@ -212,7 +212,7 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
                               ),
                               SizedBox(width: 10),
                               Text(
-                                'Listening…',
+                                'Listeningâ€¦',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w700,
@@ -234,3 +234,4 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     );
   }
 }
+

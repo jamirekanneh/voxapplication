@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'ai_service.dart';
@@ -85,14 +85,14 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
                   ),
                   boxShadow: [
                     BoxShadow(
-                      color: const Color(0xFF4B9EFF).withOpacity(0.35),
+                      color: const Color(0xFF4B9EFF).withValues(alpha: 0.35),
                       blurRadius: 16,
                       spreadRadius: 1,
                       offset: const Offset(0, 4),
                     ),
                   ],
                   border: Border.all(
-                    color: const Color(0xFF4B9EFF).withOpacity(0.4),
+                    color: const Color(0xFF4B9EFF).withValues(alpha: 0.4),
                     width: 1.5,
                   ),
                 ),
@@ -106,7 +106,7 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
                         height: 36,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: const Color(0xFF4B9EFF).withOpacity(0.1),
+                          color: const Color(0xFF4B9EFF).withValues(alpha: 0.1),
                         ),
                       ),
                       // Question mark
@@ -329,7 +329,7 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                 ),
               ],
             ),
-            Divider(color: Colors.white.withOpacity(0.1)),
+            Divider(color: Colors.white.withValues(alpha: 0.1)),
             Expanded(
               child: ListView.builder(
                 itemCount: _messages.length,
@@ -345,13 +345,13 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: isUser
-                            ? const Color(0xFF4B9EFF).withOpacity(0.1)
-                            : Colors.white.withOpacity(0.04),
+                            ? const Color(0xFF4B9EFF).withValues(alpha: 0.1)
+                            : Colors.white.withValues(alpha: 0.04),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: isUser
-                              ? const Color(0xFF4B9EFF).withOpacity(0.3)
-                              : Colors.white.withOpacity(0.08),
+                              ? const Color(0xFF4B9EFF).withValues(alpha: 0.3)
+                              : Colors.white.withValues(alpha: 0.08),
                         ),
                       ),
                       child: Text(
@@ -383,7 +383,7 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                         boxShadow: _isListening
                             ? [
                                 BoxShadow(
-                                  color: Colors.redAccent.withOpacity(0.4 * _pulseController.value),
+                                  color: Colors.redAccent.withValues(alpha: 0.4 * _pulseController.value),
                                   blurRadius: 12 * _pulseController.value,
                                   spreadRadius: 8 * _pulseController.value,
                                 )
@@ -393,7 +393,7 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                       child: CircleAvatar(
                         backgroundColor: _isListening
                             ? Colors.redAccent
-                            : Colors.white.withOpacity(0.05),
+                            : Colors.white.withValues(alpha: 0.05),
                         child: IconButton(
                           icon: Icon(
                             _isListening ? Icons.mic : Icons.mic_none,
@@ -417,10 +417,10 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                           ? 'Listening...'
                           : 'Ask something...',
                       hintStyle: TextStyle(
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                       ),
                       filled: true,
-                      fillColor: Colors.white.withOpacity(0.05),
+                      fillColor: Colors.white.withValues(alpha: 0.05),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(25),
                         borderSide: BorderSide.none,
@@ -452,3 +452,4 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
     );
   }
 }
+

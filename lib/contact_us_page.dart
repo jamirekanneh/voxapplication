@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -30,85 +30,85 @@ const _kNavy = Color(0xFF141A29);
 enum ContactPreference { email, whatsapp }
 
 const List<Map<String, String>> _kCountries = [
-  {'name': 'Afghanistan', 'dial': '+93', 'flag': '🇦🇫'},
-  {'name': 'Albania', 'dial': '+355', 'flag': '🇦🇱'},
-  {'name': 'Algeria', 'dial': '+213', 'flag': '🇩🇿'},
-  {'name': 'Argentina', 'dial': '+54', 'flag': '🇦🇷'},
-  {'name': 'Australia', 'dial': '+61', 'flag': '🇦🇺'},
-  {'name': 'Austria', 'dial': '+43', 'flag': '🇦🇹'},
-  {'name': 'Bahrain', 'dial': '+973', 'flag': '🇧🇭'},
-  {'name': 'Bangladesh', 'dial': '+880', 'flag': '🇧🇩'},
-  {'name': 'Belgium', 'dial': '+32', 'flag': '🇧🇪'},
-  {'name': 'Brazil', 'dial': '+55', 'flag': '🇧🇷'},
-  {'name': 'Canada', 'dial': '+1', 'flag': '🇨🇦'},
-  {'name': 'Chile', 'dial': '+56', 'flag': '🇨🇱'},
-  {'name': 'China', 'dial': '+86', 'flag': '🇨🇳'},
-  {'name': 'Colombia', 'dial': '+57', 'flag': '🇨🇴'},
-  {'name': 'Croatia', 'dial': '+385', 'flag': '🇭🇷'},
-  {'name': 'Czech Republic', 'dial': '+420', 'flag': '🇨🇿'},
-  {'name': 'Denmark', 'dial': '+45', 'flag': '🇩🇰'},
-  {'name': 'Egypt', 'dial': '+20', 'flag': '🇪🇬'},
-  {'name': 'Ethiopia', 'dial': '+251', 'flag': '🇪🇹'},
-  {'name': 'Finland', 'dial': '+358', 'flag': '🇫🇮'},
-  {'name': 'France', 'dial': '+33', 'flag': '🇫🇷'},
-  {'name': 'Germany', 'dial': '+49', 'flag': '🇩🇪'},
-  {'name': 'Ghana', 'dial': '+233', 'flag': '🇬🇭'},
-  {'name': 'Greece', 'dial': '+30', 'flag': '🇬🇷'},
-  {'name': 'Hungary', 'dial': '+36', 'flag': '🇭🇺'},
-  {'name': 'India', 'dial': '+91', 'flag': '🇮🇳'},
-  {'name': 'Indonesia', 'dial': '+62', 'flag': '🇮🇩'},
-  {'name': 'Iran', 'dial': '+98', 'flag': '🇮🇷'},
-  {'name': 'Iraq', 'dial': '+964', 'flag': '🇮🇶'},
-  {'name': 'Ireland', 'dial': '+353', 'flag': '🇮🇪'},
-  {'name': 'Israel', 'dial': '+972', 'flag': '🇮🇱'},
-  {'name': 'Italy', 'dial': '+39', 'flag': '🇮🇹'},
-  {'name': 'Japan', 'dial': '+81', 'flag': '🇯🇵'},
-  {'name': 'Jordan', 'dial': '+962', 'flag': '🇯🇴'},
-  {'name': 'Kenya', 'dial': '+254', 'flag': '🇰🇪'},
-  {'name': 'Kuwait', 'dial': '+965', 'flag': '🇰🇼'},
-  {'name': 'Lebanon', 'dial': '+961', 'flag': '🇱🇧'},
-  {'name': 'Libya', 'dial': '+218', 'flag': '🇱🇾'},
-  {'name': 'Malaysia', 'dial': '+60', 'flag': '🇲🇾'},
-  {'name': 'Mexico', 'dial': '+52', 'flag': '🇲🇽'},
-  {'name': 'Morocco', 'dial': '+212', 'flag': '🇲🇦'},
-  {'name': 'Netherlands', 'dial': '+31', 'flag': '🇳🇱'},
-  {'name': 'New Zealand', 'dial': '+64', 'flag': '🇳🇿'},
-  {'name': 'Nigeria', 'dial': '+234', 'flag': '🇳🇬'},
-  {'name': 'Norway', 'dial': '+47', 'flag': '🇳🇴'},
-  {'name': 'Oman', 'dial': '+968', 'flag': '🇴🇲'},
-  {'name': 'Pakistan', 'dial': '+92', 'flag': '🇵🇰'},
-  {'name': 'Palestine', 'dial': '+970', 'flag': '🇵🇸'},
-  {'name': 'Peru', 'dial': '+51', 'flag': '🇵🇪'},
-  {'name': 'Philippines', 'dial': '+63', 'flag': '🇵🇭'},
-  {'name': 'Poland', 'dial': '+48', 'flag': '🇵🇱'},
-  {'name': 'Portugal', 'dial': '+351', 'flag': '🇵🇹'},
-  {'name': 'Qatar', 'dial': '+974', 'flag': '🇶🇦'},
-  {'name': 'Romania', 'dial': '+40', 'flag': '🇷🇴'},
-  {'name': 'Russia', 'dial': '+7', 'flag': '🇷🇺'},
-  {'name': 'Saudi Arabia', 'dial': '+966', 'flag': '🇸🇦'},
-  {'name': 'Senegal', 'dial': '+221', 'flag': '🇸🇳'},
-  {'name': 'Serbia', 'dial': '+381', 'flag': '🇷🇸'},
-  {'name': 'Singapore', 'dial': '+65', 'flag': '🇸🇬'},
-  {'name': 'South Africa', 'dial': '+27', 'flag': '🇿🇦'},
-  {'name': 'South Korea', 'dial': '+82', 'flag': '🇰🇷'},
-  {'name': 'Spain', 'dial': '+34', 'flag': '🇪🇸'},
-  {'name': 'Sudan', 'dial': '+249', 'flag': '🇸🇩'},
-  {'name': 'Sweden', 'dial': '+46', 'flag': '🇸🇪'},
-  {'name': 'Switzerland', 'dial': '+41', 'flag': '🇨🇭'},
-  {'name': 'Syria', 'dial': '+963', 'flag': '🇸🇾'},
-  {'name': 'Taiwan', 'dial': '+886', 'flag': '🇹🇼'},
-  {'name': 'Tanzania', 'dial': '+255', 'flag': '🇹🇿'},
-  {'name': 'Thailand', 'dial': '+66', 'flag': '🇹🇭'},
-  {'name': 'Tunisia', 'dial': '+216', 'flag': '🇹🇳'},
-  {'name': 'Turkey', 'dial': '+90', 'flag': '🇹🇷'},
-  {'name': 'UAE', 'dial': '+971', 'flag': '🇦🇪'},
-  {'name': 'Uganda', 'dial': '+256', 'flag': '🇺🇬'},
-  {'name': 'Ukraine', 'dial': '+380', 'flag': '🇺🇦'},
-  {'name': 'United Kingdom', 'dial': '+44', 'flag': '🇬🇧'},
-  {'name': 'United States', 'dial': '+1', 'flag': '🇺🇸'},
-  {'name': 'Venezuela', 'dial': '+58', 'flag': '🇻🇪'},
-  {'name': 'Vietnam', 'dial': '+84', 'flag': '🇻🇳'},
-  {'name': 'Yemen', 'dial': '+967', 'flag': '🇾🇪'},
+  {'name': 'Afghanistan', 'dial': '+93', 'flag': 'ðŸ‡¦ðŸ‡«'},
+  {'name': 'Albania', 'dial': '+355', 'flag': 'ðŸ‡¦ðŸ‡±'},
+  {'name': 'Algeria', 'dial': '+213', 'flag': 'ðŸ‡©ðŸ‡¿'},
+  {'name': 'Argentina', 'dial': '+54', 'flag': 'ðŸ‡¦ðŸ‡·'},
+  {'name': 'Australia', 'dial': '+61', 'flag': 'ðŸ‡¦ðŸ‡º'},
+  {'name': 'Austria', 'dial': '+43', 'flag': 'ðŸ‡¦ðŸ‡¹'},
+  {'name': 'Bahrain', 'dial': '+973', 'flag': 'ðŸ‡§ðŸ‡­'},
+  {'name': 'Bangladesh', 'dial': '+880', 'flag': 'ðŸ‡§ðŸ‡©'},
+  {'name': 'Belgium', 'dial': '+32', 'flag': 'ðŸ‡§ðŸ‡ª'},
+  {'name': 'Brazil', 'dial': '+55', 'flag': 'ðŸ‡§ðŸ‡·'},
+  {'name': 'Canada', 'dial': '+1', 'flag': 'ðŸ‡¨ðŸ‡¦'},
+  {'name': 'Chile', 'dial': '+56', 'flag': 'ðŸ‡¨ðŸ‡±'},
+  {'name': 'China', 'dial': '+86', 'flag': 'ðŸ‡¨ðŸ‡³'},
+  {'name': 'Colombia', 'dial': '+57', 'flag': 'ðŸ‡¨ðŸ‡´'},
+  {'name': 'Croatia', 'dial': '+385', 'flag': 'ðŸ‡­ðŸ‡·'},
+  {'name': 'Czech Republic', 'dial': '+420', 'flag': 'ðŸ‡¨ðŸ‡¿'},
+  {'name': 'Denmark', 'dial': '+45', 'flag': 'ðŸ‡©ðŸ‡°'},
+  {'name': 'Egypt', 'dial': '+20', 'flag': 'ðŸ‡ªðŸ‡¬'},
+  {'name': 'Ethiopia', 'dial': '+251', 'flag': 'ðŸ‡ªðŸ‡¹'},
+  {'name': 'Finland', 'dial': '+358', 'flag': 'ðŸ‡«ðŸ‡®'},
+  {'name': 'France', 'dial': '+33', 'flag': 'ðŸ‡«ðŸ‡·'},
+  {'name': 'Germany', 'dial': '+49', 'flag': 'ðŸ‡©ðŸ‡ª'},
+  {'name': 'Ghana', 'dial': '+233', 'flag': 'ðŸ‡¬ðŸ‡­'},
+  {'name': 'Greece', 'dial': '+30', 'flag': 'ðŸ‡¬ðŸ‡·'},
+  {'name': 'Hungary', 'dial': '+36', 'flag': 'ðŸ‡­ðŸ‡º'},
+  {'name': 'India', 'dial': '+91', 'flag': 'ðŸ‡®ðŸ‡³'},
+  {'name': 'Indonesia', 'dial': '+62', 'flag': 'ðŸ‡®ðŸ‡©'},
+  {'name': 'Iran', 'dial': '+98', 'flag': 'ðŸ‡®ðŸ‡·'},
+  {'name': 'Iraq', 'dial': '+964', 'flag': 'ðŸ‡®ðŸ‡¶'},
+  {'name': 'Ireland', 'dial': '+353', 'flag': 'ðŸ‡®ðŸ‡ª'},
+  {'name': 'Israel', 'dial': '+972', 'flag': 'ðŸ‡®ðŸ‡±'},
+  {'name': 'Italy', 'dial': '+39', 'flag': 'ðŸ‡®ðŸ‡¹'},
+  {'name': 'Japan', 'dial': '+81', 'flag': 'ðŸ‡¯ðŸ‡µ'},
+  {'name': 'Jordan', 'dial': '+962', 'flag': 'ðŸ‡¯ðŸ‡´'},
+  {'name': 'Kenya', 'dial': '+254', 'flag': 'ðŸ‡°ðŸ‡ª'},
+  {'name': 'Kuwait', 'dial': '+965', 'flag': 'ðŸ‡°ðŸ‡¼'},
+  {'name': 'Lebanon', 'dial': '+961', 'flag': 'ðŸ‡±ðŸ‡§'},
+  {'name': 'Libya', 'dial': '+218', 'flag': 'ðŸ‡±ðŸ‡¾'},
+  {'name': 'Malaysia', 'dial': '+60', 'flag': 'ðŸ‡²ðŸ‡¾'},
+  {'name': 'Mexico', 'dial': '+52', 'flag': 'ðŸ‡²ðŸ‡½'},
+  {'name': 'Morocco', 'dial': '+212', 'flag': 'ðŸ‡²ðŸ‡¦'},
+  {'name': 'Netherlands', 'dial': '+31', 'flag': 'ðŸ‡³ðŸ‡±'},
+  {'name': 'New Zealand', 'dial': '+64', 'flag': 'ðŸ‡³ðŸ‡¿'},
+  {'name': 'Nigeria', 'dial': '+234', 'flag': 'ðŸ‡³ðŸ‡¬'},
+  {'name': 'Norway', 'dial': '+47', 'flag': 'ðŸ‡³ðŸ‡´'},
+  {'name': 'Oman', 'dial': '+968', 'flag': 'ðŸ‡´ðŸ‡²'},
+  {'name': 'Pakistan', 'dial': '+92', 'flag': 'ðŸ‡µðŸ‡°'},
+  {'name': 'Palestine', 'dial': '+970', 'flag': 'ðŸ‡µðŸ‡¸'},
+  {'name': 'Peru', 'dial': '+51', 'flag': 'ðŸ‡µðŸ‡ª'},
+  {'name': 'Philippines', 'dial': '+63', 'flag': 'ðŸ‡µðŸ‡­'},
+  {'name': 'Poland', 'dial': '+48', 'flag': 'ðŸ‡µðŸ‡±'},
+  {'name': 'Portugal', 'dial': '+351', 'flag': 'ðŸ‡µðŸ‡¹'},
+  {'name': 'Qatar', 'dial': '+974', 'flag': 'ðŸ‡¶ðŸ‡¦'},
+  {'name': 'Romania', 'dial': '+40', 'flag': 'ðŸ‡·ðŸ‡´'},
+  {'name': 'Russia', 'dial': '+7', 'flag': 'ðŸ‡·ðŸ‡º'},
+  {'name': 'Saudi Arabia', 'dial': '+966', 'flag': 'ðŸ‡¸ðŸ‡¦'},
+  {'name': 'Senegal', 'dial': '+221', 'flag': 'ðŸ‡¸ðŸ‡³'},
+  {'name': 'Serbia', 'dial': '+381', 'flag': 'ðŸ‡·ðŸ‡¸'},
+  {'name': 'Singapore', 'dial': '+65', 'flag': 'ðŸ‡¸ðŸ‡¬'},
+  {'name': 'South Africa', 'dial': '+27', 'flag': 'ðŸ‡¿ðŸ‡¦'},
+  {'name': 'South Korea', 'dial': '+82', 'flag': 'ðŸ‡°ðŸ‡·'},
+  {'name': 'Spain', 'dial': '+34', 'flag': 'ðŸ‡ªðŸ‡¸'},
+  {'name': 'Sudan', 'dial': '+249', 'flag': 'ðŸ‡¸ðŸ‡©'},
+  {'name': 'Sweden', 'dial': '+46', 'flag': 'ðŸ‡¸ðŸ‡ª'},
+  {'name': 'Switzerland', 'dial': '+41', 'flag': 'ðŸ‡¨ðŸ‡­'},
+  {'name': 'Syria', 'dial': '+963', 'flag': 'ðŸ‡¸ðŸ‡¾'},
+  {'name': 'Taiwan', 'dial': '+886', 'flag': 'ðŸ‡¹ðŸ‡¼'},
+  {'name': 'Tanzania', 'dial': '+255', 'flag': 'ðŸ‡¹ðŸ‡¿'},
+  {'name': 'Thailand', 'dial': '+66', 'flag': 'ðŸ‡¹ðŸ‡­'},
+  {'name': 'Tunisia', 'dial': '+216', 'flag': 'ðŸ‡¹ðŸ‡³'},
+  {'name': 'Turkey', 'dial': '+90', 'flag': 'ðŸ‡¹ðŸ‡·'},
+  {'name': 'UAE', 'dial': '+971', 'flag': 'ðŸ‡¦ðŸ‡ª'},
+  {'name': 'Uganda', 'dial': '+256', 'flag': 'ðŸ‡ºðŸ‡¬'},
+  {'name': 'Ukraine', 'dial': '+380', 'flag': 'ðŸ‡ºðŸ‡¦'},
+  {'name': 'United Kingdom', 'dial': '+44', 'flag': 'ðŸ‡¬ðŸ‡§'},
+  {'name': 'United States', 'dial': '+1', 'flag': 'ðŸ‡ºðŸ‡¸'},
+  {'name': 'Venezuela', 'dial': '+58', 'flag': 'ðŸ‡»ðŸ‡ª'},
+  {'name': 'Vietnam', 'dial': '+84', 'flag': 'ðŸ‡»ðŸ‡³'},
+  {'name': 'Yemen', 'dial': '+967', 'flag': 'ðŸ‡¾ðŸ‡ª'},
 ];
 
 class _BlinkingHint extends StatefulWidget {
@@ -143,7 +143,7 @@ class _BlinkingHintState extends State<_BlinkingHint>
     opacity: _a,
     child: Text(
       widget.text,
-      style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 13),
+      style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
     ),
   );
 }
@@ -281,13 +281,13 @@ class _ContactUsPageState extends State<ContactUsPage> {
       final email = _emailCtrl.text.trim();
       final message = _messageCtrl.text.trim();
       final text = Uri.encodeComponent(
-        '📩 *New VOX App Message*\n\n'
-        '👤 *Name:* $name\n'
-        '📧 *Email:* $email\n'
-        '📞 *Phone:* $phone\n'
-        '📌 *Subject:* ${_titleCtrl.text.trim()}\n\n'
-        '💬 *Message:*\n$message\n\n'
-        '↩️ _Reply to this user via WhatsApp_',
+        'ðŸ“© *New VOX App Message*\n\n'
+        'ðŸ‘¤ *Name:* $name\n'
+        'ðŸ“§ *Email:* $email\n'
+        'ðŸ“ž *Phone:* $phone\n'
+        'ðŸ“Œ *Subject:* ${_titleCtrl.text.trim()}\n\n'
+        'ðŸ’¬ *Message:*\n$message\n\n'
+        'â†©ï¸ _Reply to this user via WhatsApp_',
       );
       final waUrl = Uri.parse('https://wa.me/$_kDevWhatsApp?text=$text');
       if (await canLaunchUrl(waUrl)) {
@@ -321,7 +321,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
               'subject': _titleCtrl.text.trim(),
               'message': _messageCtrl.text.trim(),
               'reply_preference':
-                  '📧 User prefers Email reply\n📬 Reply to: ${_emailCtrl.text.trim()}',
+                  'ðŸ“§ User prefers Email reply\nðŸ“¬ Reply to: ${_emailCtrl.text.trim()}',
             },
           }),
         );
@@ -372,7 +372,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.2),
+                color: Colors.white.withValues(alpha: 0.2),
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
@@ -381,10 +381,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
               child: TextField(
                 autofocus: true,
                 decoration: InputDecoration(
-                  hintText: 'Search country…',
+                  hintText: 'Search countryâ€¦',
                   prefixIcon: const Icon(Icons.search, size: 18),
                   filled: true,
-                  fillColor: Colors.white.withOpacity(0.04),
+                  fillColor: Colors.white.withValues(alpha: 0.04),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 10,
@@ -447,7 +447,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                     fontWeight: FontWeight.w600,
                                     color: active
                                         ? Colors.white
-                                        : Colors.white.withOpacity(0.8),
+                                        : Colors.white.withValues(alpha: 0.8),
                                   ),
                                 ),
                               ),
@@ -456,7 +456,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 style: TextStyle(
                                   color: active
                                       ? Colors.white70
-                                      : Colors.white.withOpacity(0.5),
+                                      : Colors.white.withValues(alpha: 0.5),
                                   fontSize: 13,
                                 ),
                               ),
@@ -488,18 +488,18 @@ class _ContactUsPageState extends State<ContactUsPage> {
         prefixIcon: prefix,
         suffixIcon: suffix,
         filled: true,
-        fillColor: Colors.white.withOpacity(0.04),
+        fillColor: Colors.white.withValues(alpha: 0.04),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 14,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
@@ -522,7 +522,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
       style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w800,
-        color: Colors.white.withOpacity(0.6),
+        color: Colors.white.withValues(alpha: 0.6),
         letterSpacing: 2,
       ),
     ),
@@ -547,11 +547,11 @@ class _ContactUsPageState extends State<ContactUsPage> {
         Container(
           height: 52,
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.04),
+            color: Colors.white.withValues(alpha: 0.04),
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Color(0xFF0A0E1A).withOpacity(0.06),
+                color: Color(0xFF0A0E1A).withValues(alpha: 0.06),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -575,7 +575,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                       boxShadow: [
                         BoxShadow(
                           color: (isEmail ? Color(0xFF0A0E1A) : _kWaGreen)
-                              .withOpacity(0.25),
+                              .withValues(alpha: 0.25),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
                         ),
@@ -601,7 +601,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               size: 16,
                               color: isEmail
                                   ? Colors.white
-                                  : Colors.white.withOpacity(0.4),
+                                  : Colors.white.withValues(alpha: 0.4),
                             ),
                             const SizedBox(width: 7),
                             Text(
@@ -611,7 +611,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 fontWeight: FontWeight.w700,
                                 color: isEmail
                                     ? Colors.white
-                                    : Colors.white.withOpacity(0.6),
+                                    : Colors.white.withValues(alpha: 0.6),
                                 letterSpacing: 0.2,
                               ),
                             ),
@@ -635,7 +635,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               size: 16,
                               color: !isEmail
                                   ? Colors.white
-                                  : Colors.white.withOpacity(0.4),
+                                  : Colors.white.withValues(alpha: 0.4),
                             ),
                             const SizedBox(width: 7),
                             Text(
@@ -645,7 +645,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 fontWeight: FontWeight.w700,
                                 color: !isEmail
                                     ? Colors.white
-                                    : Colors.white.withOpacity(0.6),
+                                    : Colors.white.withValues(alpha: 0.6),
                                 letterSpacing: 0.2,
                               ),
                             ),
@@ -677,10 +677,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
               Text(
                 isEmail
                     ? 'We will reply directly to your email'
-                    : 'WhatsApp opens — tap Send to deliver your message',
+                    : 'WhatsApp opens â€” tap Send to deliver your message',
                 style: TextStyle(
                   fontSize: 11.5,
-                  color: isEmail ? Colors.white.withOpacity(0.5) : _kWaGreen,
+                  color: isEmail ? Colors.white.withValues(alpha: 0.5) : _kWaGreen,
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -691,7 +691,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
     );
   }
 
-  // ── Professional success screen ───────────────────────────────────────────
+  // â”€â”€ Professional success screen â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildSuccess() {
     final isEmail = _contactPref == ContactPreference.email;
     final replyVia = isEmail ? 'Email' : 'WhatsApp';
@@ -703,7 +703,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
         children: [
           const SizedBox(height: 24),
 
-          // ── Check icon ────────────────────────────────────────────────────
+          // â”€â”€ Check icon â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           Container(
             width: 72,
             height: 72,
@@ -719,7 +719,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
           ),
           const SizedBox(height: 24),
 
-          // ── Title ─────────────────────────────────────────────────────────
+          // â”€â”€ Title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           const Text(
             'Thank you for contacting us!',
             textAlign: TextAlign.center,
@@ -736,7 +736,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
               height: 1.5,
             ),
           ),
@@ -746,13 +746,13 @@ class _ContactUsPageState extends State<ContactUsPage> {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: Colors.white.withOpacity(0.8),
+              color: Colors.white.withValues(alpha: 0.8),
               fontWeight: FontWeight.w500,
             ),
           ),
           const SizedBox(height: 32),
 
-          // ── Buttons ───────────────────────────────────────────────────────
+          // â”€â”€ Buttons â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           SizedBox(
             width: double.infinity,
             child: ElevatedButton.icon(
@@ -794,9 +794,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                 _sent = false;
               }),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white.withOpacity(0.6),
+                foregroundColor: Colors.white.withValues(alpha: 0.6),
                 padding: const EdgeInsets.symmetric(vertical: 13),
-                side: BorderSide(color: Colors.white.withOpacity(0.1)),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -840,7 +840,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.25),
+                      color: Colors.white.withValues(alpha: 0.25),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(
@@ -879,7 +879,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                 Container(
                   padding: const EdgeInsets.all(10),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.25),
+                    color: Colors.white.withValues(alpha: 0.25),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(
@@ -944,7 +944,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                             prefix: Icon(
                                               Icons.person_outline_rounded,
                                               size: 18,
-                                              color: Colors.white.withOpacity(
+                                              color: Colors.white.withValues(alpha: 
                                                 0.5,
                                               ),
                                             ),
@@ -1000,7 +1000,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                             prefix: Icon(
                                               Icons.person_outline_rounded,
                                               size: 18,
-                                              color: Colors.white.withOpacity(
+                                              color: Colors.white.withValues(alpha: 
                                                 0.5,
                                               ),
                                             ),
@@ -1034,7 +1034,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   prefix: Icon(
                                     Icons.mail_outline_rounded,
                                     size: 18,
-                                    color: Colors.white.withOpacity(0.5),
+                                    color: Colors.white.withValues(alpha: 0.5),
                                   ),
                                   suffix: _mic('email', _emailCtrl),
                                 ).copyWith(
@@ -1070,10 +1070,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                     vertical: 14,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.04),
+                                    color: Colors.white.withValues(alpha: 0.04),
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: Colors.white.withOpacity(0.1),
+                                      color: Colors.white.withValues(alpha: 0.1),
                                     ),
                                   ),
                                   child: Row(
@@ -1095,7 +1095,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                       Icon(
                                         Icons.arrow_drop_down_rounded,
                                         size: 18,
-                                        color: Colors.white.withOpacity(0.5),
+                                        color: Colors.white.withValues(alpha: 0.5),
                                       ),
                                     ],
                                   ),
@@ -1114,7 +1114,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                       ).copyWith(
                                         hintText: '5XX XXX XXXX',
                                         hintStyle: TextStyle(
-                                          color: Colors.white.withOpacity(0.3),
+                                          color: Colors.white.withValues(alpha: 0.3),
                                           fontSize: 13,
                                         ),
                                       ),
@@ -1157,7 +1157,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   prefix: Icon(
                                     Icons.subject_rounded,
                                     size: 18,
-                                    color: Colors.white.withOpacity(0.5),
+                                    color: Colors.white.withValues(alpha: 0.5),
                                   ),
                                   suffix: _mic('title', _titleCtrl),
                                 ),
@@ -1186,9 +1186,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   forceStrutHeight: false,
                                 ),
                                 decoration: _inputDeco().copyWith(
-                                  hintText: 'Write your message here…',
+                                  hintText: 'Write your message hereâ€¦',
                                   hintStyle: TextStyle(
-                                    color: Colors.white.withOpacity(0.3),
+                                    color: Colors.white.withValues(alpha: 0.3),
                                     fontSize: 13,
                                   ),
                                   contentPadding: const EdgeInsets.fromLTRB(
@@ -1233,7 +1233,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 foregroundColor: Colors.white,
                                 disabledBackgroundColor: const Color(
                                   0xFF4B9EFF,
-                                ).withOpacity(0.35),
+                                ).withValues(alpha: 0.35),
                                 padding: const EdgeInsets.symmetric(
                                   vertical: 16,
                                 ),
@@ -1285,14 +1285,14 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 Icon(
                                   Icons.lock_outline_rounded,
                                   size: 12,
-                                  color: Colors.white.withOpacity(0.5),
+                                  color: Colors.white.withValues(alpha: 0.5),
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Your information is kept private',
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.white.withOpacity(0.5),
+                                    color: Colors.white.withValues(alpha: 0.5),
                                   ),
                                 ),
                               ],
@@ -1309,3 +1309,4 @@ class _ContactUsPageState extends State<ContactUsPage> {
     );
   }
 }
+

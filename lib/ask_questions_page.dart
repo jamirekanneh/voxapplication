@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'contact_us_page.dart';
 import 'floating_chat_bot.dart';
@@ -117,7 +117,7 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
     {
       'q': 'How do I create custom commands?',
       'a':
-          'Go to Menu → Voice Commands → Add Command. Choose a phrase to say, select an action (like opening notes or running a macro), and optionally add parameters. Your custom commands sync across devices with your account.',
+          'Go to Menu â†’ Voice Commands â†’ Add Command. Choose a phrase to say, select an action (like opening notes or running a macro), and optionally add parameters. Your custom commands sync across devices with your account.',
     },
     {
       'q': 'What is the AI Study Buddy?',
@@ -192,7 +192,7 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
                 style: TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w900,
-                  color: _kNavy.withOpacity(0.8),
+                  color: _kNavy.withValues(alpha: 0.8),
                 ),
                 textAlign: TextAlign.center,
               ),
@@ -205,12 +205,12 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
                 itemBuilder: (context, index) {
                   return Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.04),
+                      color: Colors.white.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.white.withOpacity(0.08)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
                       boxShadow: [
                         BoxShadow(
-                          color: _kHeaderColor.withOpacity(0.02),
+                          color: _kHeaderColor.withValues(alpha: 0.02),
                           blurRadius: 10,
                           offset: const Offset(0, 4),
                         ),
@@ -246,7 +246,7 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
                               child: Text(
                                 faqs[index]['a']!,
                                 style: TextStyle(
-                                  color: Colors.white.withOpacity(0.7),
+                                  color: Colors.white.withValues(alpha: 0.7),
                                   height: 1.5,
                                 ),
                               ),
@@ -285,4 +285,5 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
     ));
   }
 }
+
 

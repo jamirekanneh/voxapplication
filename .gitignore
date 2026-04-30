@@ -48,3 +48,5 @@ node_modules
 # Environment variables
 assets/project.env
 .env
+
+.firebase/

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'user_profile.dart';
 import 'home_page.dart';
@@ -77,7 +77,7 @@ class _SplashScreenState extends State<SplashScreen>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // ── LAYER 1: Full-screen watermarked logo ──────────────────────
+            // â”€â”€ LAYER 1: Full-screen watermarked logo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             // Positioned.fill pins all 4 edges to the Stack's bounds,
             // guaranteeing full-screen coverage on Flutter Web and mobile.
             Positioned.fill(
@@ -92,7 +92,7 @@ class _SplashScreenState extends State<SplashScreen>
               ),
             ),
 
-            // ── LAYER 2: Radial vignette ──────────────────────────────────
+            // â”€â”€ LAYER 2: Radial vignette â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Container(
               width: double.infinity,
               height: double.infinity,
@@ -102,15 +102,15 @@ class _SplashScreenState extends State<SplashScreen>
                   radius: 1.2,
                   colors: [
                     Colors.transparent,
-                    const Color(0xFF0A0E1A).withOpacity(0.55),
-                    const Color(0xFF0A0E1A).withOpacity(0.85),
+                    const Color(0xFF0A0E1A).withValues(alpha: 0.55),
+                    const Color(0xFF0A0E1A).withValues(alpha: 0.85),
                   ],
                   stops: const [0.0, 0.55, 1.0],
                 ),
               ),
             ),
 
-            // ── LAYER 3: Subtle blue centre-glow ─────────────────────────
+            // â”€â”€ LAYER 3: Subtle blue centre-glow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Container(
               width: double.infinity,
               height: double.infinity,
@@ -119,14 +119,14 @@ class _SplashScreenState extends State<SplashScreen>
                   center: Alignment.center,
                   radius: 0.8,
                   colors: [
-                    const Color(0xFF4B9EFF).withOpacity(0.06),
+                    const Color(0xFF4B9EFF).withValues(alpha: 0.06),
                     Colors.transparent,
                   ],
                 ),
               ),
             ),
 
-            // ── LAYER 4: Foreground content ───────────────────────────────
+            // â”€â”€ LAYER 4: Foreground content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             FadeTransition(
               opacity: _fadeAnimation,
               child: ScaleTransition(
@@ -144,14 +144,14 @@ class _SplashScreenState extends State<SplashScreen>
                           BoxShadow(
                             color: const Color(
                               0xFF4B9EFF,
-                            ).withOpacity(0.3),
+                            ).withValues(alpha: 0.3),
                             blurRadius: 60,
                             spreadRadius: 2,
                           ),
                           BoxShadow(
                             color: const Color(
                               0xFF4B9EFF,
-                            ).withOpacity(0.1),
+                            ).withValues(alpha: 0.1),
                             blurRadius: 100,
                             spreadRadius: -10,
                           ),
@@ -198,9 +198,9 @@ class _SplashScreenState extends State<SplashScreen>
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: const Color(0xFF4B9EFF).withOpacity(0.05),
+                        color: const Color(0xFF4B9EFF).withValues(alpha: 0.05),
                         border: Border.all(
-                          color: const Color(0xFF4B9EFF).withOpacity(0.4),
+                          color: const Color(0xFF4B9EFF).withValues(alpha: 0.4),
                           width: 1.5,
                         ),
                         borderRadius: BorderRadius.circular(4),
@@ -220,7 +220,7 @@ class _SplashScreenState extends State<SplashScreen>
               ),
             ),
 
-            // ── LAYER 5: Loading bar at bottom ────────────────────────────
+            // â”€â”€ LAYER 5: Loading bar at bottom â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Positioned(
               bottom: 80,
               left: 0,
@@ -231,7 +231,7 @@ class _SplashScreenState extends State<SplashScreen>
                     SizedBox(
                       width: 60,
                       child: LinearProgressIndicator(
-                        backgroundColor: Colors.white.withOpacity(0.03),
+                        backgroundColor: Colors.white.withValues(alpha: 0.03),
                         color: const Color(0xFF4B9EFF),
                         minHeight: 3,
                       ),
@@ -241,7 +241,7 @@ class _SplashScreenState extends State<SplashScreen>
                       "INITIALIZING SYSTEM",
                       style: TextStyle(
                         fontSize: 8,
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                         letterSpacing: 3,
                         fontWeight: FontWeight.w600,
                       ),
@@ -256,3 +256,4 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 }
+

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
@@ -19,9 +19,9 @@ const int _kMaxTitleLength = 100;
 const int _kMaxContentLength = 50000; // increased for long transcripts
 const Duration _kMaxRecordingDuration = Duration(hours: 1);
 
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  RECORDING STATE ENUM
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 enum RecordingState { idle, recording, processing, done }
 
 class NotesPage extends StatefulWidget {
@@ -109,9 +109,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  RESOLVE USER
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _resolveUser() async {
     try {
       final user = FirebaseAuth.instance.currentUser;
@@ -190,9 +190,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  MIC PERMISSION
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<bool> _requestMicPermission() async {
     final status = await Permission.microphone.request();
     if (status.isGranted) return true;
@@ -223,9 +223,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     return false;
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  START LONG-FORM RECORDING + LIVE TRANSCRIPTION
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _startRecording() async {
     if (_titleController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -498,9 +498,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     });
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  PLAYBACK
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _playAudio({String? url}) async {
     final targetUrl = url ?? _audioUrl;
     if (targetUrl == null) return;
@@ -544,9 +544,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  SAVE NOTE
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _saveNote(LanguageProvider lang) async {
     final transcript = _transcriptController.text.trim();
     final rawTitle = _titleController.text.trim();
@@ -682,9 +682,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  DELETE
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _deleteNote(String docId) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -826,9 +826,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     });
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  SELECTION MODE HELPERS
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _enterNoteSelectionMode(String id) {
     setState(() {
       _isNoteSelectionMode = true;
@@ -855,9 +855,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     });
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  DELETE SELECTED NOTES
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _deleteSelectedNotes() async {
     if (_selectedNoteIds.isEmpty) return;
     final count = _selectedNoteIds.length;
@@ -970,9 +970,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     _exitNoteSelectionMode();
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  NOTE DETAIL BOTTOM SHEET
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _showNoteDetails(
     String id,
     String title,
@@ -1119,7 +1119,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           ),
                         ),
 
-                      // ── AI Tools bar ──
+                      // â”€â”€ AI Tools bar â”€â”€
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 20),
                         child: Container(
@@ -1198,7 +1198,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       ),
                       const SizedBox(height: 12),
 
-                      // ── Tabs ──
+                      // â”€â”€ Tabs â”€â”€
                       if (audioUrl != null) ...[
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 20),
@@ -1228,7 +1228,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         endIndent: 20,
                       ),
 
-                      // ── Body ──
+                      // â”€â”€ Body â”€â”€
                       Expanded(
                         child: activeTab == 0
                             ? ListView(
@@ -1431,7 +1431,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
           color: dark
-              ? Colors.white.withOpacity(0.12)
+              ? Colors.white.withValues(alpha: 0.12)
               : const Color(0xFF4B9EFF),
           borderRadius: BorderRadius.circular(20),
         ),
@@ -1471,7 +1471,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         decoration: BoxDecoration(
           color: selected
               ? Color(0xFF0A0E1A)
-              : Color(0xFF0A0E1A).withOpacity(0.07),
+              : Color(0xFF0A0E1A).withValues(alpha: 0.07),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Text(
@@ -1560,20 +1560,20 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     );
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  RECORDING AREA WIDGET
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildRecordingArea(LanguageProvider lang) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        // ── IDLE: Show typable text area + record button ──
+        // â”€â”€ IDLE: Show typable text area + record button â”€â”€
         if (_recordingState == RecordingState.idle) ...[
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.05),
+              color: Colors.white.withValues(alpha: 0.05),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withOpacity(0.1)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
             ),
             child: Column(
               children: [
@@ -1615,14 +1615,14 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           ),
         ],
 
-        // ── RECORDING: Show live pulse + live transcript ──
+        // â”€â”€ RECORDING: Show live pulse + live transcript â”€â”€
         if (_recordingState == RecordingState.recording) ...[
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
               color: const Color(0xFF161B2E),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
             child: Column(
               children: [
@@ -1640,7 +1640,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         borderRadius: BorderRadius.circular(34),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.red.withOpacity(0.5),
+                            color: Colors.red.withValues(alpha: 0.5),
                             blurRadius: 24,
                             spreadRadius: 6,
                           ),
@@ -1668,9 +1668,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Recording · ${_formatDuration(_kMaxRecordingDuration - _recordingDuration)} left',
+                  'Recording Â· ${_formatDuration(_kMaxRecordingDuration - _recordingDuration)} left',
                   style: TextStyle(
-                    color: Colors.white.withOpacity(0.4),
+                    color: Colors.white.withValues(alpha: 0.4),
                     fontSize: 11,
                   ),
                 ),
@@ -1682,7 +1682,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     margin: const EdgeInsets.symmetric(horizontal: 16),
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.06),
+                      color: Colors.white.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     constraints: const BoxConstraints(maxHeight: 80),
@@ -1691,7 +1691,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       child: Text(
                         _transcriptController.text,
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.7),
+                          color: Colors.white.withValues(alpha: 0.7),
                           fontSize: 12,
                           height: 1.5,
                         ),
@@ -1708,8 +1708,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     margin: const EdgeInsets.symmetric(horizontal: 20),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     decoration: BoxDecoration(
-                      color: Colors.red.withOpacity(0.15),
-                      border: Border.all(color: Colors.red.withOpacity(0.5)),
+                      color: Colors.red.withValues(alpha: 0.15),
+                      border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
                       borderRadius: BorderRadius.circular(16),
                     ),
                     child: const Row(
@@ -1739,7 +1739,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           ),
         ],
 
-        // ── PROCESSING ──
+        // â”€â”€ PROCESSING â”€â”€
         if (_recordingState == RecordingState.processing) ...[
           Container(
             width: double.infinity,
@@ -1747,7 +1747,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
             decoration: BoxDecoration(
               color: const Color(0xFF161B2E),
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: Colors.white.withOpacity(0.08)),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
             child: const Column(
               children: [
@@ -1773,7 +1773,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           ),
         ],
 
-        // ── DONE: Show playback + transcript ──
+        // â”€â”€ DONE: Show playback + transcript â”€â”€
         if (_recordingState == RecordingState.done) ...[
           // Playback card
           Container(
@@ -1925,14 +1925,14 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     children: [
                       Icon(
                         Icons.delete_outline,
-                        color: Colors.white.withOpacity(0.3),
+                        color: Colors.white.withValues(alpha: 0.3),
                         size: 14,
                       ),
                       const SizedBox(width: 4),
                       Text(
                         'Discard recording',
                         style: TextStyle(
-                          color: Colors.white.withOpacity(0.3),
+                          color: Colors.white.withValues(alpha: 0.3),
                           fontSize: 11,
                           fontWeight: FontWeight.w600,
                         ),
@@ -1948,7 +1948,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           const SizedBox(height: 12),
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.7),
+              color: Colors.white.withValues(alpha: 0.7),
               borderRadius: BorderRadius.circular(20),
               border: Border.all(color: Colors.grey[300]!),
             ),
@@ -2003,9 +2003,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     );
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  BUILD
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
@@ -2044,7 +2044,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 ),
               ),
         backgroundColor: _isNoteSelectionMode
-            ? Color(0xFF4B9EFF).withOpacity(0.1)
+            ? Color(0xFF4B9EFF).withValues(alpha: 0.1)
             : Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
@@ -2120,7 +2120,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: Color(0xFF0A0E1A).withOpacity(0.08),
+                        color: Color(0xFF0A0E1A).withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
@@ -2162,7 +2162,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Guest banner ──
+                  // â”€â”€ Guest banner â”€â”€
                   if (_isAnonymousUser) ...[
                     Container(
                       margin: const EdgeInsets.only(bottom: 14),
@@ -2171,10 +2171,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.05),
+                        color: Colors.white.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: Colors.white.withOpacity(0.1),
+                          color: Colors.white.withValues(alpha: 0.1),
                         ),
                       ),
                       child: Row(
@@ -2187,9 +2187,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Guest mode — notes are temporary. Sign up to keep them.',
+                              'Guest mode â€” notes are temporary. Sign up to keep them.',
                               style: TextStyle(
-                                color: Colors.white.withOpacity(0.6),
+                                color: Colors.white.withValues(alpha: 0.6),
                                 fontSize: 11,
                                 height: 1.4,
                               ),
@@ -2200,12 +2200,12 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     ),
                   ],
 
-                  // ── Title field ──
+                  // â”€â”€ Title field â”€â”€
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.06),
+                      color: Colors.white.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white.withOpacity(0.1)),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                     ),
                     child: TextField(
                       controller: _titleController,
@@ -2248,12 +2248,12 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   ),
                   const SizedBox(height: 14),
 
-                  // ── Recording area ──
+                  // â”€â”€ Recording area â”€â”€
                   _buildRecordingArea(lang),
 
                   const SizedBox(height: 16),
 
-                  // ── Save + Cancel/Clear buttons ──
+                  // â”€â”€ Save + Cancel/Clear buttons â”€â”€
                   if (_recordingState == RecordingState.done ||
                       (_recordingState == RecordingState.idle &&
                           _transcriptController.text.trim().isNotEmpty)) ...[
@@ -2273,7 +2273,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             style: OutlinedButton.styleFrom(
                               foregroundColor: Colors.white70,
                               side: BorderSide(
-                                color: Colors.white.withOpacity(0.2),
+                                color: Colors.white.withValues(alpha: 0.2),
                               ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(30),
@@ -2352,7 +2352,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
               ),
             ),
 
-            // ── Saved notes section ──
+            // â”€â”€ Saved notes section â”€â”€
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
@@ -2405,7 +2405,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
 
             const SizedBox(height: 8),
 
-            // ── Notes list ──
+            // â”€â”€ Notes list â”€â”€
             Consumer<TempNotesProvider>(
               builder: (context, tempNotes, _) {
                 if (_isAnonymousUser) {
@@ -2674,13 +2674,13 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF4B9EFF).withOpacity(0.12)
-              : Colors.white.withOpacity(0.04),
+              ? const Color(0xFF4B9EFF).withValues(alpha: 0.12)
+              : Colors.white.withValues(alpha: 0.04),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
                 ? const Color(0xFF4B9EFF)
-                : Colors.white.withOpacity(0.06),
+                : Colors.white.withValues(alpha: 0.06),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -2704,12 +2704,12 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 height: 40,
                 decoration: BoxDecoration(
                   color: hasAudio
-                      ? const Color(0xFF4B9EFF).withOpacity(0.1)
-                      : Colors.white.withOpacity(0.05),
+                      ? const Color(0xFF4B9EFF).withValues(alpha: 0.1)
+                      : Colors.white.withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: hasAudio
-                        ? const Color(0xFF4B9EFF).withOpacity(0.3)
+                        ? const Color(0xFF4B9EFF).withValues(alpha: 0.3)
                         : Colors.white10,
                   ),
                 ),
@@ -2746,7 +2746,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF4B9EFF).withOpacity(0.1),
+                            color: const Color(0xFF4B9EFF).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(5),
                           ),
                           child: const Text(
@@ -2767,14 +2767,14 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         Icon(
                           Icons.graphic_eq,
                           size: 11,
-                          color: Colors.white.withOpacity(0.3),
+                          color: Colors.white.withValues(alpha: 0.3),
                         ),
                         const SizedBox(width: 4),
                         Text(
                           _formatDuration(Duration(seconds: durationSeconds)),
                           style: TextStyle(
                             fontSize: 10,
-                            color: Colors.white.withOpacity(0.3),
+                            color: Colors.white.withValues(alpha: 0.3),
                             fontWeight: FontWeight.w700,
                           ),
                         ),
@@ -2815,3 +2815,4 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     );
   }
 }
+

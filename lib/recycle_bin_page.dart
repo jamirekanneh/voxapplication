@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -72,9 +72,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
       .doc(_resolvedUid)
       .collection('deleted_library');
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  RESTORE
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _restore(BuildContext context, DocumentSnapshot doc) async {
     try {
       final data = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
@@ -157,9 +157,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  PERMANENT DELETE
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _permanentDelete(BuildContext context, DocumentSnapshot doc) async {
     final data = doc.data() as Map<String, dynamic>;
     final name = data['fileName'] as String? ?? data['phrase'] as String? ?? 'Item';
@@ -208,9 +208,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  EMPTY TRASH
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _emptyTrash(BuildContext context, List<DocumentSnapshot> docs) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -267,9 +267,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  HELPERS
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   int _daysRemaining(dynamic deletedAt) {
     if (deletedAt == null) return 30;
     DateTime deletedDate;
@@ -308,9 +308,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     return (fileType ?? 'file').toUpperCase();
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  AUTO DELETE EXPIRED ITEMS
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _cleanUpExpiredItems() async {
     if (_resolvedUid == null) return;
     final thirtyDaysAgo = Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 30)));
@@ -352,9 +352,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  BUILD
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -364,7 +364,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
       );
     }
 
-    // ── Guest Guard ──────────────────────────────
+    // â”€â”€ Guest Guard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     if (_isGuest) {
       return Scaffold(
         backgroundColor: const Color(0xFF0A0E1A),
@@ -384,7 +384,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                   width: 90,
                   height: 90,
                   decoration: BoxDecoration(
-                    color: const Color(0xFF4B9EFF).withOpacity(0.08),
+                    color: const Color(0xFF4B9EFF).withValues(alpha: 0.08),
                     shape: BoxShape.circle,
                   ),
                   child: const Icon(Icons.delete_outline_rounded, size: 46, color: Color(0xFF4B9EFF)),
@@ -398,7 +398,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                 const SizedBox(height: 12),
                 Text(
                   'The Recycle Bin is for registered users only. Guest data is removed when you leave the app. Create an account to unlock 30-day recovery.',
-                  style: TextStyle(fontSize: 13, color: Colors.white.withOpacity(0.45), height: 1.6),
+                  style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.45), height: 1.6),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -408,7 +408,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
       );
     }
 
-    // ── Logged-in User View ──────────────────────
+    // â”€â”€ Logged-in User View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     final thirtyDaysAgo = Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 30)));
 
     return DefaultTabController(
@@ -451,14 +451,14 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                     Container(
                       width: 70, height: 70,
                       decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.04),
+                        color: Colors.white.withValues(alpha: 0.04),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.delete_outline_rounded, size: 36, color: Colors.white.withOpacity(0.2)),
+                      child: Icon(Icons.delete_outline_rounded, size: 36, color: Colors.white.withValues(alpha: 0.2)),
                     ),
                     const SizedBox(height: 16),
                     Text('Nothing here yet',
-                        style: TextStyle(color: Colors.white.withOpacity(0.4), fontWeight: FontWeight.w700, fontSize: 15)),
+                        style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontWeight: FontWeight.w700, fontSize: 15)),
                   ],
                 ),
               );
@@ -495,18 +495,18 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.04),
+                      color: Colors.white.withValues(alpha: 0.04),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: Colors.white10),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline_rounded, size: 15, color: Colors.white.withOpacity(0.4)),
+                        Icon(Icons.info_outline_rounded, size: 15, color: Colors.white.withValues(alpha: 0.4)),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'Items are permanently deleted after 30 days.',
-                            style: TextStyle(fontSize: 11, color: Colors.white.withOpacity(0.4), height: 1.4),
+                            style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.4), height: 1.4),
                           ),
                         ),
                         if (docs.isNotEmpty)
@@ -548,14 +548,14 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
               width: 70,
               height: 70,
               decoration: BoxDecoration(
-                color: const Color(0xFF4B9EFF).withOpacity(0.06),
+                color: const Color(0xFF4B9EFF).withValues(alpha: 0.06),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.delete_outline_rounded, size: 36, color: Colors.white.withOpacity(0.2)),
+              child: Icon(Icons.delete_outline_rounded, size: 36, color: Colors.white.withValues(alpha: 0.2)),
             ),
             const SizedBox(height: 16),
             Text('No deleted items here',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white.withOpacity(0.3))),
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: Colors.white.withValues(alpha: 0.3))),
           ],
         ),
       );
@@ -578,9 +578,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
         return Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
-            color: Colors.white.withOpacity(0.04),
+            color: Colors.white.withValues(alpha: 0.04),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: Colors.white.withOpacity(0.08)),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
           ),
           child: Padding(
             padding: const EdgeInsets.all(14),
@@ -591,7 +591,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                   width: 48,
                   height: 48,
                   decoration: BoxDecoration(
-                    color: typeColor.withOpacity(0.12),
+                    color: typeColor.withValues(alpha: 0.12),
                     borderRadius: BorderRadius.circular(14),
                   ),
                   child: Icon(typeIcon, color: typeColor, size: 24),
@@ -614,7 +614,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                             decoration: BoxDecoration(
-                              color: typeColor.withOpacity(0.1),
+                              color: typeColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(6),
                             ),
                             child: Text(typeLabel,
@@ -651,7 +651,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF2E7D32).withOpacity(0.1),
+                          color: const Color(0xFF2E7D32).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Row(
@@ -670,7 +670,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
                         decoration: BoxDecoration(
-                          color: Colors.redAccent.withOpacity(0.08),
+                          color: Colors.redAccent.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Row(
@@ -693,3 +693,4 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     );
   }
 }
+

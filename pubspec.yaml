@@ -81,6 +81,7 @@ flutter:
 
 
   assets:
+    - .env
     - assets/images/shaheer.jpeg
     - assets/images/Jamire.jpeg
     - assets/images/Abubakir.jpeg
@@ -89,4 +90,3 @@ flutter:
     - assets/images/btn_google_signin.png
     - assets/images/chatbot_logo.png
     - assets/images/vox_logo.png
-    - assets/project.env

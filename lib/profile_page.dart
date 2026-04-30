@@ -1,4 +1,4 @@
-import 'dart:convert';
+﻿import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -7,11 +7,11 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  ProfilePage
-//  • Has account  → shows name, email, photo + edit
-//  • Anonymous    → account creation form
-// ─────────────────────────────────────────────
+//  â€¢ Has account  â†’ shows name, email, photo + edit
+//  â€¢ Anonymous    â†’ account creation form
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class ProfilePage extends StatefulWidget {
   final bool isAnonymous;
   final String username;
@@ -70,7 +70,7 @@ class _ProfilePageState extends State<ProfilePage>
     super.dispose();
   }
 
-  // ── Pick image ────────────────────────────────
+  // â”€â”€ Pick image â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(
@@ -85,7 +85,7 @@ class _ProfilePageState extends State<ProfilePage>
     }
   }
 
-  // ── Save edits (existing user) ────────────────
+  // â”€â”€ Save edits (existing user) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _saveEdits() async {
     final name = _nameController.text.trim();
     if (name.isEmpty) {
@@ -116,7 +116,7 @@ class _ProfilePageState extends State<ProfilePage>
     }
   }
 
-  // ── Anonymous: check email ────────────────────
+  // â”€â”€ Anonymous: check email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _onAnonSaveTapped() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -148,7 +148,7 @@ class _ProfilePageState extends State<ProfilePage>
     }
   }
 
-  // ── Anonymous: save brand new profile ─────────
+  // â”€â”€ Anonymous: save brand new profile â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _saveNewAnonProfile() async {
     setState(() => _anonLoading = true);
     try {
@@ -189,7 +189,7 @@ class _ProfilePageState extends State<ProfilePage>
     }
   }
 
-  // ── Anonymous: send magic link ────────────────
+  // â”€â”€ Anonymous: send magic link â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _sendMagicLink() async {
     setState(() => _anonLoading = true);
     try {
@@ -226,9 +226,9 @@ class _ProfilePageState extends State<ProfilePage>
         .showSnackBar(SnackBar(content: Text(msg)));
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  AVATAR WIDGET
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildAvatar({double radius = 52}) {
     if (_base64Image != null && _base64Image!.isNotEmpty) {
       return CircleAvatar(
@@ -258,9 +258,9 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  BUILD
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -271,9 +271,9 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  EXISTING USER PROFILE VIEW
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildProfileView() {
     return Stack(
       children: [
@@ -286,7 +286,7 @@ class _ProfilePageState extends State<ProfilePage>
             height: 220,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF4B9EFF).withOpacity(0.04),
+              color: const Color(0xFF4B9EFF).withValues(alpha: 0.04),
             ),
           ),
         ),
@@ -299,7 +299,7 @@ class _ProfilePageState extends State<ProfilePage>
             height: 260,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF4B9EFF).withOpacity(0.03),
+              color: const Color(0xFF4B9EFF).withValues(alpha: 0.03),
             ),
           ),
         ),
@@ -448,7 +448,7 @@ class _ProfilePageState extends State<ProfilePage>
                                 boxShadow: [
                                   BoxShadow(
                                     color: const Color(0xFF4B9EFF)
-                                        .withOpacity(0.25),
+                                        .withValues(alpha: 0.25),
                                     blurRadius: 20,
                                     offset: const Offset(0, 6),
                                   ),
@@ -493,7 +493,7 @@ class _ProfilePageState extends State<ProfilePage>
 
                       const SizedBox(height: 12),
 
-                      // Email — always read only
+                      // Email â€” always read only
                       _profileInfoTile(
                         label: "EMAIL",
                         value: widget.email.isNotEmpty
@@ -543,7 +543,7 @@ class _ProfilePageState extends State<ProfilePage>
                                 ),
                                 SizedBox(height: 3),
                                 Text(
-                                  "Active — data is being saved",
+                                  "Active â€” data is being saved",
                                   style: TextStyle(
                                     color: Color(0xFFF0F4FF),
                                     fontWeight: FontWeight.w700,
@@ -578,13 +578,13 @@ class _ProfilePageState extends State<ProfilePage>
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
       decoration: BoxDecoration(
-        color: Colors.white.withOpacity(0.04),
+        color: Colors.white.withValues(alpha: 0.04),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withOpacity(0.1), width: 1.5),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 1.5),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 18, color: const Color(0xFF4B9EFF).withOpacity(0.7)),
+          Icon(icon, size: 18, color: const Color(0xFF4B9EFF).withValues(alpha: 0.7)),
           const SizedBox(width: 14),
           Expanded(
             child: Column(
@@ -595,7 +595,7 @@ class _ProfilePageState extends State<ProfilePage>
                       fontSize: 10,
                       fontWeight: FontWeight.w800,
                       letterSpacing: 1.5,
-                      color: Colors.white.withOpacity(0.35),
+                      color: Colors.white.withValues(alpha: 0.35),
                     )),
                 const SizedBox(height: 3),
                 Text(value,
@@ -612,7 +612,7 @@ class _ProfilePageState extends State<ProfilePage>
               padding:
                   const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.06),
+                color: Colors.white.withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
@@ -621,7 +621,7 @@ class _ProfilePageState extends State<ProfilePage>
                     fontSize: 9,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1,
-                    color: Colors.white.withOpacity(0.3)),
+                    color: Colors.white.withValues(alpha: 0.3)),
               ),
             ),
         ],
@@ -639,15 +639,15 @@ class _ProfilePageState extends State<ProfilePage>
       style: const TextStyle(
           fontWeight: FontWeight.w600, fontSize: 15, color: Colors.white),
       decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: const Color(0xFF4B9EFF).withOpacity(0.7), size: 20),
+        prefixIcon: Icon(icon, color: const Color(0xFF4B9EFF).withValues(alpha: 0.7), size: 20),
         labelText: label,
         labelStyle: TextStyle(
-            color: Colors.white.withOpacity(0.4), fontSize: 14, fontWeight: FontWeight.w500),
+            color: Colors.white.withValues(alpha: 0.4), fontSize: 14, fontWeight: FontWeight.w500),
         filled: true,
-        fillColor: Colors.white.withOpacity(0.05),
+        fillColor: Colors.white.withValues(alpha: 0.05),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: Colors.white.withOpacity(0.1), width: 1.5),
+          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1), width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(16),
@@ -657,9 +657,9 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  ANONYMOUS VIEW — 3 stages
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  ANONYMOUS VIEW â€” 3 stages
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildAnonView() {
     return Stack(
       children: [
@@ -671,7 +671,7 @@ class _ProfilePageState extends State<ProfilePage>
             height: 260,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF4B9EFF).withOpacity(0.04),
+              color: const Color(0xFF4B9EFF).withValues(alpha: 0.04),
             ),
           ),
         ),
@@ -683,7 +683,7 @@ class _ProfilePageState extends State<ProfilePage>
             height: 320,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: const Color(0xFF4B9EFF).withOpacity(0.03),
+              color: const Color(0xFF4B9EFF).withValues(alpha: 0.03),
             ),
           ),
         ),
@@ -735,7 +735,7 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // Stage 1 — Join form
+  // Stage 1 â€” Join form
   Widget _anonJoinView() {
     return SingleChildScrollView(
       key: const ValueKey('join'),
@@ -765,7 +765,7 @@ class _ProfilePageState extends State<ProfilePage>
                           color: const Color(0xFF4B9EFF), width: 2.5),
                       boxShadow: [
                         BoxShadow(
-                          color: const Color(0xFF4B9EFF).withOpacity(0.25),
+                          color: const Color(0xFF4B9EFF).withValues(alpha: 0.25),
                           blurRadius: 20,
                           offset: const Offset(0, 6),
                         ),
@@ -774,13 +774,13 @@ class _ProfilePageState extends State<ProfilePage>
                     child: CircleAvatar(
                       radius: 52,
                       backgroundColor:
-                          const Color(0xFF4B9EFF).withOpacity(0.08),
+                          const Color(0xFF4B9EFF).withValues(alpha: 0.08),
                       backgroundImage: _base64Image != null
                           ? MemoryImage(base64Decode(_base64Image!))
                           : null,
                       child: _base64Image == null
                           ? Icon(Icons.camera_alt_outlined,
-                              color: const Color(0xFF4B9EFF).withOpacity(0.5), size: 28)
+                              color: const Color(0xFF4B9EFF).withValues(alpha: 0.5), size: 28)
                           : null,
                     ),
                   ),
@@ -825,7 +825,7 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // Stage 2 — Returning user
+  // Stage 2 â€” Returning user
   Widget _anonReturningView() {
     return SingleChildScrollView(
       key: const ValueKey('returning'),
@@ -845,17 +845,17 @@ class _ProfilePageState extends State<ProfilePage>
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.04),
+              color: Colors.white.withValues(alpha: 0.04),
               borderRadius: BorderRadius.circular(18),
               border: Border.all(
-                  color: Colors.white.withOpacity(0.1), width: 1.5),
+                  color: Colors.white.withValues(alpha: 0.1), width: 1.5),
             ),
             child: Row(
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                      color: const Color(0xFF4B9EFF).withOpacity(0.12), shape: BoxShape.circle),
+                      color: const Color(0xFF4B9EFF).withValues(alpha: 0.12), shape: BoxShape.circle),
                   child: const Icon(Icons.mail_outline_rounded,
                       color: Color(0xFF4B9EFF), size: 18),
                 ),
@@ -869,7 +869,7 @@ class _ProfilePageState extends State<ProfilePage>
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 1.5,
-                              color: Colors.white.withOpacity(0.35))),
+                              color: Colors.white.withValues(alpha: 0.35))),
                       const SizedBox(height: 3),
                       Text(_emailController.text.trim(),
                           style: const TextStyle(
@@ -924,7 +924,7 @@ class _ProfilePageState extends State<ProfilePage>
               onPressed: _anonLoading ? null : _saveNewAnonProfile,
               style: OutlinedButton.styleFrom(
                 foregroundColor: Colors.white60,
-                side: BorderSide(color: Colors.white.withOpacity(0.15)),
+                side: BorderSide(color: Colors.white.withValues(alpha: 0.15)),
                 shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(18)),
               ),
@@ -941,7 +941,7 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // Stage 3 — Awaiting link
+  // Stage 3 â€” Awaiting link
   Widget _anonAwaitingView() {
     return SingleChildScrollView(
       key: const ValueKey('awaiting'),
@@ -979,7 +979,7 @@ class _ProfilePageState extends State<ProfilePage>
                     width: 62,
                     height: 62,
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4B9EFF).withOpacity(0.15),
+                      color: const Color(0xFF4B9EFF).withValues(alpha: 0.15),
                       shape: BoxShape.circle,
                     ),
                     child: const Icon(Icons.mail_rounded,
@@ -992,9 +992,9 @@ class _ProfilePageState extends State<ProfilePage>
           const SizedBox(height: 24),
           Center(
             child: Text(
-              "Waiting for you to tap the link…",
+              "Waiting for you to tap the linkâ€¦",
               style: TextStyle(
-                  color: Colors.white.withOpacity(0.35),
+                  color: Colors.white.withValues(alpha: 0.35),
                   fontWeight: FontWeight.w600,
                   fontSize: 13),
             ),
@@ -1023,7 +1023,7 @@ class _ProfilePageState extends State<ProfilePage>
                   await prefs.setBool('hasProfile', true);
                   if (mounted) Navigator.pop(context);
                 },
-                child: const Text("⚠ Skip (debug only)",
+                child: const Text("âš  Skip (debug only)",
                     style: TextStyle(
                         color: Colors.red,
                         fontSize: 12,
@@ -1037,7 +1037,7 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // ── Shared anon widgets ───────────────────────
+  // â”€â”€ Shared anon widgets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _anonHeader({
     required String tag,
     required String title,
@@ -1049,9 +1049,9 @@ class _ProfilePageState extends State<ProfilePage>
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
           decoration: BoxDecoration(
-            color: const Color(0xFF4B9EFF).withOpacity(0.12),
+            color: const Color(0xFF4B9EFF).withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: const Color(0xFF4B9EFF).withOpacity(0.3)),
+            border: Border.all(color: const Color(0xFF4B9EFF).withValues(alpha: 0.3)),
           ),
           child: Text(tag,
               style: const TextStyle(
@@ -1071,7 +1071,7 @@ class _ProfilePageState extends State<ProfilePage>
         const SizedBox(height: 10),
         Text(subtitle,
             style: TextStyle(
-                color: Colors.white.withOpacity(0.5),
+                color: Colors.white.withValues(alpha: 0.5),
                 fontWeight: FontWeight.w500,
                 fontSize: 14,
                 height: 1.5)),
@@ -1093,17 +1093,17 @@ class _ProfilePageState extends State<ProfilePage>
         style: const TextStyle(
             fontWeight: FontWeight.w600, fontSize: 15, color: Colors.white),
         decoration: InputDecoration(
-          prefixIcon: Icon(icon, color: const Color(0xFF4B9EFF).withOpacity(0.7), size: 20),
+          prefixIcon: Icon(icon, color: const Color(0xFF4B9EFF).withValues(alpha: 0.7), size: 20),
           labelText: label,
           labelStyle: TextStyle(
-              color: Colors.white.withOpacity(0.4),
+              color: Colors.white.withValues(alpha: 0.4),
               fontSize: 14,
               fontWeight: FontWeight.w500),
           filled: true,
-          fillColor: Colors.white.withOpacity(0.05),
+          fillColor: Colors.white.withValues(alpha: 0.05),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(color: Colors.white.withOpacity(0.1)),
+            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
@@ -1128,7 +1128,7 @@ class _ProfilePageState extends State<ProfilePage>
         style: ElevatedButton.styleFrom(
           backgroundColor: const Color(0xFF4B9EFF),
           foregroundColor: Colors.white,
-          disabledBackgroundColor: const Color(0xFF4B9EFF).withOpacity(0.4),
+          disabledBackgroundColor: const Color(0xFF4B9EFF).withValues(alpha: 0.4),
           shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(18)),
           elevation: 0,
@@ -1149,7 +1149,7 @@ class _ProfilePageState extends State<ProfilePage>
   }
 }
 
-// ── Sweep ring painter ────────────────────────
+// â”€â”€ Sweep ring painter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _SweepRingPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
@@ -1161,7 +1161,7 @@ class _SweepRingPainter extends CustomPainter {
       ..strokeWidth = 3
       ..shader = SweepGradient(
         colors: [
-          const Color(0xFF4B9EFF).withOpacity(0),
+          const Color(0xFF4B9EFF).withValues(alpha: 0),
           const Color(0xFF4B9EFF),
         ],
       ).createShader(rect);

@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:provider/provider.dart';
@@ -127,9 +127,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
     super.dispose();
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  RESOLVE USER
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _resolveUser() async {
     final user = FirebaseAuth.instance.currentUser;
 
@@ -209,9 +209,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  DOCUMENT OPTIONS (3 buttons)
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _showDocumentOptions(String fileName, String content) async {
     final choice = await showModalBottomSheet<String>(
       context: context,
@@ -345,7 +345,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
               width: 44,
               height: 44,
               decoration: BoxDecoration(
-                color: iconColor.withOpacity(0.15),
+                color: iconColor.withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Icon(icon, color: iconColor, size: 22),
@@ -378,16 +378,16 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  OPEN READER (kept for backward compatibility)
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _openReader(String fileName, String content) async {
     await _showDocumentOptions(fileName, content);
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  VOICE SEARCH
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _listen() async {
     if (_isListening) {
       await _speech.stop();
@@ -430,9 +430,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
     }
   }
 
-  // ─────────────────────────────────────────────
-  //  DELETE — Firestore (logged-in users)
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  DELETE â€” Firestore (logged-in users)
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _confirmDelete(BuildContext context, String docId, String fileName) {
     final lang = context.read<LanguageProvider>();
     final displayName = fileName.length > 40
@@ -583,9 +583,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
-  // ─────────────────────────────────────────────
-  //  DELETE — temp/anonymous users
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  DELETE â€” temp/anonymous users
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _confirmDeleteTemp(
     BuildContext context,
     String id,
@@ -688,9 +688,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  SELECTION MODE HELPERS
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _enterSelectionMode(String id) {
     setState(() {
       _isSelectionMode = true;
@@ -717,9 +717,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
     });
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  DELETE SELECTED
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _deleteSelected() async {
     if (_selectedIds.isEmpty) return;
     final count = _selectedIds.length;
@@ -729,7 +729,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
         backgroundColor: const Color(0xFF0A0E1A),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Colors.white.withOpacity(0.1)),
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
         ),
         title: const Row(
           children: [
@@ -740,12 +740,12 @@ class _VoxHomePageState extends State<VoxHomePage> {
         ),
         content: Text(
           '$count file${count == 1 ? '' : 's'} will be moved to the Recycle Bin and permanently deleted after 30 days.',
-          style: TextStyle(color: Colors.white.withOpacity(0.7)),
+          style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.5))),
+            child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
@@ -811,9 +811,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
     _exitSelectionMode();
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  BUILD
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
@@ -827,7 +827,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ── Header / Selection Bar ──────────────────
+              // â”€â”€ Header / Selection Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               if (_isSelectionMode) ...[
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
@@ -915,8 +915,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             ),
                           ),
                           filled: true,
-                          fillColor: Colors.white.withOpacity(0.08),
-                          hoverColor: Colors.white.withOpacity(0.12),
+                          fillColor: Colors.white.withValues(alpha: 0.08),
+                          hoverColor: Colors.white.withValues(alpha: 0.12),
                           contentPadding: EdgeInsets.zero,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(20),
@@ -938,13 +938,13 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                 horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
                               color: provider.assistantModeEnabled
-                                  ? const Color(0xFF4B9EFF).withOpacity(0.15)
-                                  : Colors.white.withOpacity(0.05),
+                                  ? const Color(0xFF4B9EFF).withValues(alpha: 0.15)
+                                  : Colors.white.withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                   color: provider.assistantModeEnabled
                                       ? const Color(0xFF4B9EFF)
-                                      : Colors.white.withOpacity(0.1)),
+                                      : Colors.white.withValues(alpha: 0.1)),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -1007,15 +1007,15 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 ),
               ],
 
-              // ── Guest banner ─────────────────────────────
+              // â”€â”€ Guest banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               if (_isAnonymousUser) ...[
                 const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withOpacity(0.05),
+                    color: Colors.white.withValues(alpha: 0.05),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.white.withOpacity(0.1)),
+                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
                   ),
                   child: Row(
                     children: [
@@ -1023,9 +1023,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Guest mode — files are temporary. Create an account to save them.',
+                          'Guest mode â€” files are temporary. Create an account to save them.',
                           style: TextStyle(
-                            color: Colors.white.withOpacity(0.6),
+                            color: Colors.white.withValues(alpha: 0.6),
                             fontSize: 11,
                             height: 1.4,
                           ),
@@ -1038,7 +1038,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
               const SizedBox(height: 12),
 
-              // ── Folders/Tags ───────────────────────────
+              // â”€â”€ Folders/Tags â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               SizedBox(
                 height: 32,
                 child: ListView.builder(
@@ -1054,15 +1054,15 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         margin: const EdgeInsets.only(right: 8),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
                         decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFF4B9EFF) : Colors.white.withOpacity(0.05),
+                          color: isSelected ? const Color(0xFF4B9EFF) : Colors.white.withValues(alpha: 0.05),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: isSelected ? Colors.transparent : Colors.white.withOpacity(0.1)),
+                          border: Border.all(color: isSelected ? Colors.transparent : Colors.white.withValues(alpha: 0.1)),
                         ),
                         child: Center(
                           child: Text(
                             folder,
                             style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.white.withOpacity(0.6),
+                              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.6),
                               fontSize: 12,
                               fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
                             ),
@@ -1076,11 +1076,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
               const SizedBox(height: 12),
 
-              // ── Library content ──────────────────────────
+              // â”€â”€ Library content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               Expanded(
                 child: Consumer<TempLibraryProvider>(
                   builder: (context, tempLibrary, _) {
-                    // ── Guest: in-memory items ───────────────
+                    // â”€â”€ Guest: in-memory items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if (_isAnonymousUser) {
                       final items = tempLibrary.items
                           .where((item) {
@@ -1163,7 +1163,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       );
                     }
 
-                    // ── Logged in: Firestore filtered by userId ──
+                    // â”€â”€ Logged in: Firestore filtered by userId â”€â”€
                     if (_resolvedUid == null) {
                       return const Center(child: CircularProgressIndicator());
                     }
@@ -1177,7 +1177,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                           .snapshots(),
                       builder: (context, snapshot) {
                         if (snapshot.hasError) {
-                          debugPrint('🔴 Firestore error: ${snapshot.error}');
+                          debugPrint('ðŸ”´ Firestore error: ${snapshot.error}');
                           final isOffline = snapshot.error.toString().contains(
                             'unavailable',
                           );
@@ -1256,14 +1256,14 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                 Container(
                                   width: 70, height: 70,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF4B9EFF).withOpacity(0.06),
+                                    color: const Color(0xFF4B9EFF).withValues(alpha: 0.06),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: Icon(Icons.folder_off_outlined, size: 36, color: Colors.white.withOpacity(0.2)),
+                                  child: Icon(Icons.folder_off_outlined, size: 36, color: Colors.white.withValues(alpha: 0.2)),
                                 ),
                                 const SizedBox(height: 16),
                                 Text(lang.t('no_files'),
-                                    style: TextStyle(color: Colors.white.withOpacity(0.4), fontWeight: FontWeight.w700, fontSize: 15)),
+                                    style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontWeight: FontWeight.w700, fontSize: 15)),
                               ],
                             ),
                           );
@@ -1361,7 +1361,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 
-  // ── Card count picker ─────────────────────────
+  // â”€â”€ Card count picker â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<int?> _pickCardCount(BuildContext context) async {
     int selected = 10;
     return showDialog<int>(
@@ -1371,7 +1371,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
           backgroundColor: const Color(0xFF0A0E1A),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
-            side: BorderSide(color: Colors.white.withOpacity(0.1)),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
           ),
           title: const Text(
             'How many questions?',
@@ -1394,14 +1394,14 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 max: 20,
                 divisions: 15,
                 activeColor: const Color(0xFF4B9EFF),
-                inactiveColor: Colors.white.withOpacity(0.1),
+                inactiveColor: Colors.white.withValues(alpha: 0.1),
                 onChanged: (v) => setDialogState(() => selected = v.round()),
               ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('5', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12)),
-                  Text('20', style: TextStyle(color: Colors.white.withOpacity(0.4), fontSize: 12)),
+                  Text('5', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12)),
+                  Text('20', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12)),
                 ],
               ),
             ],
@@ -1409,7 +1409,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.5))),
+              child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, selected),
@@ -1459,15 +1459,15 @@ class _VoxHomePageState extends State<VoxHomePage> {
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF4B9EFF).withOpacity(0.12) : Colors.white.withOpacity(0.04),
+            color: isSelected ? const Color(0xFF4B9EFF).withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.04),
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isSelected ? const Color(0xFF4B9EFF) : Colors.white.withOpacity(0.08),
+              color: isSelected ? const Color(0xFF4B9EFF) : Colors.white.withValues(alpha: 0.08),
               width: isSelected ? 2.0 : 1.0,
             ),
             boxShadow: isSelected ? [
               BoxShadow(
-                color: const Color(0xFF4B9EFF).withOpacity(0.1),
+                color: const Color(0xFF4B9EFF).withValues(alpha: 0.1),
                 blurRadius: 12,
                 spreadRadius: 2,
               ),
@@ -1481,7 +1481,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
               Text(
                 title,
                 style: TextStyle(
-                  color: Colors.white.withOpacity(isSelected ? 1.0 : 0.7),
+                  color: Colors.white.withValues(alpha: isSelected ? 1.0 : 0.7),
                   fontSize: 10,
                   fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
                   height: 1.2,
@@ -1491,7 +1491,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
               ),
               Align(
                 alignment: Alignment.bottomRight,
-                child: Icon(iconData, size: 24, color: iconColor.withOpacity(0.9)),
+                child: Icon(iconData, size: 24, color: iconColor.withValues(alpha: 0.9)),
               ),
             ],
           ),
@@ -1507,7 +1507,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 color: const Color(0xFF4B9EFF),
                 shape: BoxShape.circle,
                 boxShadow: [
-                  BoxShadow(color: const Color(0xFF4B9EFF).withOpacity(0.4), blurRadius: 6, spreadRadius: 1),
+                  BoxShadow(color: const Color(0xFF4B9EFF).withValues(alpha: 0.4), blurRadius: 6, spreadRadius: 1),
                 ],
               ),
               child: const Icon(Icons.check, color: Colors.white, size: 16),
@@ -1543,3 +1543,4 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 }
+

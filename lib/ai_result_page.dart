@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -10,7 +10,7 @@ class AiResultPage extends StatefulWidget {
   final String documentContent;
   final String mode; // 'summary' | 'flashcards'
   final int cardCount; // how many flashcards to generate
-  final String source; // 'Home' | 'Notes' — origin of the document
+  final String source; // 'Home' | 'Notes' â€” origin of the document
 
   const AiResultPage({
     super.key,
@@ -26,7 +26,7 @@ class AiResultPage extends StatefulWidget {
 }
 
 class _AiResultPageState extends State<AiResultPage> {
-  // ── AI State ───────────────────────────────────
+  // â”€â”€ AI State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   bool _loading = true;
   String? _error;
   String? _summary;
@@ -36,7 +36,7 @@ class _AiResultPageState extends State<AiResultPage> {
   late List<bool> _flipped;
   int _currentCard = 0;
 
-  // ── TTS State ──────────────────────────────────
+  // â”€â”€ TTS State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   final FlutterTts _tts = FlutterTts();
   bool _isSpeaking = false;
   bool _autoReadEnabled = true; // auto-read toggle
@@ -54,7 +54,7 @@ class _AiResultPageState extends State<AiResultPage> {
     super.dispose();
   }
 
-  // ── Init TTS ───────────────────────────────────
+  // â”€â”€ Init TTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _initTts() async {
     await _tts.setLanguage('en-US');
     await _tts.setSpeechRate(0.5);
@@ -67,7 +67,7 @@ class _AiResultPageState extends State<AiResultPage> {
     });
   }
 
-  // ── TTS helpers ────────────────────────────────
+  // â”€â”€ TTS helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _speak(String text) async {
     await _tts.stop();
     if (text.isEmpty) return;
@@ -97,7 +97,7 @@ class _AiResultPageState extends State<AiResultPage> {
         : 'Question: ${card.question}';
   }
 
-  // ── Fetch AI content ───────────────────────────
+  // â”€â”€ Fetch AI content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _fetch() async {
     setState(() {
       _loading = true;
@@ -146,7 +146,7 @@ class _AiResultPageState extends State<AiResultPage> {
     }
   }
 
-  // ── Save to Firebase ───────────────────────────
+  // â”€â”€ Save to Firebase â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _saveAssessment() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
@@ -240,7 +240,7 @@ class _AiResultPageState extends State<AiResultPage> {
     }
   }
 
-  // ── Speaker button ─────────────────────────────
+  // â”€â”€ Speaker button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildSpeakerButton({bool compact = false}) {
     return GestureDetector(
       onTap: _toggleSpeaker,
@@ -253,7 +253,7 @@ class _AiResultPageState extends State<AiResultPage> {
         decoration: BoxDecoration(
           color: _isSpeaking
               ? const Color(0xFF4B9EFF)
-              : Colors.white.withOpacity(0.08),
+              : Colors.white.withValues(alpha: 0.08),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -281,7 +281,7 @@ class _AiResultPageState extends State<AiResultPage> {
     );
   }
 
-  // ── Auto-read toggle ───────────────────────────
+  // â”€â”€ Auto-read toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildAutoReadToggle() {
     return GestureDetector(
       onTap: () {
@@ -292,8 +292,8 @@ class _AiResultPageState extends State<AiResultPage> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: _autoReadEnabled
-              ? const Color(0xFF4B9EFF).withOpacity(0.15)
-              : Colors.white.withOpacity(0.05),
+              ? const Color(0xFF4B9EFF).withValues(alpha: 0.15)
+              : Colors.white.withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: _autoReadEnabled ? const Color(0xFF4B9EFF) : Colors.white10,
@@ -324,7 +324,7 @@ class _AiResultPageState extends State<AiResultPage> {
     );
   }
 
-  // ── Summary view ──────────────────────────────
+  // â”€â”€ Summary view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildSummary() {
     final lines = (_summary ?? '').split('\n');
     return ListView.builder(
@@ -333,7 +333,7 @@ class _AiResultPageState extends State<AiResultPage> {
       itemBuilder: (_, i) {
         final line = lines[i].trim();
         if (line.isEmpty) return const SizedBox(height: 10);
-        final isBullet = line.startsWith('•');
+        final isBullet = line.startsWith('â€¢');
         return Padding(
           padding: EdgeInsets.only(bottom: 6, left: isBullet ? 8 : 0),
           child: Row(
@@ -341,7 +341,7 @@ class _AiResultPageState extends State<AiResultPage> {
             children: [
               if (isBullet) ...[
                 const Text(
-                  '•  ',
+                  'â€¢  ',
                   style: TextStyle(
                     fontSize: 15,
                     color: Color(0xFF4B9EFF),
@@ -376,7 +376,7 @@ class _AiResultPageState extends State<AiResultPage> {
     );
   }
 
-  // ── Flashcard view ────────────────────────────
+  // â”€â”€ Flashcard view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildFlashcards() {
     final cards = _flashcards!;
     final card = cards[_currentCard];
@@ -392,7 +392,7 @@ class _AiResultPageState extends State<AiResultPage> {
               Text(
                 'Card ${_currentCard + 1} of ${cards.length}',
                 style: TextStyle(
-                  color: Colors.white.withOpacity(0.5),
+                  color: Colors.white.withValues(alpha: 0.5),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -415,7 +415,7 @@ class _AiResultPageState extends State<AiResultPage> {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: (_currentCard + 1) / cards.length,
-              backgroundColor: Colors.white.withOpacity(0.05),
+              backgroundColor: Colors.white.withValues(alpha: 0.05),
               valueColor: const AlwaysStoppedAnimation<Color>(
                 Color(0xFF4B9EFF),
               ),
@@ -426,7 +426,7 @@ class _AiResultPageState extends State<AiResultPage> {
 
         const SizedBox(height: 12),
 
-        // Flashcard — tap flips and reads
+        // Flashcard â€” tap flips and reads
         Expanded(
           child: GestureDetector(
             onTap: () {
@@ -447,19 +447,19 @@ class _AiResultPageState extends State<AiResultPage> {
                 decoration: BoxDecoration(
                   color: isFlipped
                       ? const Color(0xFF161B2E)
-                      : Colors.white.withOpacity(0.04),
+                      : Colors.white.withValues(alpha: 0.04),
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Color(0xFF0A0E1A).withOpacity(0.08),
+                      color: Color(0xFF0A0E1A).withValues(alpha: 0.08),
                       blurRadius: 20,
                       offset: const Offset(0, 6),
                     ),
                   ],
                   border: Border.all(
                     color: isFlipped
-                        ? const Color(0xFF4B9EFF).withOpacity(0.4)
-                        : Colors.white.withOpacity(0.08),
+                        ? const Color(0xFF4B9EFF).withValues(alpha: 0.4)
+                        : Colors.white.withValues(alpha: 0.08),
                   ),
                 ),
                 child: Column(
@@ -472,8 +472,8 @@ class _AiResultPageState extends State<AiResultPage> {
                       ),
                       decoration: BoxDecoration(
                         color: isFlipped
-                            ? const Color(0xFF4B9EFF).withOpacity(0.15)
-                            : Colors.white.withOpacity(0.05),
+                            ? const Color(0xFF4B9EFF).withValues(alpha: 0.15)
+                            : Colors.white.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -546,8 +546,8 @@ class _AiResultPageState extends State<AiResultPage> {
                     foregroundColor: Colors.white,
                     side: BorderSide(
                       color: _currentCard > 0
-                          ? Colors.white.withOpacity(0.2)
-                          : Colors.white.withOpacity(0.05),
+                          ? Colors.white.withValues(alpha: 0.2)
+                          : Colors.white.withValues(alpha: 0.05),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
@@ -555,7 +555,7 @@ class _AiResultPageState extends State<AiResultPage> {
                     ),
                   ),
                   child: const Text(
-                    '← Previous',
+                    'â† Previous',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -586,10 +586,10 @@ class _AiResultPageState extends State<AiResultPage> {
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    disabledBackgroundColor: Colors.white.withOpacity(0.05),
+                    disabledBackgroundColor: Colors.white.withValues(alpha: 0.05),
                   ),
                   child: const Text(
-                    'Next →',
+                    'Next â†’',
                     style: TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
@@ -601,7 +601,7 @@ class _AiResultPageState extends State<AiResultPage> {
     );
   }
 
-  // ── Build ──────────────────────────────────────
+  // â”€â”€ Build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
     final isSummary = widget.mode == 'summary';
@@ -645,7 +645,7 @@ class _AiResultPageState extends State<AiResultPage> {
                           widget.documentTitle,
                           style: TextStyle(
                             fontSize: 11,
-                            color: Colors.white.withOpacity(0.5),
+                            color: Colors.white.withValues(alpha: 0.5),
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -655,7 +655,7 @@ class _AiResultPageState extends State<AiResultPage> {
                   // Auto-read toggle
                   if (!_loading && _error == null) _buildAutoReadToggle(),
                   const SizedBox(width: 6),
-                  // Speaker button (summary only — flashcard has its own)
+                  // Speaker button (summary only â€” flashcard has its own)
                   if (!_loading && _error == null && isSummary)
                     _buildSpeakerButton(),
                   const SizedBox(width: 6),
@@ -670,10 +670,10 @@ class _AiResultPageState extends State<AiResultPage> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF4B9EFF).withOpacity(0.12),
+                          color: const Color(0xFF4B9EFF).withValues(alpha: 0.12),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: const Color(0xFF4B9EFF).withOpacity(0.3),
+                            color: const Color(0xFF4B9EFF).withValues(alpha: 0.3),
                           ),
                         ),
                         child: const Row(
@@ -731,10 +731,10 @@ class _AiResultPageState extends State<AiResultPage> {
                           vertical: 6,
                         ),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.06),
+                          color: Colors.white.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                            color: Colors.white.withOpacity(0.08),
+                            color: Colors.white.withValues(alpha: 0.08),
                           ),
                         ),
                         child: const Row(
@@ -767,7 +767,7 @@ class _AiResultPageState extends State<AiResultPage> {
                       child: Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.06),
+                          color: Colors.white.withValues(alpha: 0.06),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: const Icon(
@@ -862,3 +862,4 @@ class _AiResultPageState extends State<AiResultPage> {
     );
   }
 }
+

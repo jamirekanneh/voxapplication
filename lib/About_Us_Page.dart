@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'language_provider.dart';
 
@@ -24,11 +24,11 @@ class AboutUsPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // ── Developers Section ──────────────────
+                  // â”€â”€ Developers Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                   _sectionLabel('Developers'),
                   const SizedBox(height: 12),
 
-                  // ── تم التعديل هنا لعرض البطاقات عموديًا واحد تلو الآخر ──
+                  // â”€â”€ ØªÙ… Ø§Ù„ØªØ¹Ø¯ÙŠÙ„ Ù‡Ù†Ø§ Ù„Ø¹Ø±Ø¶ Ø§Ù„Ø¨Ø·Ø§Ù‚Ø§Øª Ø¹Ù…ÙˆØ¯ÙŠÙ‹Ø§ ÙˆØ§Ø­Ø¯ ØªÙ„Ùˆ Ø§Ù„Ø¢Ø®Ø± â”€â”€
                   Column(
                     children: [
                       _memberCard(
@@ -40,7 +40,7 @@ class AboutUsPage extends StatelessWidget {
                         'Flutter Project Lead & Final Decision Maker',
                         isLeader: true,
                       ),
-                      const SizedBox(height: 14), // مسافة بين البطاقات
+                      const SizedBox(height: 14), // Ù…Ø³Ø§ÙØ© Ø¨ÙŠÙ† Ø§Ù„Ø¨Ø·Ø§Ù‚Ø§Øª
                       _memberCard(
                         'assets/images/shaheer.jpeg',
                         'Shaheer Ahmed Farooqi',
@@ -70,17 +70,17 @@ class AboutUsPage extends StatelessWidget {
                     ],
                   ),
 
-                  // ────────────────────────────────────────────────────────
+                  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                   const SizedBox(height: 28),
 
-                  // ── Supervisor Section ──────────────────
+                  // â”€â”€ Supervisor Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                   _sectionLabel('Supervisor'),
                   const SizedBox(height: 12),
                   _supervisorCard(),
 
                   const SizedBox(height: 28),
 
-                  // ── About App Section ───────────────────
+                  // â”€â”€ About App Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                   _sectionLabel('About the App'),
                   const SizedBox(height: 12),
                   _aboutCard(),
@@ -93,7 +93,7 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 
-  // ── Header Widget ──────────────────────────────────────
+  // â”€â”€ Header Widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildHeader(BuildContext context, String Function(String) t) {
     return Container(
       width: double.infinity,
@@ -165,7 +165,7 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 
-  // ── Member Card Widget ──────────────────────────────────
+  // â”€â”€ Member Card Widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _memberCard(
     String imagePath,
     String name,
@@ -176,7 +176,7 @@ class AboutUsPage extends StatelessWidget {
     bool isLeader = false,
   }) {
     return Container(
-      // تم تغيير العرض ليأخذ المساحة المتاحة بالكامل مع مراعاة الحواف
+      // ØªÙ… ØªØºÙŠÙŠØ± Ø§Ù„Ø¹Ø±Ø¶ Ù„ÙŠØ£Ø®Ø° Ø§Ù„Ù…Ø³Ø§Ø­Ø© Ø§Ù„Ù…ØªØ§Ø­Ø© Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ Ù…Ø¹ Ù…Ø±Ø§Ø¹Ø§Ø© Ø§Ù„Ø­ÙˆØ§Ù
       width: double.infinity,
       decoration: BoxDecoration(
         color: cardGrey,
@@ -305,7 +305,7 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 
-  // ── Supervisor Card Widget ──────────────────────────────
+  // â”€â”€ Supervisor Card Widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _supervisorCard() {
     return Container(
       width: double.infinity,
@@ -356,7 +356,7 @@ class AboutUsPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 12),
                 const Text(
-                  'Prof. Dr. Nadire Çavuş',
+                  'Prof. Dr. Nadire Ã‡avuÅŸ',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
@@ -370,7 +370,7 @@ class AboutUsPage extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.6,
-                    color: Colors.white.withOpacity(0.7),
+                    color: Colors.white.withValues(alpha: 0.7),
                   ),
                 ),
               ],
@@ -381,7 +381,7 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 
-  // ── About App Widget (Merged with Main Features) ────────
+  // â”€â”€ About App Widget (Merged with Main Features) â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _aboutCard() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -479,3 +479,4 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 }
+

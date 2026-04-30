@@ -1,4 +1,4 @@
-import 'dart:async';
+﻿import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -9,9 +9,9 @@ import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:app_links/app_links.dart';
 
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  COLORS
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class VoxColors {
   static const Color navy = Color(0xFF0A0E1A);
   static const Color blue = Color(0xFF4B9EFF);
@@ -20,9 +20,9 @@ class VoxColors {
   static const Color accent = Color(0xFF4B9EFF);
 }
 
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  ENTRY POINT
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class UserProfilePage extends StatefulWidget {
   final bool isEditingMode;
 
@@ -52,16 +52,16 @@ class _UserProfilePageState extends State<UserProfilePage>
   String? _currentName;
   String? _currentPhotoBase64;
 
-  // Google Sign-In — mobile only
+  // Google Sign-In â€” mobile only
   late final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email'],
     serverClientId:
         '650391636557-h799717ovtk7k86d171cd6rcqj68csc4.apps.googleusercontent.com',
   );
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  LIFECYCLE
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   void initState() {
     super.initState();
@@ -89,9 +89,9 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  DEEP LINKS
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _initDeepLinks() async {
     _appLinks = AppLinks();
 
@@ -135,9 +135,9 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  LOAD / INIT
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _loadCurrentUserData() async {
     if (!_isEditingMode) return;
     if (mounted) setState(() => _isLoading = true);
@@ -184,9 +184,9 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  EMAIL SWITCH
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _requestEmailSwitch() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -219,9 +219,9 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  SAVE / SUBMIT
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _onSaveTapped() async {
     if (_isLoading) return;
 
@@ -234,7 +234,7 @@ class _UserProfilePageState extends State<UserProfilePage>
       return;
     }
 
-    // ── Switching email flow ──
+    // â”€â”€ Switching email flow â”€â”€
     if (_isEditingMode &&
         _isSwitchingEmail &&
         currentUser != null &&
@@ -251,13 +251,13 @@ class _UserProfilePageState extends State<UserProfilePage>
       return;
     }
 
-    // ── Edit existing profile (no email change) ──
+    // â”€â”€ Edit existing profile (no email change) â”€â”€
     if (_isEditingMode) {
       await _updateExistingProfile();
       return;
     }
 
-    // ── New user onboarding ──
+    // â”€â”€ New user onboarding â”€â”€
     if (!_isValidEmail(email)) {
       _showSnack('Please enter a valid email address.');
       return;
@@ -372,9 +372,9 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  MAGIC LINK
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _sendMagicLink({bool isFreshStart = false}) async {
     if (_isLoading) return;
     if (mounted) setState(() => _isLoading = true);
@@ -414,7 +414,7 @@ class _UserProfilePageState extends State<UserProfilePage>
   Future<void> _onStartFreshTapped() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      barrierColor: VoxColors.navy.withOpacity(0.8),
+      barrierColor: VoxColors.navy.withValues(alpha: 0.8),
       builder: (ctx) => AlertDialog(
         title: const Text('Start Fresh?'),
         content: const Text(
@@ -504,7 +504,7 @@ class _UserProfilePageState extends State<UserProfilePage>
           },
         );
       } else {
-        // Returning user — migrate old doc to new UID
+        // Returning user â€” migrate old doc to new UID
         final oldUsers = await FirebaseFirestore.instance
             .collection('users')
             .where('email', isEqualTo: email)
@@ -606,9 +606,9 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  GOOGLE SIGN-IN
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _handleGoogleSignIn() async {
     if (_googleLoading) return;
     if (mounted) setState(() => _googleLoading = true);
@@ -669,9 +669,9 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  IMAGE PICKER
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(
@@ -685,9 +685,9 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  HELPERS
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _showSnack(String message) {
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
@@ -773,9 +773,9 @@ class _UserProfilePageState extends State<UserProfilePage>
     );
   }
 
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  BUILD
-  // ─────────────────────────────────────────────
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
     // Non-form stages rendered inside VoxScaffoldWrapper
@@ -819,7 +819,7 @@ class _UserProfilePageState extends State<UserProfilePage>
             const SizedBox(height: 20),
           const SizedBox(height: 36),
 
-          // ── Avatar picker ──
+          // â”€â”€ Avatar picker â”€â”€
           Center(
             child: GestureDetector(
               onTap: _pickImage,
@@ -891,7 +891,7 @@ class _UserProfilePageState extends State<UserProfilePage>
                 onPressed: _showGuestWarning,
                 child: Text(
                   'Continue without account',
-                  style: TextStyle(color: Colors.white.withOpacity(0.3)),
+                  style: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
                 ),
               ),
             ),
@@ -912,9 +912,9 @@ class _UserProfilePageState extends State<UserProfilePage>
   }
 }
 
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  SUB-VIEWS
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _ReturningUserView extends StatelessWidget {
   final String email;
   final VoidCallback onConfirm;
@@ -1022,7 +1022,7 @@ class _AwaitingLinkView extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.03),
+              color: Colors.white.withValues(alpha: 0.03),
               borderRadius: BorderRadius.circular(24),
             ),
             child: Column(
@@ -1043,7 +1043,7 @@ class _AwaitingLinkView extends StatelessWidget {
                   "We've sent a magic sign-in link to your email. Click it to continue.",
                   textAlign: TextAlign.center,
                   style:
-                      TextStyle(color: Colors.white.withOpacity(0.5), fontSize: 13),
+                      TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
                 ),
                 const SizedBox(height: 32),
                 _VoxButton(
@@ -1068,9 +1068,9 @@ class _AwaitingLinkView extends StatelessWidget {
   }
 }
 
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  SHARED WIDGETS
-// ─────────────────────────────────────────────
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 class _VoxHeader extends StatelessWidget {
   final String tag, title, subtitle;
 
@@ -1117,7 +1117,7 @@ class _VoxHeader extends StatelessWidget {
           const SizedBox(height: 12),
           Text(
             subtitle,
-            style: TextStyle(color: Colors.white.withOpacity(0.5)),
+            style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
           ),
         ],
       ),
@@ -1152,7 +1152,7 @@ class _VoxTextField extends StatelessWidget {
         decoration: InputDecoration(
           prefixIcon: Icon(icon, color: VoxColors.blue),
           labelText: label,
-          labelStyle: TextStyle(color: Colors.white.withOpacity(0.4)),
+          labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
           filled: true,
           fillColor: Colors.white.withValues(alpha: 0.05),
           border: OutlineInputBorder(
@@ -1196,7 +1196,7 @@ class _VoxButton extends StatelessWidget {
         onPressed: isLoading ? null : onTap,
         style: ElevatedButton.styleFrom(
           backgroundColor: VoxColors.blue,
-          disabledBackgroundColor: VoxColors.blue.withOpacity(0.4),
+          disabledBackgroundColor: VoxColors.blue.withValues(alpha: 0.4),
           minimumSize: const Size(double.infinity, 56),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
@@ -1238,7 +1238,7 @@ class _DividerRow extends StatelessWidget {
             child: Text(
               'OR',
               style: TextStyle(
-                color: Colors.white.withOpacity(0.3),
+                color: Colors.white.withValues(alpha: 0.3),
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
               ),
