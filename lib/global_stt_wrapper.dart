@@ -85,14 +85,17 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
   Future<void> _startListening() async {
     if (!_speechAvailable || _isListening) return;
 
+    final langProvider = context.read<LanguageProvider>();
     final tts = context.read<TtsService>();
     if (tts.isPlaying) {
-      await tts.togglePause(context.read<LanguageProvider>().currentLocale);
+      await tts.togglePause(langProvider.currentLocale);
     }
 
     // Force cancel any stuck session before starting
     await _speech.stop();
     await _speech.cancel();
+
+    if (!mounted) return;
 
     _updateListening(true);
     setState(() {
@@ -101,19 +104,21 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
 
     await _speech.listen(
       onResult: (result) {
-        print('STT RESULT: "${result.recognizedWords}"'); // debug
-        setState(() => _lastWords = result.recognizedWords);
+        debugPrint('STT RESULT: "${result.recognizedWords}"');
+        if (mounted) setState(() => _lastWords = result.recognizedWords);
       },
-      localeId: context.read<LanguageProvider>().currentLocale,
+      localeId: langProvider.currentLocale,
       listenFor: const Duration(seconds: 8),
       pauseFor: const Duration(seconds: 2),
-      partialResults:
-          true, // FIX: was false - ensures _lastWords is set before onStatus fires
+      listenOptions: stt.SpeechListenOptions(
+        partialResults: true,
+        cancelOnError: false,
+      ),
     );
   }
 
   Future<void> _handleResult() async {
-    print('HANDLE RESULT: "$_lastWords"'); // debug
+    debugPrint('HANDLE RESULT: "$_lastWords"');
     if (_lastWords.isEmpty) return;
     if (!mounted) return;
 
@@ -184,7 +189,7 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
                     liveRegion: true,
                     child: AnimatedBuilder(
                       animation: _pulseAnimation,
-                      builder: (_, __) => Transform.scale(
+                      builder: (context, _) => Transform.scale(
                         scale: _pulseAnimation.value,
                         child: Container(
                           padding: const EdgeInsets.symmetric(

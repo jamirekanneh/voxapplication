@@ -42,8 +42,23 @@
     "public": "docs",
     "ignore": [
       "firebase.json",
-      "**/.*",
       "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/verify",
+        "destination": "/verify/index.html"
+      }
+    ],
+    "headers": [
+      {
+        "source": "/verify/**",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      },
+      {
+        "source": "/verify",
+        "headers": [{ "key": "Cache-Control", "value": "no-cache, no-store, must-revalidate" }]
+      }
     ]
   }
 }

@@ -16,7 +16,6 @@ import 'tts_service.dart';
 import 'ai_result_page.dart';
 
 const int _kMaxTitleLength = 100;
-const int _kMaxContentLength = 50000; // increased for long transcripts
 const Duration _kMaxRecordingDuration = Duration(hours: 1);
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -52,8 +51,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   Duration _recordingDuration = Duration.zero;
   Timer? _recordingTimer;
   Timer? _maxDurationTimer;
-  String _liveTranscript = '';
-  bool _isTranscribing = false;
   bool _isTitleDictating = false;
   bool _isTranscriptDictating = false;
 
@@ -72,7 +69,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   List<String> _visibleNoteIds = [];
 
   // Tab for note detail view
-  final int _detailTab = 0; // 0=transcript, 1=audio
 
   @override
   void initState() {
@@ -223,117 +219,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     return false;
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  START LONG-FORM RECORDING + LIVE TRANSCRIPTION
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<void> _startRecording() async {
-    if (_titleController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please enter a title before recording.'),
-          backgroundColor: Color(0xFF333333),
-          behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
-        ),
-      );
-      return;
-    }
-
-    final granted = await _requestMicPermission();
-    if (!granted) return;
-
-    try {
-      final langProvider = context.read<LanguageProvider>();
-
-      // Start audio recording
-      final fileName = '${DateTime.now().millisecondsSinceEpoch}.m4a';
-      await _audioRecorder.start(
-        const RecordConfig(
-          encoder: AudioEncoder.aacLc,
-          bitRate: 128000,
-          sampleRate: 44100,
-        ),
-        path: fileName,
-      );
-
-      // Start live STT transcription in parallel
-      _liveTranscript = _transcriptController.text;
-      _isTranscribing = true;
-      _startLiveStt(langProvider.sttLocale);
-
-      // Timers
-      _recordingDuration = Duration.zero;
-      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
-        if (mounted) {
-          setState(() => _recordingDuration += const Duration(seconds: 1));
-        }
-      });
-
-      // Auto-stop at max duration
-      _maxDurationTimer = Timer(_kMaxRecordingDuration, () {
-        if (_recordingState == RecordingState.recording) _stopRecording();
-      });
-
-      setState(() {
-        _recordingState = RecordingState.recording;
-        _audioPath = fileName;
-      });
-    } catch (e) {
-      debugPrint('Error starting recording: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to start recording'),
-            backgroundColor: Colors.red,
-          ),
-        );
-      }
-    }
-  }
-
-  void _startLiveStt(String locale) async {
-    bool available = await _speech.initialize(
-      onError: (_) {},
-      onStatus: (s) {
-        // Restart STT when it stops (keeps live transcription going for long sessions)
-        if ((s == 'done' || s == 'notListening') &&
-            _recordingState == RecordingState.recording &&
-            _isTranscribing) {
-          Future.delayed(
-            const Duration(milliseconds: 300),
-            () => _startLiveStt(locale),
-          );
-        }
-      },
-    );
-    if (!available || !_isTranscribing) return;
-
-    final existingText = _liveTranscript;
-    final prefix = existingText.isNotEmpty ? '$existingText ' : '';
-
-    _speech.listen(
-      localeId: locale,
-      onResult: (val) {
-        String newText = val.recognizedWords;
-        if (val.finalResult && newText.isNotEmpty) {
-          _liveTranscript = '$prefix$newText';
-          if (mounted) {
-            setState(() {
-              _transcriptController.text = _liveTranscript;
-              _transcriptController.selection = TextSelection.fromPosition(
-                TextPosition(offset: _transcriptController.text.length),
-              );
-            });
-          }
-        }
-      },
-      listenFor: const Duration(minutes: 5),
-      pauseFor: const Duration(seconds: 6),
-      partialResults: true,
-    );
-  }
-
   Future<void> _toggleDictation(bool isTitle) async {
+    if (!mounted) return;
+    final langProvider = context.read<LanguageProvider>();
     final granted = await _requestMicPermission();
     if (!granted) return;
 
@@ -365,7 +253,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       }
     });
 
-    final langProvider = context.read<LanguageProvider>();
     bool available = await _speech.initialize(
       onError: (e) {
         if (mounted) {
@@ -397,6 +284,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       return;
     }
 
+    if (!mounted) return;
+
     final String existingText = isTitle
         ? _titleController.text
         : _transcriptController.text;
@@ -404,6 +293,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
 
     _speech.listen(
       localeId: langProvider.sttLocale,
+      listenOptions: stt.SpeechListenOptions(
+        partialResults: true,
+        cancelOnError: true,
+        listenMode: stt.ListenMode.dictation,
+      ),
       onResult: (val) {
         String newText = val.recognizedWords;
         // With partialResults: false, we just get the final chunk or we can use partial and just update.
@@ -428,14 +322,12 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       },
       listenFor: const Duration(minutes: 1),
       pauseFor: const Duration(seconds: 3),
-      partialResults: true,
     );
   }
 
   Future<void> _stopRecording() async {
     _recordingTimer?.cancel();
     _maxDurationTimer?.cancel();
-    _isTranscribing = false;
     await _speech.stop();
 
     setState(() => _recordingState = RecordingState.processing);
@@ -482,7 +374,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   void _discardRecording() {
     _recordingTimer?.cancel();
     _maxDurationTimer?.cancel();
-    _isTranscribing = false;
     _speech.stop();
     _audioRecorder.stop();
     setState(() {
@@ -493,7 +384,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       _audioDuration = Duration.zero;
       _currentPosition = Duration.zero;
       _isPlaying = false;
-      _liveTranscript = '';
       _transcriptController.clear();
     });
   }
@@ -639,7 +529,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         setState(() {
           _titleController.clear();
           _transcriptController.clear();
-          _liveTranscript = '';
           _isEditing = false;
           _editingId = null;
           _audioPath = null;
@@ -818,7 +707,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       _editingId = null;
       _titleController.clear();
       _transcriptController.clear();
-      _liveTranscript = '';
       _recordingState = RecordingState.idle;
       _audioPath = null;
       _audioUrl = null;
@@ -898,6 +786,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       ),
     );
     if (confirmed != true) return;
+    if (!mounted) return;
 
     try {
       if (_isAnonymousUser) {
@@ -1175,11 +1064,13 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                 dark: false,
                                 onTap: () async {
                                   tts.stop();
+                                  final nav = Navigator.of(context);
                                   final count = await _pickCardCount(context);
-                                  if (count == null || !context.mounted) return;
+                                  if (count == null) return;
+                                  if (!ctx.mounted) return;
                                   Navigator.pop(ctx);
-                                  Navigator.push(
-                                    context,
+                                  if (!context.mounted) return;
+                                  nav.push(
                                     MaterialPageRoute(
                                       builder: (_) => AiResultPage(
                                         documentTitle: title,
@@ -1630,7 +1521,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 // Animated mic
                 AnimatedBuilder(
                   animation: _pulseAnimation,
-                  builder: (_, __) => Transform.scale(
+                  builder: (_, _) => Transform.scale(
                     scale: _pulseAnimation.value,
                     child: Container(
                       width: 68,

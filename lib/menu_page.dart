@@ -7,10 +7,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'language_provider.dart';
 import 'profile_page.dart';
 import 'contact_us_page.dart';
-import 'About_Us_Page.dart';
+import 'about_us_page.dart';
 import 'recycle_bin_page.dart';
 import 'custom_commands_page.dart';
-import 'Statistics_page.dart';
+import 'statistics_page.dart';
 import 'ask_questions_page.dart';
 import 'saved_assessments_page.dart';
 import 'analytics_service.dart';
@@ -37,10 +37,6 @@ class _MenuPageState extends State<MenuPage> {
   bool _isFirebaseAnonymous = true;
   bool _loadingProfile = true;
   bool _isOffline = false;
-
-  /// The actual Firestore document UID â€” may differ from Firebase Auth UID
-  /// for anonymous-auth users whose profile was saved under a specific doc ID.
-  String? _resolvedUid;
 
   @override
   void initState() {
@@ -104,7 +100,6 @@ class _MenuPageState extends State<MenuPage> {
             _base64Image = (raw != null && raw.isNotEmpty) ? raw : null;
             _photoUrl = data['photoUrl'] as String?;
             _hasProfile = true;
-            _resolvedUid = user.uid;
           });
         }
         if (mounted) setState(() => _loadingProfile = false);
@@ -129,7 +124,6 @@ class _MenuPageState extends State<MenuPage> {
             _base64Image = (raw != null && raw.isNotEmpty) ? raw : null;
             _photoUrl = data['photoUrl'] as String?;
             _hasProfile = true;
-            _resolvedUid = user.uid;
           });
           if (mounted) setState(() => _loadingProfile = false);
           return;
@@ -152,7 +146,6 @@ class _MenuPageState extends State<MenuPage> {
               _base64Image = (raw != null && raw.isNotEmpty) ? raw : null;
               _photoUrl = data['photoUrl'] as String?;
               _hasProfile = true;
-              _resolvedUid = emailQuery.docs.first.id;
             });
             if (mounted) setState(() => _loadingProfile = false);
             return;

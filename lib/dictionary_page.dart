@@ -123,6 +123,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
       },
     );
 
+    if (!mounted) return;
+
     if (!available) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -143,14 +145,17 @@ class _DictionaryPageState extends State<DictionaryPage> {
     final langProvider = context.read<LanguageProvider>();
     _speech.listen(
       localeId: langProvider.sttLocale,
+      listenOptions: stt.SpeechListenOptions(
+        partialResults: true,
+        cancelOnError: true,
+        listenMode: stt.ListenMode.search,
+      ),
       onResult: (val) {
         final text = val.recognizedWords.trim();
         if (mounted) setState(() => _searchController.text = text);
       },
       listenFor: const Duration(seconds: 8),
       pauseFor: const Duration(seconds: 2),
-      partialResults: true,
-      cancelOnError: true,
     );
   }
 
@@ -326,10 +331,11 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
         if (generalResult != null) {
           _extractAudio(generalResult);
-        } else if (medicalResult != null)
+        } else if (medicalResult != null) {
           _extractAudio(medicalResult);
-        else if (csResult != null)
+        } else if (csResult != null) {
           _extractAudio(csResult);
+        }
       } else {
         setState(() => _error = _composeError(word, futures));
       }
@@ -420,17 +426,6 @@ class _DictionaryPageState extends State<DictionaryPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  HELPERS
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  int _countDefinitions(Map<String, dynamic>? result) {
-    if (result == null) return 0;
-    int count = 0;
-    for (final m in (result['meanings'] as List<dynamic>? ?? [])) {
-      count +=
-          ((m as Map<String, dynamic>)['definitions'] as List<dynamic>? ?? [])
-              .length;
-    }
-    return count;
-  }
-
   String _composeError(String word, List<dynamic> futures) {
     return 'No results found for "$word".\n\nCheck the spelling or try a related term.';
   }

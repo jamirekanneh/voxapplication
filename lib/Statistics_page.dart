@@ -464,10 +464,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         };
 
     final totalOpens = data['totalOpens'] as int? ?? 0;
-    final todayTimeMs = data['todayTimeMs'] as int? ?? 0;
     final totalTimeMs = data['totalTimeMs'] as int? ?? 0;
-    final uniqueCmds = data['uniqueVoiceCmds'] as int? ?? 0;
-    final activeDays = data['activeDays'] as int? ?? 0;
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 24, 20, 40),
@@ -650,33 +647,6 @@ class _StatisticsPageState extends State<StatisticsPage> {
     );
   }
 
-  Widget _statRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.7),
-              fontWeight: FontWeight.w600,
-              fontSize: 13,
-            ),
-          ),
-          Text(
-            value,
-            style: const TextStyle(
-              color: Colors.white,
-              fontWeight: FontWeight.w800,
-              fontSize: 13,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  SECTION LABEL
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -779,7 +749,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
     final features = list.take(5).toList();
     final totalTime = features.fold(
       0.0,
-      (sum, entry) => sum + (entry.value as num).toDouble(),
+      (running, entry) =>
+          running + (entry.value as num).toDouble(),
     );
 
     return Container(

@@ -1,5 +1,7 @@
 {
-  "projects": {},
+  "projects": {
+    "default": "the-vox-application"
+  },
   "targets": {},
   "etags": {}
 }

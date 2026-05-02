@@ -206,7 +206,8 @@ class _ProfilePageState extends State<ProfilePage>
         return;
       }
       final acs = ActionCodeSettings(
-        url: 'https://the-vox-application.firebaseapp.com/verify?email=$email',
+        url:
+            'https://the-vox-application.firebaseapp.com/verify?email=${Uri.encodeComponent(email)}',
         handleCodeInApp: true,
         androidPackageName: 'com.example.voxapplication',
         androidInstallApp: true,

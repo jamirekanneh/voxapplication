@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.example.voxapplication",
+      "sha256_cert_fingerprints": [
+        "10:86:b1:c2:de:6e:8c:6a:9f:54:f2:ab:81:05:e5:49:10:f8:c3:ca:b5:cb:ca:8d:e5:1e:15:e0:e7:44:82:86"
+      ]
+    }
+  }
+]

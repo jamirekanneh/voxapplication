@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Vox — Sign-in</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+  <style>
+    :root { --bg:#0b1220; --card:#111827; --ink:#f3f4f6; --muted:#9ca3af; --accent:#14b8a6; --err:#f87171; }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: var(--bg); color: var(--ink); min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 24px; }
+    .card { background: var(--card); border-radius: 16px; padding: 28px; max-width: 420px; width: 100%;
+      box-shadow: 0 20px 50px rgba(0,0,0,.35); border: 1px solid rgba(255,255,255,.06); }
+    h1 { margin: 0 0 12px; font-size: 1.25rem; }
+    p { margin: 0 0 12px; line-height: 1.55; color: var(--muted); font-size: 0.95rem; }
+    .status { color: var(--accent); margin-top: 8px; min-height: 1.5em; }
+    .status.err { color: var(--err); }
+    a { color: var(--accent); }
+  </style>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.14.1/firebase-auth-compat.js"></script>
+</head>
+<body>
+  <main class="card">
+    <h1>Email sign-in</h1>
+    <!-- Defaults: correct explanation even if JavaScript or CDN cache fails -->
+    <p id="lead">Open this page from your email</p>
+    <p id="status" class="status">
+      This URL is meant to open from the magic link Vox emailed you—not by typing or bookmarking it. If you got here manually, nothing is broken; finish sign-in using the button in your email instead.
+    </p>
+    <p id="hint">
+      Request a link in the Vox app, open that email on this phone, then tap the link. If Android offers <strong>Open with Vox</strong>, choose it so the app can finish sign-in.
+    </p>
+  </main>
+  <script>
+    (function () {
+      var cfg = {
+        apiKey: 'AIzaSyAYO2N189vadDto8I2wOdfiquhfG15oVG4',
+        authDomain: 'the-vox-application.firebaseapp.com',
+        projectId: 'the-vox-application',
+        storageBucket: 'the-vox-application.firebasestorage.app',
+        messagingSenderId: '650391636557',
+        appId: '1:650391636557:web:5f1fa32c9341beea10ea04'
+      };
+      firebase.initializeApp(cfg);
+      var auth = firebase.auth();
+
+      function setErr(msg) {
+        var el = document.getElementById('status');
+        el.textContent = msg;
+        el.classList.add('err');
+        document.getElementById('lead').textContent = 'Could not finish sign-in';
+        document.getElementById('hint').textContent =
+          'Request a fresh link from the app. Still stuck? Confirm your device clock is correct.';
+      }
+
+      function emailFromQuery() {
+        try {
+          var p = new URLSearchParams(window.location.search);
+          var e = p.get('email');
+          if (!e) return '';
+          return decodeURIComponent(e).trim().toLowerCase();
+        } catch (ignore) {
+          return '';
+        }
+      }
+
+      function hasEmailLinkTokens() {
+        var p = new URLSearchParams(window.location.search);
+        return !!(p.get('oobCode') || (p.get('mode') === 'signIn' && p.get('apiKey')));
+      }
+
+      async function run() {
+        var href = window.location.href;
+
+        if (auth.isSignInWithEmailLink(href)) {
+          document.getElementById('lead').textContent = 'Completing sign-in…';
+          document.getElementById('status').textContent = '';
+          document.getElementById('status').classList.remove('err');
+          document.getElementById('hint').hidden = true;
+
+          var email = emailFromQuery();
+          if (!email) {
+            email = window.prompt('Enter the email you used to request the sign-in link:');
+          }
+          if (!email) {
+            document.getElementById('hint').hidden = false;
+            setErr('Email is required to complete sign-in.');
+            return;
+          }
+          email = String(email).trim().toLowerCase();
+
+          try {
+            await auth.signInWithEmailLink(email, href);
+            document.getElementById('hint').hidden = true;
+            document.getElementById('lead').textContent = 'Signed in';
+            document.getElementById('status').classList.remove('err');
+            document.getElementById('status').textContent = 'You can close this tab or switch back to the Vox app.';
+            window.setTimeout(function () { window.location.replace('/'); }, 1800);
+          } catch (e) {
+            document.getElementById('hint').hidden = false;
+            setErr((e && e.message) ? e.message : String(e));
+          }
+          return;
+        }
+
+        if (hasEmailLinkTokens()) {
+          document.getElementById('lead').textContent = 'Sign-in link could not be used';
+          document.getElementById('status').textContent =
+            'This URL looks expired or incomplete. Tap a new magic link from a fresh verification email.';
+          document.getElementById('status').classList.remove('err');
+          document.getElementById('hint').textContent =
+            'Still seeing this after a fresh link? Clear cache for this site or open the email link in an incognito / private tab.';
+        }
+        /* Else: leave the static HTML (direct visit)—already explains the behavior. */
+      }
+
+      run();
+    })();
+  </script>
+</body>
+</html>

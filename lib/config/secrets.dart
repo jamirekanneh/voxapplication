@@ -1,17 +1,9 @@
 // lib/config/secrets.dart
 //
-// Environment-based configuration
-// Values loaded from .env file (not committed to version control)
-//
-// Get your FREE Groq key from: https://console.groq.com
-// Sign up → API Keys → Create API Key
+// Groq and related keys are read from assets/project.env via flutter_dotenv.
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
-String get kGroqKey {
-  final key = dotenv.env['GROQ_API_KEY'];
-  if (key == null || key.isEmpty) {
-    throw Exception('GROQ_API_KEY not found in .env file');
-  }
-  return key;
-}
+/// Groq API key for AiService (see https://console.groq.com → API Keys).
+/// Set `GROQ_API_KEY` in [assets/project.env]. Empty string if missing.
+String get kGroqKey => (dotenv.env['GROQ_API_KEY'] ?? '').trim();

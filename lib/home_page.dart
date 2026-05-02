@@ -388,7 +388,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  VOICE SEARCH
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  void _listen() async {
+  Future<void> _listen() async {
     if (_isListening) {
       await _speech.stop();
       if (mounted) setState(() => _isListening = false);
@@ -408,283 +408,32 @@ class _VoxHomePageState extends State<VoxHomePage> {
       return;
     }
     bool available = await _speech.initialize(
-      onError: (e) => setState(() => _isListening = false),
+      onError: (e) {
+        if (mounted) setState(() => _isListening = false);
+      },
       onStatus: (s) {
         if (s == 'done' || s == 'notListening') {
           if (mounted) setState(() => _isListening = false);
         }
       },
     );
-    if (available) {
-      final langProvider = context.read<LanguageProvider>();
-      setState(() => _isListening = true);
-      _speech.listen(
-        localeId: langProvider.sttLocale,
-        onResult: (val) {
-          setState(() {
-            _searchQuery = val.recognizedWords.toLowerCase();
-            _searchController.text = val.recognizedWords;
-          });
-        },
-      );
-    }
-  }
-
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  DELETE â€” Firestore (logged-in users)
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  void _confirmDelete(BuildContext context, String docId, String fileName) {
-    final lang = context.read<LanguageProvider>();
-    final displayName = fileName.length > 40
-        ? '${fileName.substring(0, 40)}...'
-        : fileName;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Color(0xFF141A29),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+    if (!available || !mounted) return;
+    final langProvider = context.read<LanguageProvider>();
+    setState(() => _isListening = true);
+    await _speech.listen(
+      localeId: langProvider.sttLocale,
+      listenOptions: stt.SpeechListenOptions(
+        partialResults: true,
+        cancelOnError: false,
+        listenMode: stt.ListenMode.search,
       ),
-      builder: (sheetCtx) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: Colors.grey[600],
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            const Icon(Icons.delete_outline, color: Colors.redAccent, size: 40),
-            const SizedBox(height: 12),
-            Text(
-              'Delete "$displayName"?',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              'This item will be stored in the Recycle Bin and permanently deleted after 30 days.',
-              style: TextStyle(color: Colors.grey[400], fontSize: 13),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(sheetCtx),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.grey[600]!),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: Text(lang.t('cancel')),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      Navigator.pop(sheetCtx);
-                      try {
-                        // Use _resolvedUid (may differ from Firebase auth UID
-                        // for anonymous users whose profile was created by email)
-                        final uid =
-                            _resolvedUid ??
-                            FirebaseAuth.instance.currentUser?.uid;
-                        final libRef = FirebaseFirestore.instance
-                            .collection('library')
-                            .doc(docId);
-
-                        // Get the document data before deleting
-                        final snapshot = await libRef.get();
-                        if (snapshot.exists) {
-                          final data = snapshot.data()!;
-                          // Move to deleted_library collection
-                          await FirebaseFirestore.instance
-                              .collection('users')
-                              .doc(uid)
-                              .collection('deleted_library')
-                              .add({
-                                'fileName': data['fileName'] ?? 'File',
-                                'content': data['content'],
-                                'fileType': data['fileType'] ?? 'file',
-                                'sourceCollection': 'library',
-                                'deletedAt': FieldValue.serverTimestamp(),
-                                'originalTimestamp':
-                                    data['timestamp'] ?? FieldValue.serverTimestamp(),
-                                'userId': data['userId'] ?? uid,
-                              });
-                        }
-
-                        // Delete from library
-                        await libRef.delete();
-
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                '"$displayName" ${lang.t('deleted')}',
-                              ),
-                              behavior: SnackBarBehavior.floating,
-                              backgroundColor: const Color(0xFF333333),
-                              margin: const EdgeInsets.only(
-                                bottom: 90,
-                                left: 20,
-                                right: 20,
-                              ),
-                            ),
-                          );
-                        }
-                      } on FirebaseException catch (e) {
-                        if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                e.code == 'unavailable'
-                                    ? 'Cannot delete while offline'
-                                    : 'Delete failed: ${e.message}',
-                              ),
-                              backgroundColor: const Color(0xFF333333),
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: Text(lang.t('delete_confirm')),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  DELETE â€” temp/anonymous users
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  void _confirmDeleteTemp(
-    BuildContext context,
-    String id,
-    String fileName,
-    TempLibraryProvider tempLibrary,
-  ) {
-    final lang = context.read<LanguageProvider>();
-    final displayName = fileName.length > 40
-        ? '${fileName.substring(0, 40)}...'
-        : fileName;
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Color(0xFF141A29),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (sheetCtx) => Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: Colors.grey[600],
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            const Icon(Icons.delete_outline, color: Colors.redAccent, size: 40),
-            const SizedBox(height: 12),
-            Text(
-              'Delete "$displayName"?',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 16,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              lang.t('remove_library'),
-              style: TextStyle(color: Colors.grey[400], fontSize: 13),
-            ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => Navigator.pop(sheetCtx),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: BorderSide(color: Colors.grey[600]!),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: Text(lang.t('cancel')),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(sheetCtx);
-                      tempLibrary.remove(id);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('"$displayName" ${lang.t('deleted')}'),
-                          behavior: SnackBarBehavior.floating,
-                          backgroundColor: const Color(0xFF333333),
-                          margin: const EdgeInsets.only(
-                            bottom: 90,
-                            left: 20,
-                            right: 20,
-                          ),
-                        ),
-                      );
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(30),
-                      ),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                    ),
-                    child: Text(lang.t('delete_confirm')),
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
+      onResult: (val) {
+        if (!mounted) return;
+        setState(() {
+          _searchQuery = val.recognizedWords.toLowerCase();
+          _searchController.text = val.recognizedWords;
+        });
+      },
     );
   }
 
@@ -761,6 +510,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
     );
     if (confirmed != true) return;
+    if (!mounted) return;
 
     try {
       if (_isAnonymousUser) {

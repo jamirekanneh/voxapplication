@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
-import 'custom_commands_provider.dart';
-import 'tts_service.dart';
-import 'language_provider.dart';
+import 'ai_service.dart';
 import 'analytics_service.dart';
+import 'custom_commands_provider.dart';
+import 'language_provider.dart';
+import 'tts_service.dart';
+import 'voice_assistant_intent.dart';
 
 // ─────────────────────────────────────────────
 //  VOICE FEEDBACK STRINGS (all app languages)
@@ -22,6 +24,7 @@ const Map<String, Map<String, String>> _feedback = {
     'openNote': 'Opening note',
     'searchLibrary': 'Searching library',
     'openAssessments': 'Opening saved Q&A',
+    'assistantMuted': 'Voice assistant muted',
     'noMatch': 'Command not recognized',
   },
   'Spanish': {
@@ -38,6 +41,7 @@ const Map<String, Map<String, String>> _feedback = {
     'openNote': 'Abriendo nota',
     'searchLibrary': 'Buscando en la biblioteca',
     'openAssessments': 'Abriendo evaluaciones guardadas',
+    'assistantMuted': 'Asistente de voz desactivado',
     'noMatch': 'Comando no reconocido',
   },
   'French': {
@@ -54,6 +58,7 @@ const Map<String, Map<String, String>> _feedback = {
     'openNote': 'Ouverture de la note',
     'searchLibrary': 'Recherche dans la bibliothèque',
     'openAssessments': 'Ouverture des évaluations enregistrées',
+    'assistantMuted': 'Assistant vocal désactivé',
     'noMatch': 'Commande non reconnue',
   },
   'Arabic': {
@@ -70,6 +75,7 @@ const Map<String, Map<String, String>> _feedback = {
     'openNote': 'فتح الملاحظة',
     'searchLibrary': 'البحث في المكتبة',
     'openAssessments': 'فتح التقييمات المحفوظة',
+    'assistantMuted': 'تم إيقاف المساعد الصوتي',
     'noMatch': 'الأمر غير معروف',
   },
   'Turkish': {
@@ -86,6 +92,7 @@ const Map<String, Map<String, String>> _feedback = {
     'openNote': 'Not açılıyor',
     'searchLibrary': 'Kütüphanede aranıyor',
     'openAssessments': 'Kayıtlı değerlendirmeler açılıyor',
+    'assistantMuted': 'Sesli asistan kapatıldı',
     'noMatch': 'Komut tanınmadı',
   },
   'Chinese': {
@@ -102,6 +109,7 @@ const Map<String, Map<String, String>> _feedback = {
     'openNote': '打开笔记',
     'searchLibrary': '搜索图书馆',
     'openAssessments': '打开保存的评估',
+    'assistantMuted': '语音助手已关闭',
     'noMatch': '未识别命令',
   },
 };
@@ -115,6 +123,119 @@ String _getFeedback(String language, String key) {
 //  DISPATCHER
 // ─────────────────────────────────────────────
 class CommandDispatcher {
+  static CommandActionType? _mapNlAction(VoiceAssistantAction a) {
+    switch (a) {
+      case VoiceAssistantAction.navigateHome:
+        return CommandActionType.navigateHome;
+      case VoiceAssistantAction.navigateNotes:
+        return CommandActionType.navigateNotes;
+      case VoiceAssistantAction.navigateMenu:
+        return CommandActionType.navigateMenu;
+      case VoiceAssistantAction.navigateDictionary:
+        return CommandActionType.navigateDictionary;
+      case VoiceAssistantAction.searchLibrary:
+        return CommandActionType.searchLibrary;
+      case VoiceAssistantAction.searchNotes:
+        return CommandActionType.searchNotes;
+      case VoiceAssistantAction.openNote:
+        return CommandActionType.openNote;
+      case VoiceAssistantAction.openAssessments:
+        return CommandActionType.openAssessments;
+      case VoiceAssistantAction.readingPlay:
+        return CommandActionType.ttsPlay;
+      case VoiceAssistantAction.readingPause:
+        return CommandActionType.ttsPause;
+      case VoiceAssistantAction.readingStop:
+        return CommandActionType.ttsStop;
+      case VoiceAssistantAction.readingFaster:
+        return CommandActionType.ttsSpeedUp;
+      case VoiceAssistantAction.readingSlower:
+        return CommandActionType.ttsSlowDown;
+      case VoiceAssistantAction.none:
+      case VoiceAssistantAction.unknown:
+      case VoiceAssistantAction.assistantOff:
+        return null;
+    }
+  }
+
+  static Future<bool> _dispatchNlIntent({
+    required BuildContext context,
+    required VoiceAssistantInterpretation nl,
+    required CustomCommandsProvider commandsProvider,
+    required TtsService ttsService,
+    required LanguageProvider langProvider,
+  }) async {
+    final locale = langProvider.currentLocale;
+    final language = langProvider.selectedLanguage;
+
+    switch (nl.action) {
+      case VoiceAssistantAction.unknown:
+        return false;
+
+      case VoiceAssistantAction.none:
+        if (!context.mounted) return true;
+        if (commandsProvider.voiceFeedbackEnabled) {
+          final r = nl.replyEnglish?.trim();
+          if (r != null && r.isNotEmpty) {
+            await ttsService.play('', r, locale);
+          } else {
+            await ttsService.play('', _getFeedback(language, 'noMatch'), locale);
+          }
+        }
+        return true;
+
+      case VoiceAssistantAction.assistantOff:
+        await commandsProvider.setAssistantMode(false);
+        if (!context.mounted) return true;
+        if (commandsProvider.voiceFeedbackEnabled) {
+          final r = nl.replyEnglish?.trim();
+          await ttsService.play(
+              '',
+              (r != null && r.isNotEmpty)
+                  ? r
+                  : _getFeedback(language, 'assistantMuted'),
+              locale);
+        }
+        return true;
+
+      default:
+        final mapped = _mapNlAction(nl.action);
+        if (mapped == null || !context.mounted) return false;
+
+        AnalyticsService.instance.recordVoiceCommand(mapped.displayName);
+
+        final cmd = CustomCommand(
+          id: '_nl_${nl.action.name}',
+          phrase: '__nl__',
+          action: mapped,
+          parameter: nl.query ?? '',
+        );
+
+        if (!context.mounted) return false;
+
+        if (commandsProvider.voiceFeedbackEnabled) {
+          var feedbackText =
+              (nl.replyEnglish != null && nl.replyEnglish!.trim().isNotEmpty)
+                  ? nl.replyEnglish!.trim()
+                  : _getFeedback(language, cmd.action.name);
+          final p = (nl.query ?? '').trim();
+          if (p.isNotEmpty &&
+              (mapped == CommandActionType.searchNotes ||
+                  mapped == CommandActionType.openNote ||
+                  mapped == CommandActionType.searchLibrary)) {
+            feedbackText += ': $p';
+          }
+          await ttsService.play('', feedbackText, locale);
+        }
+
+        if (!context.mounted) return true;
+
+        await _execute(context, cmd, ttsService, locale);
+
+        return true;
+    }
+  }
+
   static Future<bool> dispatch({
     required BuildContext context,
     required String spokenText,
@@ -122,6 +243,28 @@ class CommandDispatcher {
     required TtsService ttsService,
     required LanguageProvider langProvider,
   }) async {
+    VoiceAssistantInterpretation? interpreted;
+    try {
+      interpreted = await AiService.interpretVoiceAssistant(
+        transcript: spokenText,
+      );
+    } catch (_) {
+      interpreted = null;
+    }
+
+    if (!context.mounted) return false;
+
+    if (interpreted != null) {
+      final handled = await _dispatchNlIntent(
+        context: context,
+        nl: interpreted,
+        commandsProvider: commandsProvider,
+        ttsService: ttsService,
+        langProvider: langProvider,
+      );
+      if (handled) return true;
+    }
+
     final matched = commandsProvider.match(spokenText);
     final language = langProvider.selectedLanguage;
     final locale = langProvider.currentLocale;

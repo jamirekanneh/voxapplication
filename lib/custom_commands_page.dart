@@ -174,104 +174,6 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
   }
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  DELETE ALL
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<void> _deleteAllCommands() async {
-    final provider = context.read<CustomCommandsProvider>();
-    if (provider.commands.isEmpty) return;
-
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.delete_sweep, color: Colors.redAccent),
-            SizedBox(width: 8),
-            Text('Empty Commands?'),
-          ],
-        ),
-        content: const Text(
-          'All commands will be moved to the Recycle Bin and permanently deleted after 30 days. Are you sure?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Color(0x8A0A0E1A)),
-            ),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(10),
-              ),
-            ),
-            child: const Text('Delete All'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed != true) return;
-
-    try {
-      if (!_isAnonymousUser) {
-        final curUid = _resolvedUid ?? FirebaseAuth.instance.currentUser?.uid;
-        if (curUid != null) {
-          final batch = FirebaseFirestore.instance.batch();
-          final binCollection = FirebaseFirestore.instance
-              .collection('users')
-              .doc(curUid)
-              .collection('deleted_library');
-
-          for (var cmd in provider.commands) {
-            final newDocRef = binCollection.doc();
-            batch.set(newDocRef, {
-              'fileName': 'Command: ${cmd.phrase}',
-              'phrase': cmd.phrase,
-              'action': cmd.action.name,
-              'parameter': cmd.parameter,
-              'isEnabled': cmd.isEnabled,
-              'fileType': 'command',
-              'sourceCollection': 'custom_commands',
-              'commandId': cmd.id,
-              'deletedAt': FieldValue.serverTimestamp(),
-              'originalTimestamp': FieldValue.serverTimestamp(),
-              'userId': curUid,
-            });
-          }
-          await batch.commit();
-        }
-      }
-
-      await provider.deleteAllCommands();
-
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('All commands moved to Recycle Bin.'),
-            backgroundColor: Color(0xFF333333),
-          ),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Failed to delete commands: $e'),
-            backgroundColor: Colors.redAccent,
-          ),
-        );
-      }
-    }
-  }
-
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  BUILD
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
@@ -282,7 +184,10 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
       canPop: false,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        if (await _confirmLeave() && mounted) Navigator.pop(context);
+        if (!mounted) return;
+        final ok = await _confirmLeave();
+        if (!context.mounted) return;
+        if (ok) Navigator.pop(context);
       },
       child: Scaffold(
         backgroundColor: const Color(0xFF0A0E1A),
@@ -314,9 +219,10 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
                         button: true,
                         child: GestureDetector(
                           onTap: () async {
-                            if (await _confirmLeave() && mounted) {
-                              Navigator.pop(context);
-                            }
+                            if (!mounted) return;
+                            final ok = await _confirmLeave();
+                            if (!context.mounted) return;
+                            if (ok) Navigator.pop(context);
                           },
                           child: const Icon(
                             Icons.arrow_back_ios_new_rounded,

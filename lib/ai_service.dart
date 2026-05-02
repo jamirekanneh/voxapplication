@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'analytics_service.dart';
+import 'voice_assistant_intent.dart';
 
 // ignore: uri_does_not_exist
 import 'config/secrets.dart';
@@ -16,9 +17,16 @@ class AiService {
 
   static Future<String> _callGroq(
     String systemPrompt,
-    String userMessage,
-  ) async {
-    debugPrint('🔑 Groq key loaded: ${kGroqKey.length} chars');
+    String userMessage, {
+    double temperature = 0.9,
+    int maxTokens = 2048,
+  }) async {
+    if (kGroqKey.isEmpty) {
+      throw Exception(
+        'Missing GROQ_API_KEY. Edit assets/project.env, add your key from '
+        'https://console.groq.com, then rebuild the app.',
+      );
+    }
     debugPrint('🌐 Calling Groq API...');
 
     final content = userMessage.length > _maxChars
@@ -39,8 +47,8 @@ class AiService {
                 {'role': 'system', 'content': systemPrompt},
                 {'role': 'user', 'content': content},
               ],
-              'max_tokens': 2048,
-              'temperature': 0.9, // Higher = more varied responses each time
+              'max_tokens': maxTokens,
+              'temperature': temperature,
             }),
           )
           .timeout(const Duration(seconds: 30));
@@ -56,7 +64,7 @@ class AiService {
         throw Exception('Rate limit hit — please wait 1 minute and try again.');
       } else if (response.statusCode == 401) {
         throw Exception(
-          'Invalid API key. Please check your Groq key in secrets.dart',
+          'Invalid Groq API key. Check GROQ_API_KEY in assets/project.env.',
         );
       } else {
         final body = response.body.length > 300
@@ -123,6 +131,59 @@ class AiService {
         '3) Important conclusions. '
         'Use plain text only — no markdown headers or bold.';
     return _callGroq(system, 'Summarize this document:\n\n$documentText');
+  }
+
+  /// High-level semantic routing: maps device STT transcript → structured app command.
+  /// Returns null if the Groq request fails — caller falls back to local phrase matching.
+  static Future<VoiceAssistantInterpretation?> interpretVoiceAssistant({
+    required String transcript,
+  }) async {
+    final t = transcript.trim();
+    if (t.isEmpty) return null;
+
+    const systemPrompt =
+        'You classify short spoken phrases for the Vox mobile app voice assistant '
+        '(navigation, searching files/notes, opening saved quizzes, playback control). '
+        'Output ONLY a single JSON object. No markdown, no prose, no trailing text. '
+        'Schema strictly:\n'
+        '{"action":"<ACTION>","query":null|String,"reply":null|String}\n\n'
+        '- action must be exactly one of: none, navigate_home, navigate_notes, '
+        'navigate_menu, navigate_dictionary, search_library, search_notes, open_note, '
+        'open_assessments, reading_play, reading_pause, reading_stop, reading_faster, '
+        'reading_slower, assistant_off.\n'
+        '- Put user-specific text (search keywords, file/title hints) in query when '
+        'relevant otherwise null.\n'
+        '- assistant_off: user wants quiet or to stop hands-free assistant.\n'
+        '- reading_*: controlling text-to-speech while reading documents.\n'
+        '- Understand synonyms ("take me home", "show my uploads", '
+        '"open dictionary", etc.) and multilingual phrasing.\n'
+        '- If speech is unrelated to Vox navigation/search/playback, '
+        'action=none with a short reply (≤14 words English) naming one example phrase.\n';
+
+    try {
+      final raw = await _callGroq(
+        systemPrompt,
+        'User spoke:\n"""$t"""',
+        temperature: 0.12,
+        maxTokens: 256,
+      );
+      final jsonStr = _extractJsonObject(raw);
+      if (jsonStr == null) return null;
+      final decoded = jsonDecode(jsonStr);
+      if (decoded is! Map<String, dynamic>) return null;
+      return VoiceAssistantInterpretation.tryParse(decoded);
+    } catch (e, st) {
+      debugPrint('interpretVoiceAssistant: $e\n$st');
+      return null;
+    }
+  }
+
+  static String? _extractJsonObject(String text) {
+    final s = text.trim();
+    final start = s.indexOf('{');
+    final end = s.lastIndexOf('}');
+    if (start == -1 || end <= start) return null;
+    return s.substring(start, end + 1);
   }
 
   /// Assistant for generic questions.

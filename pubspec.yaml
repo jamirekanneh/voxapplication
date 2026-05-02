@@ -81,7 +81,7 @@ flutter:
 
 
   assets:
-    - .env
+    - assets/project.env
     - assets/images/shaheer.jpeg
     - assets/images/Jamire.jpeg
     - assets/images/Abubakir.jpeg

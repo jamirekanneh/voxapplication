@@ -2,12 +2,62 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:app_links/app_links.dart';
+
+enum _SnackTone { neutral, success, error }
+
+String _googleSignInUserMessage(Object e) {
+  if (e is FirebaseAuthException) {
+    switch (e.code) {
+      case 'invalid-credential':
+        return 'Google could not verify this device. Add your app signing '
+            'SHA-1/SHA-256 in Firebase Console, then reinstall and try again.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'account-exists-with-different-credential':
+      case 'credential-already-in-use':
+        return 'This Google account is already linked elsewhere. Try '
+            'signing in the other way, or reset in Firebase.';
+      case 'operation-not-allowed':
+        return 'Google sign-in is disabled for this app. Contact support.';
+      default:
+        final h = (e.message ?? '').trim();
+        return h.length > 120 ? '${h.substring(0, 117)}…' : (h.isNotEmpty ? h : e.code);
+    }
+  }
+  if (e is PlatformException) {
+    final code = e.code.toLowerCase();
+    final blob = '${e.message ?? ''} ${e.details ?? ''}'.toLowerCase();
+    if (code.contains('canceled') ||
+        code.contains('cancelled') ||
+        blob.contains('12501')) {
+      return '';
+    }
+    if (blob.contains('network') || code.contains('network')) {
+      return 'No internet. Check Wi-Fi or mobile data and try again.';
+    }
+    if (blob.contains('developer_error') ||
+        blob.contains('10:') ||
+        code == 'sign_in_failed' ||
+        code == 'sign_in_required') {
+      return 'Google sign-in could not start. Add SHA-1/SHA-256 in Firebase '
+          'Console and ensure google-services.json matches this app.';
+    }
+    final m = (e.message ?? '').trim();
+    return m.length > 160 ? '${m.substring(0, 157)}…' : (m.isNotEmpty ? m : e.code);
+  }
+  final raw = e.toString();
+  final low = raw.toLowerCase();
+  if (low.contains('canceled') || low.contains('cancelled')) return '';
+  if (raw.length > 140) return '${raw.substring(0, 137)}…';
+  return raw;
+}
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  COLORS
@@ -405,7 +455,8 @@ class _UserProfilePageState extends State<UserProfilePage>
       await prefs.setBool('pendingIsFreshStart', isFreshStart);
 
       final actionCodeSettings = ActionCodeSettings(
-        url: 'https://the-vox-application.firebaseapp.com/verify?email=$email',
+        url:
+            'https://the-vox-application.firebaseapp.com/verify?email=${Uri.encodeComponent(normalizedEmail)}',
         handleCodeInApp: true,
         androidPackageName: 'com.example.voxapplication',
         androidInstallApp: true,
@@ -747,12 +798,27 @@ class _UserProfilePageState extends State<UserProfilePage>
       await prefs.setString('userEmail', user.email ?? '');
       await prefs.setString('userName', user.displayName ?? '');
 
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true)
-            .pushReplacementNamed('/home');
-      }
+      if (!mounted) return;
+
+      final dn = user.displayName?.trim();
+      final em = user.email?.trim();
+      final label =
+          ((dn ?? '').isNotEmpty ? dn : null) ??
+          ((em ?? '').isNotEmpty ? em : null);
+      _showSnack(
+        label != null
+            ? 'Sign-in complete. Signed in as $label.'
+            : 'Sign-in complete.',
+        tone: _SnackTone.success,
+        duration: const Duration(seconds: 3),
+      );
+
+      await Future<void>.delayed(const Duration(milliseconds: 650));
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
     } catch (e) {
-      _showSnack('Google sign-in error: $e');
+      final msg = _googleSignInUserMessage(e);
+      if (msg.isNotEmpty) _showSnack(msg, tone: _SnackTone.error);
     } finally {
       if (mounted) setState(() => _googleLoading = false);
     }
@@ -777,13 +843,24 @@ class _UserProfilePageState extends State<UserProfilePage>
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  HELPERS
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  void _showSnack(String message) {
+  void _showSnack(
+    String message, {
+    _SnackTone tone = _SnackTone.neutral,
+    Duration duration = const Duration(seconds: 3),
+  }) {
     if (!mounted) return;
+    final bg = switch (tone) {
+      _SnackTone.success => const Color(0xFF1B5E20),
+      _SnackTone.error => const Color(0xFFC62828),
+      _SnackTone.neutral => const Color(0xFF333333),
+    };
+    ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: const Color(0xFF333333),
+        backgroundColor: bg,
         behavior: SnackBarBehavior.floating,
+        duration: duration,
       ),
     );
   }

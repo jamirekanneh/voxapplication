@@ -174,20 +174,27 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
       bool available = await _speech.initialize(
         onStatus: (status) {
           if (status == 'done' || status == 'notListening') {
-            setState(() => _isListening = false);
+            if (mounted) setState(() => _isListening = false);
           }
         },
         onError: (error) {
+          if (!mounted) return;
           setState(() => _isListening = false);
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(content: Text('Speech error: ${error.errorMsg}')),
           );
         },
       );
+      if (!mounted) return;
       if (available) {
         setState(() => _isListening = true);
         _speech.listen(
+          listenOptions: stt.SpeechListenOptions(
+            partialResults: true,
+            listenMode: stt.ListenMode.dictation,
+          ),
           onResult: (val) {
+            if (!mounted) return;
             setState(() {
               _controller.text = val.recognizedWords;
             });
@@ -238,10 +245,10 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
         
         if (_voiceOutputEnabled) {
           final locale = context.read<LanguageProvider>().currentLocale;
-          // Use a small delay to ensure UI has updated
+          final tts = context.read<TtsService>();
           Future.delayed(const Duration(milliseconds: 300), () {
             if (mounted) {
-              context.read<TtsService>().play('Assistant', response, locale);
+              tts.play('Assistant', response, locale);
             }
           });
         }

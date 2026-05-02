@@ -292,6 +292,8 @@ class TtsService extends ChangeNotifier {
     // Reload voices every time picker opens in case list was empty before
     if (_availableVoices.isEmpty) await _loadVoices();
 
+    if (!context.mounted) return;
+
     if (_availableVoices.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -305,6 +307,8 @@ class TtsService extends ChangeNotifier {
       );
       return;
     }
+
+    if (!context.mounted) return;
 
     await showModalBottomSheet(
       context: context,

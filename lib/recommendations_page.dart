@@ -47,6 +47,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     } else {
       setState(() => _isListening = true);
       await _speech.listen(
+        listenOptions: stt.SpeechListenOptions(
+          listenMode: stt.ListenMode.dictation,
+        ),
         onResult: (r) {
           if (!mounted) return;
           _controller.text = r.recognizedWords;
@@ -55,7 +58,6 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         },
         listenFor: const Duration(seconds: 30),
         pauseFor: const Duration(seconds: 4),
-        listenMode: stt.ListenMode.dictation,
       );
     }
   }

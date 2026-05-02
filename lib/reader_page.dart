@@ -42,7 +42,6 @@ class _ReaderPageState extends State<ReaderPage> {
   int _pinnedStart = 0;
   int _pinnedEnd = 0;
 
-  final bool _showStudyBuddy = false;
   final TextEditingController _buddyController = TextEditingController();
   final List<Map<String, String>> _buddyMessages = [];
   bool _isBuddyThinking = false;
@@ -182,8 +181,11 @@ class _ReaderPageState extends State<ReaderPage> {
         listenFor: const Duration(seconds: 60),
         // Wait 2.5s of silence before considering the utterance done
         pauseFor: const Duration(seconds: 2, milliseconds: 500),
-        partialResults: true,
-        cancelOnError: false,
+        listenOptions: stt.SpeechListenOptions(
+          partialResults: true,
+          cancelOnError: false,
+          listenMode: stt.ListenMode.confirmation,
+        ),
         onResult: (result) {
           if (!mounted || _commandProcessing) return;
 
@@ -544,13 +546,6 @@ class _ReaderPageState extends State<ReaderPage> {
         style: const TextStyle(fontSize: 16, height: 1.8, color: Colors.white),
       );
     }
-
-    // Clean content for display (strip XML tags if detected in docx)
-    final cleanedText = text
-        .replaceAll(RegExp(r'<[^>]*>'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    final displayText = cleanedText.isEmpty ? text : cleanedText;
 
     final lang = context.watch<LanguageProvider>();
     final isDyslexic = lang.isDyslexicFontEnabled;
@@ -1056,32 +1051,33 @@ class _ReaderPageState extends State<ReaderPage> {
                   context: context,
                   initialTime: TimeOfDay.now(),
                 );
-                if (time != null && mounted) {
-                  final now = DateTime.now();
-                  var scheduledTime = DateTime(
-                    now.year,
-                    now.month,
-                    now.day,
-                    time.hour,
-                    time.minute,
-                  );
-                  if (scheduledTime.isBefore(now)) {
-                    scheduledTime = scheduledTime.add(const Duration(days: 1));
-                  }
-
-                  await NotificationService.instance.scheduleReminder(
-                    id: scheduledTime.millisecondsSinceEpoch ~/ 1000,
-                    title: 'Study Reminder: ${widget.title}',
-                    body: 'It is time to dive back into your reading material!',
-                    scheduledTime: scheduledTime,
-                  );
-
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text('Reminder set for ${time.format(context)}'),
-                    ),
-                  );
+                if (time == null || !mounted) return;
+                final now = DateTime.now();
+                var scheduledTime = DateTime(
+                  now.year,
+                  now.month,
+                  now.day,
+                  time.hour,
+                  time.minute,
+                );
+                if (scheduledTime.isBefore(now)) {
+                  scheduledTime = scheduledTime.add(const Duration(days: 1));
                 }
+
+                await NotificationService.instance.scheduleReminder(
+                  id: scheduledTime.millisecondsSinceEpoch ~/ 1000,
+                  title: 'Study Reminder: ${widget.title}',
+                  body: 'It is time to dive back into your reading material!',
+                  scheduledTime: scheduledTime,
+                );
+
+                if (!mounted) return;
+                final label = time.format(context);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Reminder set for $label'),
+                  ),
+                );
               },
               child: Container(
                 padding: const EdgeInsets.symmetric(

@@ -417,6 +417,8 @@ class _UploadPageState extends State<UploadPage> {
       return;
     }
 
+    if (!mounted) return;
+
     // Ask: single or multi-page
     final choice = await showModalBottomSheet<String>(
       context: context,

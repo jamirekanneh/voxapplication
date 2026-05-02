@@ -236,6 +236,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
       if (!mounted) return;
       setState(() => _listeningField = key);
       await _speech.listen(
+        listenOptions: stt.SpeechListenOptions(
+          cancelOnError: true,
+          listenMode: stt.ListenMode.dictation,
+        ),
         onResult: (r) {
           if (!mounted) return;
           ctrl.text = r.recognizedWords;
@@ -246,8 +250,6 @@ class _ContactUsPageState extends State<ContactUsPage> {
         },
         listenFor: const Duration(seconds: 30),
         pauseFor: const Duration(seconds: 4),
-        cancelOnError: true,
-        listenMode: stt.ListenMode.dictation,
       );
     } finally {
       _voiceBusy = false;
@@ -401,7 +403,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
             Expanded(
               child: ValueListenableBuilder<String>(
                 valueListenable: search,
-                builder: (_, query, __) {
+                builder: (context, query, _) {
                   final filtered = _kCountries
                       .where(
                         (c) =>
@@ -920,7 +922,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                           TextEditingValue
                                         >(
                                           valueListenable: _firstNameCtrl,
-                                          builder: (_, v, __) => v.text.isEmpty
+                                          builder: (context, v, _) => v.text.isEmpty
                                               ? const Padding(
                                                   padding: EdgeInsets.only(
                                                     left: 48,
@@ -976,7 +978,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                           TextEditingValue
                                         >(
                                           valueListenable: _lastNameCtrl,
-                                          builder: (_, v, __) => v.text.isEmpty
+                                          builder: (context, v, _) => v.text.isEmpty
                                               ? const Padding(
                                                   padding: EdgeInsets.only(
                                                     left: 48,
@@ -1137,7 +1139,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                             children: [
                               ValueListenableBuilder<TextEditingValue>(
                                 valueListenable: _titleCtrl,
-                                builder: (_, v, __) => v.text.isEmpty
+                                builder: (context, v, _) => v.text.isEmpty
                                     ? const Padding(
                                         padding: EdgeInsets.only(left: 16),
                                         child: _BlinkingHint(
