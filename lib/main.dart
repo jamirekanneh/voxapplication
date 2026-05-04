@@ -22,6 +22,15 @@ import 'custom_commands_provider.dart';
 import 'analytics_service.dart';
 import 'notification_service.dart';
 import 'saved_assessments_page.dart';
+import 'profile_page.dart';
+import 'custom_commands_page.dart';
+import 'about_us_page.dart';
+import 'statistics_page.dart';
+import 'contact_us_page.dart';
+import 'ask_questions_page.dart';
+import 'recommendations_page.dart';
+import 'recycle_bin_page.dart';
+import 'history_page.dart';
 
 final GlobalKey<NavigatorState> globalNavigatorKey =
     GlobalKey<NavigatorState>();
@@ -39,7 +48,10 @@ class AuthWrapper extends StatelessWidget {
       builder: (context, snapshot) {
         // Show splash/loading while checking auth state
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return const GlobalSttWrapper(child: SplashScreen());
+          return const MaterialApp(
+            debugShowCheckedModeBanner: false,
+            home: SplashScreen(),
+          );
         }
 
         final user = snapshot.data;
@@ -150,8 +162,9 @@ class _TheVoxAppState extends State<TheVoxApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: globalNavigatorKey,
-      // Wrap the SplashScreen with the GlobalSttWrapper
-      home: const GlobalSttWrapper(child: SplashScreen()),
+      // Wrap the entire app routing navigator with GlobalSttWrapper
+      builder: (context, child) => GlobalSttWrapper(child: child!),
+      home: const SplashScreen(),
       routes: {
         '/home': (context) => const VoxHomePage(),
         '/upload': (context) => const UploadPage(),
@@ -159,6 +172,15 @@ class _TheVoxAppState extends State<TheVoxApp> {
         '/dictionary': (context) => const DictionaryPage(),
         '/notes': (context) => const NotesPage(),
         '/saved_assessments': (context) => const SavedAssessmentsPage(),
+        '/profile': (context) => const ProfilePage(),
+        '/custom_commands': (context) => const CustomCommandsPage(),
+        '/about': (context) => const AboutUsPage(),
+        '/statistics': (context) => const StatisticsPage(),
+        '/contact': (context) => const ContactUsPage(),
+        '/faqs': (context) => const AskQuestionsPage(),
+        '/recommendations': (context) => const RecommendationsPage(),
+        '/recycle_bin': (context) => const RecycleBinPage(),
+        '/history': (context) => HistoryScreen(),
       },
     );
   }

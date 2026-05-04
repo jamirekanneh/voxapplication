@@ -44,6 +44,18 @@ enum CommandActionType {
   searchLibrary,
   openAssessments,
   macroSequence,
+  navigateProfile,
+  navigateCustomCommands,
+  navigateAbout,
+  navigateStatistics,
+  navigateContact,
+  navigateFaqs,
+  navigateRecommendations,
+  navigateRecycleBin,
+  navigateHistory,
+  openLanguagePicker,
+  customCommand,
+  none,
 }
 
 extension CommandActionTypeLabel on CommandActionType {
@@ -77,6 +89,30 @@ extension CommandActionTypeLabel on CommandActionType {
         return 'Open Saved Q&A';
       case CommandActionType.macroSequence:
         return 'Run Macro Sequence';
+      case CommandActionType.navigateProfile:
+        return 'Go to Profile';
+      case CommandActionType.navigateCustomCommands:
+        return 'Go to Personalized Commands';
+      case CommandActionType.navigateAbout:
+        return 'Go to About Us';
+      case CommandActionType.navigateStatistics:
+        return 'Go to Statistics';
+      case CommandActionType.navigateContact:
+        return 'Go to Contact Us';
+      case CommandActionType.navigateFaqs:
+        return 'Go to FAQs';
+      case CommandActionType.navigateRecommendations:
+        return 'Go to Recommendations';
+      case CommandActionType.navigateRecycleBin:
+        return 'Go to Recycle Bin';
+      case CommandActionType.navigateHistory:
+        return 'Go to History';
+      case CommandActionType.openLanguagePicker:
+        return 'Open Language Selection';
+      case CommandActionType.customCommand:
+        return 'Custom Command';
+      case CommandActionType.none:
+        return 'None';
     }
   }
 
@@ -110,6 +146,30 @@ extension CommandActionTypeLabel on CommandActionType {
         return Icons.assignment_turned_in_outlined;
       case CommandActionType.macroSequence:
         return Icons.timeline_rounded;
+      case CommandActionType.navigateProfile:
+        return Icons.person_outline_rounded;
+      case CommandActionType.navigateCustomCommands:
+        return Icons.mic_none_rounded;
+      case CommandActionType.navigateAbout:
+        return Icons.info_outline_rounded;
+      case CommandActionType.navigateStatistics:
+        return Icons.bar_chart_outlined;
+      case CommandActionType.navigateContact:
+        return Icons.mail_outline_rounded;
+      case CommandActionType.navigateFaqs:
+        return Icons.question_answer_outlined;
+      case CommandActionType.navigateRecommendations:
+        return Icons.lightbulb_outline_rounded;
+      case CommandActionType.navigateRecycleBin:
+        return Icons.delete_sweep_rounded;
+      case CommandActionType.navigateHistory:
+        return Icons.history_rounded;
+      case CommandActionType.openLanguagePicker:
+        return Icons.language_rounded;
+      case CommandActionType.customCommand:
+        return Icons.code_rounded;
+      case CommandActionType.none:
+        return Icons.do_not_disturb_rounded;
     }
   }
 
@@ -394,34 +454,109 @@ class CustomCommandsProvider extends ChangeNotifier {
   void _addDefaultCommands() {
     _commands = [
       CustomCommand(
-        id: '${DateTime.now().millisecondsSinceEpoch}1',
+        id: 'def_menu_1',
         phrase: 'turn to menu page',
         action: CommandActionType.navigateMenu,
       ),
       CustomCommand(
-        id: '${DateTime.now().millisecondsSinceEpoch}2',
+        id: 'def_menu_2',
+        phrase: 'menu',
+        action: CommandActionType.navigateMenu,
+      ),
+      CustomCommand(
+        id: 'def_lib_1',
         phrase: 'search library for',
         action: CommandActionType.searchLibrary,
       ),
       CustomCommand(
-        id: '${DateTime.now().millisecondsSinceEpoch}3',
+        id: 'def_ass_1',
         phrase: 'open and read this assessment',
         action: CommandActionType.openAssessments,
       ),
       CustomCommand(
-        id: '${DateTime.now().millisecondsSinceEpoch}4',
+        id: 'def_ass_2',
+        phrase: 'assessments',
+        action: CommandActionType.openAssessments,
+      ),
+      CustomCommand(
+        id: 'def_home_1',
         phrase: 'go home',
         action: CommandActionType.navigateHome,
       ),
       CustomCommand(
-        id: '${DateTime.now().millisecondsSinceEpoch}5',
+        id: 'def_home_2',
+        phrase: 'home',
+        action: CommandActionType.navigateHome,
+      ),
+      CustomCommand(
+        id: 'def_notes_1',
         phrase: 'open notes',
         action: CommandActionType.navigateNotes,
       ),
       CustomCommand(
-        id: '${DateTime.now().millisecondsSinceEpoch}6',
+        id: 'def_notes_2',
+        phrase: 'notes',
+        action: CommandActionType.navigateNotes,
+      ),
+      CustomCommand(
+        id: 'def_dict_1',
+        phrase: 'dictionary',
+        action: CommandActionType.navigateDictionary,
+      ),
+      CustomCommand(
+        id: 'def_search_notes',
         phrase: 'search notes for',
         action: CommandActionType.searchNotes,
+      ),
+      CustomCommand(
+        id: 'def_profile',
+        phrase: 'profile',
+        action: CommandActionType.navigateProfile,
+      ),
+      CustomCommand(
+        id: 'def_languages',
+        phrase: 'languages',
+        action: CommandActionType.openLanguagePicker,
+      ),
+      CustomCommand(
+        id: 'def_personalized_commands',
+        phrase: 'personalized commands',
+        action: CommandActionType.navigateCustomCommands,
+      ),
+      CustomCommand(
+        id: 'def_statistics',
+        phrase: 'statistics',
+        action: CommandActionType.navigateStatistics,
+      ),
+      CustomCommand(
+        id: 'def_about',
+        phrase: 'about us',
+        action: CommandActionType.navigateAbout,
+      ),
+      CustomCommand(
+        id: 'def_contact',
+        phrase: 'contact us',
+        action: CommandActionType.navigateContact,
+      ),
+      CustomCommand(
+        id: 'def_faqs',
+        phrase: 'faqs',
+        action: CommandActionType.navigateFaqs,
+      ),
+      CustomCommand(
+        id: 'def_recommendations',
+        phrase: 'recommendations',
+        action: CommandActionType.navigateRecommendations,
+      ),
+      CustomCommand(
+        id: 'def_recycle_bin',
+        phrase: 'recycle bin',
+        action: CommandActionType.navigateRecycleBin,
+      ),
+      CustomCommand(
+        id: 'def_history',
+        phrase: 'history',
+        action: CommandActionType.navigateHistory,
       ),
     ];
   }
@@ -431,11 +566,23 @@ class CustomCommandsProvider extends ChangeNotifier {
   CustomCommand? match(String spokenText) {
     final input = _normalize(spokenText);
     CustomCommand? best;
-    double bestScore = 0.4; // minimum threshold
+    double bestScore = 0.35; // slightly lower threshold to catch more intent
 
     for (final cmd in enabledCommands) {
       final phrase = _normalize(cmd.phrase);
       double score = _score(input, phrase);
+
+      // KEYWORD BOOST: If the input contains a hard navigation keyword related to the action,
+      // boost the score specifically to prioritize certain routes.
+      if (cmd.action == CommandActionType.navigateMenu && (input.contains('menu') || input.contains('option'))) {
+        score += 0.3;
+      } else if (cmd.action == CommandActionType.navigateDictionary && (input.contains('dictionary') || input.contains('meaning') || input.contains('word'))) {
+        score += 0.3;
+      } else if (cmd.action == CommandActionType.navigateNotes && (input.contains('notes') || input.contains('write'))) {
+        score += 0.3;
+      } else if (cmd.action == CommandActionType.navigateHome && (input.contains('home') || input.contains('back'))) {
+        score += 0.3;
+      }
 
       if (score > bestScore) {
         bestScore = score;

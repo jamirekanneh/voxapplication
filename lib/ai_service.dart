@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'analytics_service.dart';
 import 'voice_assistant_intent.dart';
+import 'custom_commands_provider.dart';
 
 // ignore: uri_does_not_exist
 import 'config/secrets.dart';
@@ -137,28 +138,38 @@ class AiService {
   /// Returns null if the Groq request fails — caller falls back to local phrase matching.
   static Future<VoiceAssistantInterpretation?> interpretVoiceAssistant({
     required String transcript,
+    List<CustomCommand> customCommands = const [],
   }) async {
     final t = transcript.trim();
     if (t.isEmpty) return null;
+    
+    String customCommandsContext = '';
+    if (customCommands.isNotEmpty) {
+      final cmds = customCommands.map((c) => 'ID: "${c.id}" => Phrase: "${c.phrase}" (Action: ${c.action.name})').join('\n');
+      customCommandsContext = '\n\nThe user has configured these CUSTOM COMMANDS. If the user\'s speech expresses '
+          'the intent to trigger one of these phrases, output action="custom_command" and include '
+          '"customCommandId": "<ID_HERE>".\nCustom Commands:\n$cmds\n';
+    }
 
-    const systemPrompt =
+    final systemPrompt =
         'You classify short spoken phrases for the Vox mobile app voice assistant '
         '(navigation, searching files/notes, opening saved quizzes, playback control). '
         'Output ONLY a single JSON object. No markdown, no prose, no trailing text. '
         'Schema strictly:\n'
-        '{"action":"<ACTION>","query":null|String,"reply":null|String}\n\n'
+        '{"action":"<ACTION>","query":null|String,"reply":null|String,"customCommandId":null|String}\n\n'
         '- action must be exactly one of: none, navigate_home, navigate_notes, '
         'navigate_menu, navigate_dictionary, search_library, search_notes, open_note, '
         'open_assessments, reading_play, reading_pause, reading_stop, reading_faster, '
-        'reading_slower, assistant_off.\n'
+        'reading_slower, assistant_off, custom_command.\n'
         '- Put user-specific text (search keywords, file/title hints) in query when '
         'relevant otherwise null.\n'
         '- assistant_off: user wants quiet or to stop hands-free assistant.\n'
         '- reading_*: controlling text-to-speech while reading documents.\n'
         '- Understand synonyms ("take me home", "show my uploads", '
         '"open dictionary", etc.) and multilingual phrasing.\n'
-        '- If speech is unrelated to Vox navigation/search/playback, '
-        'action=none with a short reply (≤14 words English) naming one example phrase.\n';
+        '- If speech is unrelated to Vox navigation/search/playback/custom_commands, '
+        'action=none with a short reply (≤14 words English) naming one example phrase.\n'
+        '$customCommandsContext';
 
     try {
       final raw = await _callGroq(

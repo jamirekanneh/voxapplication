@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'ai_service.dart';
+import 'config/secrets.dart';
 import 'analytics_service.dart';
 import 'custom_commands_provider.dart';
 import 'language_provider.dart';
+import 'main.dart';
 import 'tts_service.dart';
 import 'voice_assistant_intent.dart';
 
@@ -26,6 +28,16 @@ const Map<String, Map<String, String>> _feedback = {
     'openAssessments': 'Opening saved Q&A',
     'assistantMuted': 'Voice assistant muted',
     'noMatch': 'Command not recognized',
+    'navigateProfile': 'Opening Profile',
+    'navigateCustomCommands': 'Opening Personalized Commands',
+    'navigateAbout': 'Opening About Us',
+    'navigateStatistics': 'Opening Statistics',
+    'navigateContact': 'Opening Contact Us',
+    'navigateFaqs': 'Opening FAQs',
+    'navigateRecommendations': 'Opening Recommendations',
+    'navigateRecycleBin': 'Opening Recycle Bin',
+    'navigateHistory': 'Opening History',
+    'openLanguagePicker': 'Opening language selection',
   },
   'Spanish': {
     'navigateHome': 'Yendo al inicio',
@@ -151,9 +163,33 @@ class CommandDispatcher {
         return CommandActionType.ttsSpeedUp;
       case VoiceAssistantAction.readingSlower:
         return CommandActionType.ttsSlowDown;
-      case VoiceAssistantAction.none:
-      case VoiceAssistantAction.unknown:
+      case VoiceAssistantAction.navigateProfile:
+        return CommandActionType.navigateProfile;
+      case VoiceAssistantAction.navigateCustomCommands:
+        return CommandActionType.navigateCustomCommands;
+      case VoiceAssistantAction.navigateAbout:
+        return CommandActionType.navigateAbout;
+      case VoiceAssistantAction.navigateStatistics:
+        return CommandActionType.navigateStatistics;
+      case VoiceAssistantAction.navigateContact:
+        return CommandActionType.navigateContact;
+      case VoiceAssistantAction.navigateFaqs:
+        return CommandActionType.navigateFaqs;
+      case VoiceAssistantAction.navigateRecommendations:
+        return CommandActionType.navigateRecommendations;
+      case VoiceAssistantAction.navigateRecycleBin:
+        return CommandActionType.navigateRecycleBin;
+      case VoiceAssistantAction.navigateHistory:
+        return CommandActionType.navigateHistory;
+      case VoiceAssistantAction.openLanguagePicker:
+        return CommandActionType.openLanguagePicker;
       case VoiceAssistantAction.assistantOff:
+        return null;
+      case VoiceAssistantAction.customCommand:
+        return CommandActionType.customCommand;
+      case VoiceAssistantAction.none:
+        return CommandActionType.none;
+      case VoiceAssistantAction.unknown:
         return null;
     }
   }
@@ -177,9 +213,9 @@ class CommandDispatcher {
         if (commandsProvider.voiceFeedbackEnabled) {
           final r = nl.replyEnglish?.trim();
           if (r != null && r.isNotEmpty) {
-            await ttsService.play('', r, locale);
+            ttsService.play('', r, locale);
           } else {
-            await ttsService.play('', _getFeedback(language, 'noMatch'), locale);
+            ttsService.play('', _getFeedback(language, 'noMatch'), locale);
           }
         }
         return true;
@@ -198,6 +234,46 @@ class CommandDispatcher {
         }
         return true;
 
+      case VoiceAssistantAction.customCommand:
+        final cId = nl.customCommandId;
+        debugPrint('DISPATCH: Custom command selected: $cId');
+        if (cId == null) return false;
+        try {
+          final customCmd = commandsProvider.commands.firstWhere((c) => c.id == cId);
+          debugPrint('DISPATCH: Executing custom command phrase: "${customCmd.phrase}"');
+          if (!context.mounted) return false;
+          
+          // Siri-style: Navigation happens FIRST
+          if (customCmd.action == CommandActionType.macroSequence &&
+              customCmd.parameter != null &&
+              customCmd.parameter!.trim().isNotEmpty) {
+            final steps = customCmd.parameter!
+                .split(RegExp(r'[\r\n;]+'))
+                .map((s) => s.trim())
+                .where((s) => s.isNotEmpty)
+                .toList();
+            for (final step in steps) {
+              final subCommand = commandsProvider.match(step);
+              if (subCommand != null) {
+                _execute(context, subCommand, ttsService, locale);
+              }
+            }
+          } else {
+            _execute(context, customCmd, ttsService, locale);
+          }
+
+          if (commandsProvider.voiceFeedbackEnabled) {
+            String feedbackText = (nl.replyEnglish != null && nl.replyEnglish!.trim().isNotEmpty)
+                ? nl.replyEnglish!.trim()
+                : _getFeedback(language, customCmd.action.name);
+            ttsService.play('', feedbackText, locale);
+          }
+          
+          return true;
+        } catch (_) {
+          return false;
+        }
+
       default:
         final mapped = _mapNlAction(nl.action);
         if (mapped == null || !context.mounted) return false;
@@ -213,6 +289,9 @@ class CommandDispatcher {
 
         if (!context.mounted) return false;
 
+        // Siri-style: Action happens FIRST
+        _execute(context, cmd, ttsService, locale);
+
         if (commandsProvider.voiceFeedbackEnabled) {
           var feedbackText =
               (nl.replyEnglish != null && nl.replyEnglish!.trim().isNotEmpty)
@@ -225,12 +304,8 @@ class CommandDispatcher {
                   mapped == CommandActionType.searchLibrary)) {
             feedbackText += ': $p';
           }
-          await ttsService.play('', feedbackText, locale);
+          ttsService.play('', feedbackText, locale);
         }
-
-        if (!context.mounted) return true;
-
-        await _execute(context, cmd, ttsService, locale);
 
         return true;
     }
@@ -244,12 +319,27 @@ class CommandDispatcher {
     required LanguageProvider langProvider,
   }) async {
     VoiceAssistantInterpretation? interpreted;
-    try {
-      interpreted = await AiService.interpretVoiceAssistant(
-        transcript: spokenText,
-      );
-    } catch (_) {
-      interpreted = null;
+    debugPrint('DISPATCH START: "$spokenText"');
+    
+    // SPEED FIX: If the user hasn't set their Groq key, don't even TRY the AI.
+    // This removes the 10-20 second "slow" feeling of a failing request.
+    final isPlaceholder = kGroqKey.isEmpty || 
+                          kGroqKey.toLowerCase().contains('your_') || 
+                          kGroqKey.toLowerCase().contains('api_key');
+                          
+    if (isPlaceholder) {
+      debugPrint('DISPATCH: Groq key missing or placeholder, skipping AI phase.');
+    } else {
+      try {
+        interpreted = await AiService.interpretVoiceAssistant(
+          transcript: spokenText,
+          customCommands: commandsProvider.enabledCommands,
+        );
+        debugPrint('AI INTERPRETATION: ${interpreted?.action}');
+      } catch (e) {
+        debugPrint('AI SERVICE ERROR: $e');
+        interpreted = null;
+      }
     }
 
     if (!context.mounted) return false;
@@ -262,17 +352,43 @@ class CommandDispatcher {
         ttsService: ttsService,
         langProvider: langProvider,
       );
-      if (handled) return true;
+      if (handled) {
+        debugPrint('DISPATCH: Handled by AI Intent');
+        return true;
+      }
+    }
+
+    final language = langProvider.selectedLanguage;
+    final locale = langProvider.currentLocale;
+
+    debugPrint('DISPATCH: Falling back to local matcher');
+    
+    // HARDCODED FAILSAFES: If the matching engine is struggling, we force-match core navigation.
+    final normalized = spokenText.toLowerCase().trim();
+    if (normalized == 'menu' || normalized == 'open menu' || normalized == 'go to menu') {
+      debugPrint('FAILSAFE: Force matching Menu');
+      await _execute(context, const CustomCommand(id: 'fs_menu', phrase: 'menu', action: CommandActionType.navigateMenu), ttsService, locale);
+      return true;
+    } else if (normalized == 'home' || normalized == 'go home' || normalized == 'back home') {
+      debugPrint('FAILSAFE: Force matching Home');
+      await _execute(context, const CustomCommand(id: 'fs_home', phrase: 'home', action: CommandActionType.navigateHome), ttsService, locale);
+      return true;
+    } else if (normalized == 'dictionary' || normalized == 'open dictionary' || normalized == 'dictionary page') {
+      debugPrint('FAILSAFE: Force matching Dictionary');
+      await _execute(context, const CustomCommand(id: 'fs_dict', phrase: 'dictionary', action: CommandActionType.navigateDictionary), ttsService, locale);
+      return true;
+    } else if (normalized == 'notes' || normalized == 'open notes') {
+      debugPrint('FAILSAFE: Force matching Notes');
+      await _execute(context, const CustomCommand(id: 'fs_notes', phrase: 'notes', action: CommandActionType.navigateNotes), ttsService, locale);
+      return true;
     }
 
     final matched = commandsProvider.match(spokenText);
-    final language = langProvider.selectedLanguage;
-    final locale = langProvider.currentLocale;
 
     if (matched == null) {
       AnalyticsService.instance.recordUnmatchedCommand(spokenText);
       if (commandsProvider.voiceFeedbackEnabled) {
-        await ttsService.play(
+        ttsService.play(
           '',
           _getFeedback(language, 'noMatch'),
           locale,
@@ -284,16 +400,7 @@ class CommandDispatcher {
     // Track voice command usage
     AnalyticsService.instance.recordVoiceCommand(matched.action.displayName);
 
-    if (commandsProvider.voiceFeedbackEnabled) {
-      String feedbackText = _getFeedback(language, matched.action.name);
-      if (matched.parameter != null && matched.parameter!.isNotEmpty) {
-        feedbackText += ': ${matched.parameter}';
-      }
-      await ttsService.play('', feedbackText, locale);
-    }
-
-    if (!context.mounted) return true;
-
+    // Siri-style: Navigation happens FIRST
     if (matched.action == CommandActionType.macroSequence &&
         matched.parameter != null &&
         matched.parameter!.trim().isNotEmpty) {
@@ -306,16 +413,23 @@ class CommandDispatcher {
       for (final step in steps) {
         final subCommand = commandsProvider.match(step);
         if (subCommand != null) {
-          await _execute(context, subCommand, ttsService, locale);
+          _execute(context, subCommand, ttsService, locale);
         } else if (commandsProvider.voiceFeedbackEnabled) {
-          await ttsService.play('',
-              'Macro step not found: $step', locale); // spoken fallback
+          ttsService.play('', 'Macro step not found: $step', locale);
         }
       }
-      return true;
+    } else {
+      _execute(context, matched, ttsService, locale);
     }
 
-    await _execute(context, matched, ttsService, locale);
+    if (commandsProvider.voiceFeedbackEnabled) {
+      String feedbackText = _getFeedback(language, matched.action.name);
+      if (matched.parameter != null && matched.parameter!.isNotEmpty) {
+        feedbackText += ': ${matched.parameter}';
+      }
+      ttsService.play('', feedbackText, locale);
+    }
+
     return true;
   }
 
@@ -325,20 +439,24 @@ class CommandDispatcher {
     TtsService ttsService,
     String locale,
   ) async {
+    debugPrint('EXECUTING ACTION: ${command.action}');
     switch (command.action) {
-      // FIX: pushNamed instead of pushReplacementNamed — replacement
-      // destroys the GlobalSttWrapper state, breaking all future voice commands
+      // FIX: use globalNavigatorKey since this context might be above the navigator
       case CommandActionType.navigateHome:
-        Navigator.pushNamed(context, '/home');
+        debugPrint('NAVIGATING: /home (NavState: ${globalNavigatorKey.currentState != null})');
+        globalNavigatorKey.currentState?.pushNamed('/home');
         break;
       case CommandActionType.navigateNotes:
-        Navigator.pushNamed(context, '/notes');
+        debugPrint('NAVIGATING: /notes (NavState: ${globalNavigatorKey.currentState != null})');
+        globalNavigatorKey.currentState?.pushNamed('/notes');
         break;
       case CommandActionType.navigateMenu:
-        Navigator.pushNamed(context, '/menu');
+        debugPrint('NAVIGATING: /menu (NavState: ${globalNavigatorKey.currentState != null})');
+        globalNavigatorKey.currentState?.pushNamed('/menu');
         break;
       case CommandActionType.navigateDictionary:
-        Navigator.pushNamed(context, '/dictionary');
+        debugPrint('NAVIGATING: /dictionary (NavState: ${globalNavigatorKey.currentState != null})');
+        globalNavigatorKey.currentState?.pushNamed('/dictionary');
         break;
       case CommandActionType.ttsPlay:
         if (!ttsService.isPlaying && ttsService.content != null) {
@@ -360,31 +478,66 @@ class CommandDispatcher {
         await ttsService.setRate(ttsService.speechRate - 0.2, locale);
         break;
       case CommandActionType.searchNotes:
-        Navigator.pushNamed(
-          context,
+        globalNavigatorKey.currentState!.pushNamed(
           '/notes',
           arguments: {'searchQuery': command.parameter ?? ''},
         );
         break;
       case CommandActionType.openNote:
-        Navigator.pushNamed(
-          context,
+        globalNavigatorKey.currentState!.pushNamed(
           '/notes',
           arguments: {'openNote': command.parameter ?? ''},
         );
         break;
       case CommandActionType.searchLibrary:
-        Navigator.pushNamed(
-          context,
+        globalNavigatorKey.currentState!.pushNamed(
           '/home',
           arguments: {'searchQuery': command.parameter ?? ''},
         );
         break;
       case CommandActionType.openAssessments:
-        Navigator.pushNamed(context, '/saved_assessments');
+        globalNavigatorKey.currentState!.pushNamed('/saved_assessments');
+        break;
+      case CommandActionType.navigateProfile:
+        globalNavigatorKey.currentState!.pushNamed('/profile');
+        break;
+      case CommandActionType.navigateCustomCommands:
+        globalNavigatorKey.currentState!.pushNamed('/custom_commands');
+        break;
+      case CommandActionType.navigateAbout:
+        globalNavigatorKey.currentState!.pushNamed('/about');
+        break;
+      case CommandActionType.navigateStatistics:
+        globalNavigatorKey.currentState!.pushNamed('/statistics');
+        break;
+      case CommandActionType.navigateContact:
+        globalNavigatorKey.currentState!.pushNamed('/contact');
+        break;
+      case CommandActionType.navigateFaqs:
+        globalNavigatorKey.currentState!.pushNamed('/faqs');
+        break;
+      case CommandActionType.navigateRecommendations:
+        globalNavigatorKey.currentState!.pushNamed('/recommendations');
+        break;
+      case CommandActionType.navigateRecycleBin:
+        globalNavigatorKey.currentState!.pushNamed('/recycle_bin');
+        break;
+      case CommandActionType.navigateHistory:
+        globalNavigatorKey.currentState!.pushNamed('/history');
+        break;
+      case CommandActionType.openLanguagePicker:
+        // For now, jump to menu page where the picker button is prominent,
+        // or we could implement a global picker show here.
+        globalNavigatorKey.currentState!.pushNamed('/menu');
         break;
       case CommandActionType.macroSequence:
         // Macro logic is handled in dispatch; no direct action here.
+        break;
+      case CommandActionType.customCommand:
+        // Base case for custom actions; primarily handled in dispatch.
+        break;
+      case CommandActionType.none:
+        // Explicitly do nothing.
         break;
     }
   }

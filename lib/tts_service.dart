@@ -176,9 +176,11 @@ class TtsService extends ChangeNotifier {
 
     await _applyVoiceOrLocale(locale);
     await _tts.setSpeechRate(speechRate);
-    await _tts.setPitch(1.0);
+    await _tts.setPitch(1.05); // slight pitch boost for more natural tone
+    await _tts.setVolume(1.0); // MAX volume
     notifyListeners();
-    await _tts.speak(c);
+    // Use un-awaited speak for feedback so UI flow continues immediately
+    _tts.speak(c);
   }
 
   Future<void> togglePause(String locale) async {

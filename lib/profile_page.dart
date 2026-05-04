@@ -19,16 +19,16 @@ class ProfilePage extends StatefulWidget {
   final String email;
   final String? base64Image;
   final String? photoUrl;
-  final VoidCallback onProfileUpdated;
+  final VoidCallback? onProfileUpdated;
 
   const ProfilePage({
     super.key,
-    required this.isAnonymous,
-    required this.username,
-    required this.email,
-    required this.base64Image,
-    required this.photoUrl,
-    required this.onProfileUpdated,
+    this.isAnonymous = true,
+    this.username = '',
+    this.email = '',
+    this.base64Image,
+    this.photoUrl,
+    this.onProfileUpdated,
   });
 
   @override
@@ -108,7 +108,7 @@ class _ProfilePageState extends State<ProfilePage>
         'username': name,
         'photoBase64': _base64Image ?? '',
       });
-      widget.onProfileUpdated();
+      widget.onProfileUpdated?.call();
       if (mounted) setState(() => _isEditing = false);
       _showSnack("Profile updated");
     } catch (e) {
@@ -178,8 +178,8 @@ class _ProfilePageState extends State<ProfilePage>
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool('hasProfile', true);
       await prefs.setString('userEmail', _emailController.text.trim());
-
-      widget.onProfileUpdated();
+      
+      widget.onProfileUpdated?.call();
       if (mounted) {
         _showSnack("Account created! Your data is now being saved.");
         Navigator.pop(context);

@@ -1,16 +1,17 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:permission_handler/permission_handler.dart';
 import 'custom_commands_provider.dart';
 import 'command_dispatcher.dart';
 import 'tts_service.dart';
 import 'language_provider.dart';
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────
 //  GLOBAL STT WRAPPER
 //  Wrap your MaterialApp child with this widget.
-//  Double-tap anywhere â†’ starts listening â†’ matches commands.
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  Double-tap anywhere → starts listening → matches commands.
+// ─────────────────────────────────────────────
 class GlobalSttWrapper extends StatefulWidget {
   final Widget child;
 
@@ -23,7 +24,8 @@ class GlobalSttWrapper extends StatefulWidget {
 class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     with SingleTickerProviderStateMixin {
   final stt.SpeechToText _speech = stt.SpeechToText();
-  bool _isListening = false;
+  bool _isHardwareListening = false;
+  bool _showListeningUI = false;
   bool _speechAvailable = false;
   String _lastWords = '';
 
@@ -54,8 +56,11 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     if (!mounted) return;
     final assistantEnabled =
         context.read<CustomCommandsProvider>().assistantModeEnabled;
-    if (assistantEnabled && !_isListening) {
-      _startListening();
+    if (assistantEnabled && !_isHardwareListening) {
+      _startListening(manual: false);
+    } else if (!assistantEnabled && !_showListeningUI && _isHardwareListening) {
+      // If toggled off while passively listening, stop hardware
+      _speech.stop();
     }
   }
 
@@ -68,13 +73,12 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
   Future<void> _initSpeech() async {
     _speechAvailable = await _speech.initialize(
       onError: (e) {
-        if (mounted) _updateListening(false);
-        // Auto-restart if assistant mode is on and it's not a fatal error
+        if (mounted) _updateListening(hardware: false, ui: false);
         _checkAutoRestart();
       },
       onStatus: (status) {
         if (status == 'done' || status == 'notListening') {
-          if (mounted) _updateListening(false);
+          if (mounted) _updateListening(hardware: false, ui: false);
           _handleResult();
         }
       },
@@ -82,8 +86,12 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     if (mounted) setState(() {});
   }
 
-  Future<void> _startListening() async {
-    if (!_speechAvailable || _isListening) return;
+  Future<void> _startListening({bool manual = false}) async {
+    // Explicit permission check for robust Android support
+    final status = await Permission.microphone.request();
+    if (status != PermissionStatus.granted) return;
+
+    if (!_speechAvailable || _isHardwareListening) return;
 
     final langProvider = context.read<LanguageProvider>();
     final tts = context.read<TtsService>();
@@ -97,7 +105,7 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
 
     if (!mounted) return;
 
-    _updateListening(true);
+    _updateListening(hardware: true, ui: manual);
     setState(() {
       _lastWords = '';
     });
@@ -119,49 +127,127 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
 
   Future<void> _handleResult() async {
     debugPrint('HANDLE RESULT: "$_lastWords"');
-    if (_lastWords.isEmpty) return;
+    String spokenText = _lastWords.toLowerCase().trim();
+    if (spokenText.isEmpty) {
+      _checkAutoRestart();
+      return;
+    }
     if (!mounted) return;
 
-    final commandsProvider = context.read<CustomCommandsProvider>();
+    bool hasWakeWord = false;
+    final wakeWords = [
+      'vox', 'hey vox', 'hello vox', 'ok vox', 'okay vox', 'hi vox', 
+      'fox', 'hey fox', 'box', 'hey box', 'folks', 'hey folks', 
+      'voks', 'volks', 'vocks', 'books', 'hey books', 'choice'
+    ];
+    
+    // Check if the transcript contains any of our wake word variants
+    for (final w in wakeWords) {
+      if (spokenText.startsWith(w)) {
+        hasWakeWord = true;
+        spokenText = spokenText.substring(w.length).trim();
+        debugPrint('MATCHED WAKE WORD (START): "$w"');
+        break;
+      } else if (spokenText.contains(w)) {
+        hasWakeWord = true;
+        final idx = spokenText.indexOf(w);
+        spokenText = spokenText.substring(idx + w.length).trim();
+        debugPrint('MATCHED WAKE WORD (CONTAINS): "$w"');
+        break;
+      }
+    }
 
-    // FIX: don't match against an empty command list if provider hasn't loaded yet
+    final commandsProvider = context.read<CustomCommandsProvider>();
     if (!commandsProvider.isLoaded) return;
+
+    // RE-ATTACH/INTENT-BASED WAKING: 
+    // If the STT clipped the wake-word, we check if the command is a high-confidence local match.
+    final matchedFailsafe = (spokenText == 'menu' || spokenText == 'notes' || 
+                             spokenText == 'dictionary' || spokenText == 'home' ||
+                             spokenText.contains('open menu') || spokenText.contains('go to menu') ||
+                             spokenText.contains('profile') || spokenText.contains('language') ||
+                             spokenText.contains('commands') || spokenText.contains('statistics') ||
+                             spokenText.contains('about') || spokenText.contains('contact') ||
+                             spokenText.contains('faq') || spokenText.contains('recommendation') ||
+                             spokenText.contains('recycle bin') || spokenText.contains('history'));
+
+    // Passive Wake Word Engine
+    if (commandsProvider.assistantModeEnabled && !_showListeningUI) {
+      if (!hasWakeWord && !matchedFailsafe) {
+        debugPrint('PASSIVE MODE: Ignoring - no wake word or failsafe detected in "$spokenText"');
+        _checkAutoRestart();
+        return; 
+      }
+      
+      if (spokenText.isEmpty && hasWakeWord) {
+        // Said "Vox" and paused. Acknowledge and activate UI.
+        debugPrint('WAKE WORD ONLY: Activating UI and acknowledging...');
+        _updateListening(hardware: true, ui: true);
+        
+        if (commandsProvider.voiceFeedbackEnabled) {
+          final ttsService = context.read<TtsService>();
+          final locale = context.read<LanguageProvider>().currentLocale;
+          ttsService.play('', 'Hey! I am listening.', locale);
+        }
+        
+        _startListening(manual: true);
+        return;
+      }
+      
+      if (matchedFailsafe && !hasWakeWord) {
+        debugPrint('PASSIVE MODE: Intent-based wake triggered by: "$spokenText"');
+      }
+    } else {
+      // Active UI Engine
+      if (spokenText.isEmpty) {
+        debugPrint('ACTIVE MODE: Ignoring empty speech');
+        _checkAutoRestart();
+        return;
+      }
+    }
 
     final ttsService = context.read<TtsService>();
     final langProvider = context.read<LanguageProvider>();
 
-    await CommandDispatcher.dispatch(
+    debugPrint('GLOBAL WRAPPER: Calling dispatch for "$spokenText"...');
+    // UNBLOCK: Don't await the dispatch. Let it run in parallel so 
+    // the STT engine can finish its cleanup and restart immediately.
+    CommandDispatcher.dispatch(
       context: context,
-      spokenText: _lastWords,
+      spokenText: spokenText,
       commandsProvider: commandsProvider,
       ttsService: ttsService,
       langProvider: langProvider,
-    );
+    ).catchError((e, stack) {
+      debugPrint('CRITICAL DISPATCH ERROR: $e');
+      debugPrint(stack.toString());
+      return false;
+    });
 
-    // If Assistant Mode is on, start listening again after a short delay
     _checkAutoRestart();
   }
 
-  void _updateListening(bool value) {
+  void _updateListening({required bool hardware, required bool ui}) {
     if (!mounted) return;
-    setState(() => _isListening = value);
-    context.read<CustomCommandsProvider>().setListening(value);
+    setState(() {
+      _isHardwareListening = hardware;
+      _showListeningUI = hardware && ui;
+    });
+    context.read<CustomCommandsProvider>().setListening(_showListeningUI);
   }
 
   void _checkAutoRestart() {
     if (!mounted) return;
     final assistantEnabled =
         context.read<CustomCommandsProvider>().assistantModeEnabled;
-    if (assistantEnabled && !_isListening) {
-      // Short cooldown to allow the previous session to fully cleanup
+    if (assistantEnabled && !_isHardwareListening) {
       Future.delayed(const Duration(milliseconds: 500), () async {
         if (!mounted) return;
         final stillEnabled =
             context.read<CustomCommandsProvider>().assistantModeEnabled;
-        if (stillEnabled && !_isListening) {
-          // Re-initialize if it's been a while to keep the engine fresh
+        if (stillEnabled && !_isHardwareListening) {
           await _initSpeech();
-          if (mounted) _startListening();
+          if (mounted) _startListening(manual: false); // Auto restart hidden
         }
       });
     }
@@ -173,12 +259,12 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
       label: 'Double tap anywhere to activate voice commands',
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onDoubleTap: _speechAvailable ? _startListening : null,
+        onDoubleTap: _speechAvailable ? () => _startListening(manual: true) : null,
         child: Stack(
           children: [
             widget.child,
 
-            if (_isListening)
+            if (_showListeningUI)
               Positioned(
                 bottom: 100,
                 left: 0,
@@ -197,11 +283,11 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
                             vertical: 14,
                           ),
                           decoration: BoxDecoration(
-                            color: Color(0xFF0A0E1A).withValues(alpha: 0.82),
+                            color: const Color(0xFF0A0E1A).withOpacity(0.82),
                             borderRadius: BorderRadius.circular(40),
                             boxShadow: [
                               BoxShadow(
-                                color: const Color(0xFF4B9EFF).withValues(alpha: 0.3),
+                                color: const Color(0xFF4B9EFF).withOpacity(0.3),
                                 blurRadius: 20,
                                 spreadRadius: 2,
                               ),
@@ -217,7 +303,7 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
                               ),
                               SizedBox(width: 10),
                               Text(
-                                'Listeningâ€¦',
+                                'Listening…',
                                 style: TextStyle(
                                   color: Colors.white,
                                   fontWeight: FontWeight.w700,
@@ -239,4 +325,3 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     );
   }
 }
-
