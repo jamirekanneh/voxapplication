@@ -3,7 +3,6 @@
 import 'package:firebase_core/firebase_core.dart' show FirebaseOptions;
 import 'package:flutter/foundation.dart'
     show defaultTargetPlatform, kIsWeb, TargetPlatform;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 /// Default [FirebaseOptions] for use with your Firebase apps.
 ///
@@ -15,7 +14,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 ///   options: DefaultFirebaseOptions.currentPlatform,
 /// );
 /// ```
-
 class DefaultFirebaseOptions {
   static FirebaseOptions get currentPlatform {
     if (kIsWeb) {
@@ -42,57 +40,47 @@ class DefaultFirebaseOptions {
     }
   }
 
-  static FirebaseOptions get web => FirebaseOptions(
-    apiKey: dotenv.env['FIREBASE_API_KEY'] ?? 'AIzaSyAYO2N189vadDto8I2wOdfiquhfG15oVG4',
-    appId: dotenv.env['FIREBASE_APP_ID_WEB'] ?? '1:650391636557:web:5f1fa32c9341beea10ea04',
-    messagingSenderId: dotenv.env['FIREBASE_MESSAGING_SENDER_ID'] ?? '650391636557',
-    projectId: dotenv.env['FIREBASE_PROJECT_ID'] ?? 'the-vox-application',
-    authDomain: dotenv.env['FIREBASE_AUTH_DOMAIN'] ?? 'the-vox-application.firebaseapp.com',
-    databaseURL: dotenv.env['FIREBASE_DATABASE_URL'] ?? 'https://the-vox-application-default-rtdb.firebaseio.com',
-    storageBucket: dotenv.env['FIREBASE_STORAGE_BUCKET'] ?? 'the-vox-application.firebasestorage.app',
-    measurementId: dotenv.env['FIREBASE_MEASUREMENT_ID'] ?? 'G-Q5B06K52VG',
+  static const FirebaseOptions web = FirebaseOptions(
+    apiKey: 'AIzaSyBwAxySSdcWdjjDR5cuqP8WVOcsMxToT5A',
+    appId: '1:1033671503358:web:ade37f795afeedf7fca4af',
+    messagingSenderId: '1033671503358',
+    projectId: 'my-vox-app',
+    authDomain: 'my-vox-app.firebaseapp.com',
+    storageBucket: 'my-vox-app.firebasestorage.app',
   );
 
-  static FirebaseOptions get android => FirebaseOptions(
-    apiKey: dotenv.env['FIREBASE_API_KEY_ANDROID'] ?? 'AIzaSyDVLxpPN6CV3T_fkG7nK20WcRKxAhcqXqU',
-    appId: dotenv.env['FIREBASE_APP_ID_ANDROID'] ?? '1:650391636557:android:061cb13b6de1461b10ea04',
-    messagingSenderId: dotenv.env['FIREBASE_MESSAGING_SENDER_ID'] ?? '650391636557',
-    projectId: dotenv.env['FIREBASE_PROJECT_ID'] ?? 'the-vox-application',
-    databaseURL: dotenv.env['FIREBASE_DATABASE_URL'] ?? 'https://the-vox-application-default-rtdb.firebaseio.com',
-    storageBucket: dotenv.env['FIREBASE_STORAGE_BUCKET'] ?? 'the-vox-application.firebasestorage.app',
+  static const FirebaseOptions android = FirebaseOptions(
+    apiKey: 'AIzaSyB0VlHzYXIOUOJTkm5mo-fO5-QvdTtxmFw',
+    appId: '1:1033671503358:android:4050ec41e8bed73bfca4af',
+    messagingSenderId: '1033671503358',
+    projectId: 'my-vox-app',
+    storageBucket: 'my-vox-app.firebasestorage.app',
   );
 
-  static FirebaseOptions get ios => FirebaseOptions(
-    apiKey: dotenv.env['FIREBASE_API_KEY_IOS'] ?? 'AIzaSyBCD0Xs0XLcjQyCZ7le0etwZzLib1Z4Urw',
-    appId: dotenv.env['FIREBASE_APP_ID_IOS'] ?? '1:650391636557:ios:e928e402888ac69210ea04',
-    messagingSenderId: dotenv.env['FIREBASE_MESSAGING_SENDER_ID'] ?? '650391636557',
-    projectId: dotenv.env['FIREBASE_PROJECT_ID'] ?? 'the-vox-application',
-    databaseURL: dotenv.env['FIREBASE_DATABASE_URL'] ?? 'https://the-vox-application-default-rtdb.firebaseio.com',
-    storageBucket: dotenv.env['FIREBASE_STORAGE_BUCKET'] ?? 'the-vox-application.firebasestorage.app',
-    iosClientId: '650391636557-ahl0b6bvceqtcg6p47p2e5svt9v6dqdm.apps.googleusercontent.com',
+  static const FirebaseOptions ios = FirebaseOptions(
+    apiKey: 'AIzaSyDmb-sI-nnrFsaQWKIdT39UkdBH6fHBii0',
+    appId: '1:1033671503358:ios:a7eb2c1bf8f103a0fca4af',
+    messagingSenderId: '1033671503358',
+    projectId: 'my-vox-app',
+    storageBucket: 'my-vox-app.firebasestorage.app',
     iosBundleId: 'com.example.voxapplication',
   );
 
-  static FirebaseOptions get macos => FirebaseOptions(
-    apiKey: dotenv.env['FIREBASE_API_KEY_MACOS'] ?? 'AIzaSyBCD0Xs0XLcjQyCZ7le0etwZzLib1Z4Urw',
-    appId: dotenv.env['FIREBASE_APP_ID_MACOS'] ?? '1:650391636557:ios:e928e402888ac69210ea04',
-    messagingSenderId: dotenv.env['FIREBASE_MESSAGING_SENDER_ID'] ?? '650391636557',
-    projectId: dotenv.env['FIREBASE_PROJECT_ID'] ?? 'the-vox-application',
-    databaseURL: dotenv.env['FIREBASE_DATABASE_URL'] ?? 'https://the-vox-application-default-rtdb.firebaseio.com',
-    storageBucket: dotenv.env['FIREBASE_STORAGE_BUCKET'] ?? 'the-vox-application.firebasestorage.app',
-    iosClientId: '650391636557-ahl0b6bvceqtcg6p47p2e5svt9v6dqdm.apps.googleusercontent.com',
+  static const FirebaseOptions macos = FirebaseOptions(
+    apiKey: 'AIzaSyDmb-sI-nnrFsaQWKIdT39UkdBH6fHBii0',
+    appId: '1:1033671503358:ios:a7eb2c1bf8f103a0fca4af',
+    messagingSenderId: '1033671503358',
+    projectId: 'my-vox-app',
+    storageBucket: 'my-vox-app.firebasestorage.app',
     iosBundleId: 'com.example.voxapplication',
   );
 
-  static FirebaseOptions get windows => FirebaseOptions(
-    apiKey: dotenv.env['FIREBASE_API_KEY_WINDOWS'] ?? 'AIzaSyAYO2N189vadDto8I2wOdfiquhfG15oVG4',
-    appId: dotenv.env['FIREBASE_APP_ID_WINDOWS'] ?? '1:650391636557:web:049fb2d56fe179c110ea04',
-    messagingSenderId: dotenv.env['FIREBASE_MESSAGING_SENDER_ID'] ?? '650391636557',
-    projectId: dotenv.env['FIREBASE_PROJECT_ID'] ?? 'the-vox-application',
-    authDomain: dotenv.env['FIREBASE_AUTH_DOMAIN'] ?? 'the-vox-application.firebaseapp.com',
-    databaseURL: dotenv.env['FIREBASE_DATABASE_URL'] ?? 'https://the-vox-application-default-rtdb.firebaseio.com',
-    storageBucket: dotenv.env['FIREBASE_STORAGE_BUCKET'] ?? 'the-vox-application.firebasestorage.app',
-    measurementId: dotenv.env['FIREBASE_MEASUREMENT_ID'] ?? 'G-SFT2TH0PY4',
+  static const FirebaseOptions windows = FirebaseOptions(
+    apiKey: 'AIzaSyBwAxySSdcWdjjDR5cuqP8WVOcsMxToT5A',
+    appId: '1:1033671503358:web:866ef67554653262fca4af',
+    messagingSenderId: '1033671503358',
+    projectId: 'my-vox-app',
+    authDomain: 'my-vox-app.firebaseapp.com',
+    storageBucket: 'my-vox-app.firebasestorage.app',
   );
-
 }

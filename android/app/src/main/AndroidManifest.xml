@@ -58,10 +58,10 @@
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data
                     android:scheme="https"
-                    android:host="the-vox-application.firebaseapp.com"/>
+                    android:host="my-vox-app.firebaseapp.com"/>
                 <data
                     android:scheme="https"
-                    android:host="the-vox-application.web.app"/>
+                    android:host="my-vox-app.web.app"/>
             </intent-filter>
         </activity>
 

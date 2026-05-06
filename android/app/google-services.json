@@ -1,44 +1,26 @@
 {
   "project_info": {
-    "project_number": "650391636557",
-    "firebase_url": "https://the-vox-application-default-rtdb.firebaseio.com",
-    "project_id": "the-vox-application",
-    "storage_bucket": "the-vox-application.firebasestorage.app"
+    "project_number": "1033671503358",
+    "project_id": "my-vox-app",
+    "storage_bucket": "my-vox-app.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:650391636557:android:061cb13b6de1461b10ea04",
+        "mobilesdk_app_id": "1:1033671503358:android:4050ec41e8bed73bfca4af",
         "android_client_info": {
           "package_name": "com.example.voxapplication"
         }
       },
-      "oauth_client": [
-        {
-          "client_id": "650391636557-h799717ovtk7k86d171cd6rcqj68csc4.apps.googleusercontent.com",
-          "client_type": 3
-        }
-      ],
+      "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDVLxpPN6CV3T_fkG7nK20WcRKxAhcqXqU"
+          "current_key": "AIzaSyB0VlHzYXIOUOJTkm5mo-fO5-QvdTtxmFw"
         }
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": [
-            {
-              "client_id": "650391636557-h799717ovtk7k86d171cd6rcqj68csc4.apps.googleusercontent.com",
-              "client_type": 3
-            },
-            {
-              "client_id": "650391636557-ahl0b6bvceqtcg6p47p2e5svt9v6dqdm.apps.googleusercontent.com",
-              "client_type": 2,
-              "ios_info": {
-                "bundle_id": "com.example.voxapplication"
-              }
-            }
-          ]
+          "other_platform_oauth_client": []
         }
       }
     }

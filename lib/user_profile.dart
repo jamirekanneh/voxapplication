@@ -109,8 +109,6 @@ class _UserProfilePageState extends State<UserProfilePage>
   // Google Sign-In â€” mobile only
   late final GoogleSignIn _googleSignIn = GoogleSignIn(
     scopes: ['email'],
-    serverClientId:
-        '650391636557-h799717ovtk7k86d171cd6rcqj68csc4.apps.googleusercontent.com',
   );
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -456,7 +454,7 @@ class _UserProfilePageState extends State<UserProfilePage>
 
       final actionCodeSettings = ActionCodeSettings(
         url:
-            'https://the-vox-application.firebaseapp.com/verify?email=${Uri.encodeComponent(normalizedEmail)}',
+            'https://my-vox-app.firebaseapp.com/verify?email=${Uri.encodeComponent(normalizedEmail)}',
         handleCodeInApp: true,
         androidPackageName: 'com.example.voxapplication',
         androidInstallApp: true,

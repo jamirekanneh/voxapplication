@@ -1,6 +1,6 @@
 {
   "projects": {
-    "default": "the-vox-application"
+    "default": "my-vox-app"
   },
   "targets": {},
   "etags": {}
