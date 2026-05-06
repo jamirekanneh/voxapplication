@@ -5,7 +5,8 @@
       "namespace": "android_app",
       "package_name": "com.example.voxapplication",
       "sha256_cert_fingerprints": [
-        "10:86:b1:c2:de:6e:8c:6a:9f:54:f2:ab:81:05:e5:49:10:f8:c3:ca:b5:cb:ca:8d:e5:1e:15:e0:e7:44:82:86"
+        "10:86:b1:c2:de:6e:8c:6a:9f:54:f2:ab:81:05:e5:49:10:f8:c3:ca:b5:cb:ca:8d:e5:1e:15:e0:e7:44:82:86",
+        "18:ED:8E:63:7D:68:E3:C7:D3:7E:67:E8:D5:E3:81:25:CF:06:B4:24:46:34:4C:CD:3E:51:F2:77:A7:8C:B6:12"
       ]
     }
   }

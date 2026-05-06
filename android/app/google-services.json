@@ -12,7 +12,12 @@
           "package_name": "com.example.voxapplication"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "1033671503358-c8dhmiu6henkq7ig0cg8ata4mq24a9af.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyB0VlHzYXIOUOJTkm5mo-fO5-QvdTtxmFw"
@@ -20,7 +25,19 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1033671503358-c8dhmiu6henkq7ig0cg8ata4mq24a9af.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "1033671503358-e4j82pa80k3b4athlmp8vk30so8vh6jh.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.voxapplication"
+              }
+            }
+          ]
         }
       }
     }
