@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'user_profile.dart';
 import 'home_page.dart';
@@ -42,9 +43,15 @@ class _SplashScreenState extends State<SplashScreen>
     final prefs = await SharedPreferences.getInstance();
     final bool hasProfile = prefs.getBool('hasProfile') ?? false;
 
+    // Also check Firebase auth state — if the magic link sign-in completed
+    // before this timer fired, the user is already authenticated and should
+    // go straight to home rather than the sign-in / profile-setup page.
+    final bool isSignedIn =
+        FirebaseAuth.instance.currentUser != null;
+
     if (!mounted) return;
 
-    final Widget nextScreen = hasProfile
+    final Widget nextScreen = (hasProfile || isSignedIn)
         ? const VoxHomePage()
         : const UserProfilePage();
 

@@ -1,8 +1,9 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
+import 'theme_provider.dart';
 
 class RecommendationsPage extends StatefulWidget {
   const RecommendationsPage({super.key});
@@ -16,7 +17,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   int _charCount = 0;
   int _rating = 0;
   bool _isSending = false;
-  
+
   final stt.SpeechToText _speech = stt.SpeechToText();
   bool _isListening = false;
   bool _speechAvailable = false;
@@ -26,9 +27,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     super.initState();
     _initSpeech();
     _controller.addListener(() {
-      setState(() {
-        _charCount = _controller.text.length;
-      });
+      setState(() => _charCount = _controller.text.length);
     });
   }
 
@@ -53,7 +52,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
         onResult: (r) {
           if (!mounted) return;
           _controller.text = r.recognizedWords;
-          _controller.selection = TextSelection.fromPosition(TextPosition(offset: _controller.text.length));
+          _controller.selection = TextSelection.fromPosition(
+              TextPosition(offset: _controller.text.length));
           if (r.finalResult && mounted) setState(() => _isListening = false);
         },
         listenFor: const Duration(seconds: 30),
@@ -71,19 +71,19 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
   Future<void> _submit() async {
     if (_controller.text.trim().isEmpty) return;
-    
-    setState(() {
-      _isSending = true;
-    });
+    setState(() => _isSending = true);
 
     try {
       final res = await http.post(
         Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
         headers: {'Content-Type': 'application/json'},
         body: jsonEncode({
-          'service_id': const String.fromEnvironment('EMAILJS_SERVICE_ID', defaultValue: 'service_akm5fyg'),
-          'template_id': const String.fromEnvironment('EMAILJS_TEMPLATE_ID', defaultValue: 'template_ujtn37d'),
-          'user_id': const String.fromEnvironment('EMAILJS_PUBLIC_KEY', defaultValue: '7lv-I2bSLiEeBpoYg'),
+          'service_id': const String.fromEnvironment('EMAILJS_SERVICE_ID',
+              defaultValue: 'service_akm5fyg'),
+          'template_id': const String.fromEnvironment('EMAILJS_TEMPLATE_ID',
+              defaultValue: 'template_ujtn37d'),
+          'user_id': const String.fromEnvironment('EMAILJS_PUBLIC_KEY',
+              defaultValue: '7lv-I2bSLiEeBpoYg'),
           'template_params': {
             'name': 'Vox User',
             'email': 'jamiremkanneh@gmail.com',
@@ -97,21 +97,25 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       );
 
       if (!mounted) return;
-      setState(() {
-        _isSending = false;
-      });
+      setState(() => _isSending = false);
 
       if (res.statusCode == 200) {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
-            backgroundColor: const Color(0xFF0A0E1A),
+            backgroundColor: VoxColors.surface(context),
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(20),
-              side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+              side: BorderSide(color: VoxColors.border(context)),
             ),
-            title: const Text('Thank You!', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
-            content: Text('Your recommendation and $_rating-star rating have been submitted successfully.', style: TextStyle(color: Colors.white.withValues(alpha: 0.8))),
+            title: Text('Thank You!',
+                style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: VoxColors.onSurface(context))),
+            content: Text(
+              'Your recommendation and $_rating-star rating have been submitted successfully.',
+              style: TextStyle(color: VoxColors.textSecondary(context)),
+            ),
             actions: [
               ElevatedButton(
                 onPressed: () {
@@ -119,52 +123,61 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                   Navigator.pop(context);
                 },
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4B9EFF),
+                  backgroundColor: VoxColors.primary(context),
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12)),
                 ),
-                child: const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
+                child:
+                    const Text('OK', style: TextStyle(fontWeight: FontWeight.bold)),
               ),
             ],
           ),
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send. Please try again. (${res.statusCode})'), backgroundColor: Colors.red),
+          SnackBar(
+              content: Text(
+                  'Failed to send. Please try again. (${res.statusCode})'),
+              backgroundColor: VoxColors.danger),
         );
       }
     } catch (e) {
       if (!mounted) return;
-      setState(() {
-        _isSending = false;
-      });
+      setState(() => _isSending = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Network error. Check your connection.'), backgroundColor: Colors.red),
+        const SnackBar(
+            content: Text('Network error. Check your connection.'),
+            backgroundColor: Colors.red),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final primary = VoxColors.primary(context);
+    final onBg = VoxColors.onBg(context);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: VoxColors.bg(context),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: const Text('Recommendations', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
-        iconTheme: const IconThemeData(color: Colors.white),
+        title: Text('Recommendations',
+            style: TextStyle(color: onBg, fontWeight: FontWeight.bold)),
+        iconTheme: IconThemeData(color: onBg),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Help Us Make\nIt Better!',
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w900,
-                color: Colors.white,
+                color: onBg,
                 height: 1.2,
                 letterSpacing: -0.5,
               ),
@@ -172,24 +185,34 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             const SizedBox(height: 8),
             Text(
               'Your feedback helps us improve\nand build features you\'ll love.',
-              style: TextStyle(fontSize: 14, color: Colors.white.withValues(alpha: 0.5), height: 1.5),
+              style: TextStyle(
+                  fontSize: 14,
+                  color: VoxColors.textSecondary(context),
+                  height: 1.5),
             ),
             const SizedBox(height: 32),
 
-            // Rating Card
+            // ── Rating Card ──────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.04),
+                color: VoxColors.cardFill(context),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                border: Border.all(color: VoxColors.border(context)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Rate Vox Features', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                  Text('Rate Vox Features',
+                      style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: onBg)),
                   const SizedBox(height: 8),
-                  Text('How would you rate your experience so far?', style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.5))),
+                  Text('How would you rate your experience so far?',
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: VoxColors.textSecondary(context))),
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceEvenly,
@@ -201,11 +224,17 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                           padding: const EdgeInsets.all(8),
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: _rating > index ? const Color(0xFF4B9EFF).withValues(alpha: 0.15) : Colors.transparent,
+                            color: _rating > index
+                                ? primary.withValues(alpha: 0.15)
+                                : Colors.transparent,
                           ),
                           child: Icon(
-                            _rating > index ? Icons.star_rounded : Icons.star_outline_rounded,
-                            color: _rating > index ? const Color(0xFF4B9EFF) : Colors.white.withValues(alpha: 0.3),
+                            _rating > index
+                                ? Icons.star_rounded
+                                : Icons.star_outline_rounded,
+                            color: _rating > index
+                                ? primary
+                                : VoxColors.textHint(context),
                             size: 32,
                           ),
                         ),
@@ -216,162 +245,204 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
               ),
             ),
             const SizedBox(height: 24),
-            
-            // Text Input Card
+
+            // ── Text Input Card ──────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.04),
+                color: VoxColors.cardFill(context),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                border: Border.all(color: VoxColors.border(context)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.edit_note_rounded, color: Color(0xFF4B9EFF), size: 24),
-                      SizedBox(width: 8),
-                      Text('Share Your Suggestions', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.white)),
+                      Icon(Icons.edit_note_rounded, color: primary, size: 24),
+                      const SizedBox(width: 8),
+                      Text('Share Your Suggestions',
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: onBg)),
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Text('What can we improve or add next?', style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.5))),
+                  Text('What can we improve or add next?',
+                      style: TextStyle(
+                          fontSize: 13,
+                          color: VoxColors.textSecondary(context))),
                   const SizedBox(height: 16),
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.2),
+                      color: VoxColors.surface2(context),
                       borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                      border: Border.all(color: VoxColors.border(context)),
                     ),
                     child: TextField(
                       controller: _controller,
                       maxLength: 1000,
                       maxLines: 5,
                       textCapitalization: TextCapitalization.sentences,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: onBg),
                       decoration: InputDecoration(
                         hintText: 'Write your recommendation here...',
-                        hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 14),
+                        hintStyle: TextStyle(
+                            color: VoxColors.textHint(context), fontSize: 14),
                         border: InputBorder.none,
                         contentPadding: const EdgeInsets.all(16),
                         counterText: '',
-                        suffixIcon: _speechAvailable ? Column(
-                          mainAxisAlignment: MainAxisAlignment.start,
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Padding(
-                              padding: const EdgeInsets.only(top: 4, right: 8),
-                              child: GestureDetector(
-                                onTap: _toggleVoice,
-                                child: AnimatedContainer(
-                                  duration: const Duration(milliseconds: 200),
-                                  width: 36,
-                                  height: 36,
-                                  decoration: BoxDecoration(
-                                    color: _isListening ? Colors.red.withValues(alpha: 0.9) : Colors.white.withValues(alpha: 0.05),
-                                    shape: BoxShape.circle,
-                                    border: Border.all(
-                                      color: _isListening ? Colors.red : Colors.white.withValues(alpha: 0.15),
-                                      width: 1.5,
+                        suffixIcon: _speechAvailable
+                            ? Column(
+                                mainAxisAlignment: MainAxisAlignment.start,
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Padding(
+                                    padding: const EdgeInsets.only(
+                                        top: 4, right: 8),
+                                    child: GestureDetector(
+                                      onTap: _toggleVoice,
+                                      child: AnimatedContainer(
+                                        duration:
+                                            const Duration(milliseconds: 200),
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: _isListening
+                                              ? VoxColors.danger.withValues(
+                                                  alpha: 0.9)
+                                              : VoxColors.cardFill(context),
+                                          shape: BoxShape.circle,
+                                          border: Border.all(
+                                            color: _isListening
+                                                ? VoxColors.danger
+                                                : VoxColors.border(context),
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                        child: Icon(
+                                          _isListening
+                                              ? Icons.stop_rounded
+                                              : Icons.mic_none_rounded,
+                                          size: 18,
+                                          color: _isListening
+                                              ? Colors.white
+                                              : VoxColors.textSecondary(
+                                                  context),
+                                        ),
+                                      ),
                                     ),
                                   ),
-                                  child: Icon(
-                                    _isListening ? Icons.stop_rounded : Icons.mic_none_rounded,
-                                    size: 18,
-                                    color: _isListening ? Colors.white : Colors.white.withValues(alpha: 0.6),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ) : null,
+                                ],
+                              )
+                            : null,
                       ),
                     ),
                   ),
                   const SizedBox(height: 8),
                   Align(
                     alignment: Alignment.centerRight,
-                    child: Text('$_charCount/1000', style: TextStyle(fontSize: 11, color: Colors.white.withValues(alpha: 0.4))),
+                    child: Text('$_charCount/1000',
+                        style: TextStyle(
+                            fontSize: 11,
+                            color: VoxColors.textHint(context))),
                   ),
                 ],
               ),
             ),
-            
             const SizedBox(height: 24),
 
-            // Ideas Card
+            // ── Ideas Card ───────────────────────────────────────────
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
-                color: const Color(0xFF4B9EFF).withValues(alpha: 0.08),
+                color: primary.withValues(alpha: 0.08),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF4B9EFF).withValues(alpha: 0.2)),
+                border: Border.all(color: primary.withValues(alpha: 0.2)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Row(
+                  Row(
                     children: [
-                      Icon(Icons.lightbulb_outline_rounded, color: Color(0xFF4B9EFF), size: 22),
-                      SizedBox(width: 8),
-                      Text('Example Suggestions', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.white)),
+                      Icon(Icons.lightbulb_outline_rounded,
+                          color: primary, size: 22),
+                      const SizedBox(width: 8),
+                      Text('Example Suggestions',
+                          style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.bold,
+                              color: onBg)),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _buildBullet('Add offline dictionary lookups'),
-                  _buildBullet('Include voice note language translation'),
-                  _buildBullet('Allow importing custom flashcard decks'),
+                  _buildBullet(context, 'Add offline dictionary lookups'),
+                  _buildBullet(
+                      context, 'Include voice note language translation'),
+                  _buildBullet(
+                      context, 'Allow importing custom flashcard decks'),
                 ],
               ),
             ),
-            
             const SizedBox(height: 32),
-            
+
             Center(
               child: Text(
                 'This is optional. You can skip and do it later.',
-                style: TextStyle(fontSize: 12, color: Colors.white.withValues(alpha: 0.4)),
+                style: TextStyle(
+                    fontSize: 12, color: VoxColors.textHint(context)),
               ),
             ),
-            
             const SizedBox(height: 16),
-            
+
             SizedBox(
               width: double.infinity,
               height: 54,
               child: ElevatedButton(
-                onPressed: ((_charCount > 0 || _rating > 0) && !_isSending) ? _submit : null,
+                onPressed:
+                    ((_charCount > 0 || _rating > 0) && !_isSending)
+                        ? _submit
+                        : null,
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF4B9EFF),
+                  backgroundColor: primary,
                   foregroundColor: Colors.white,
-                  disabledBackgroundColor: const Color(0xFF4B9EFF).withValues(alpha: 0.3),
-                  disabledForegroundColor: Colors.white.withValues(alpha: 0.5),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  disabledBackgroundColor: primary.withValues(alpha: 0.3),
+                  disabledForegroundColor:
+                      VoxColors.onPrimary(context).withValues(alpha: 0.5),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
                   elevation: 0,
                 ),
-                child: _isSending 
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Submit Recommendation', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                child: _isSending
+                    ? SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(
+                            strokeWidth: 2, color: VoxColors.onPrimary(context)))
+                    : Text('Submit Recommendation',
+                        style: TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 16)),
               ),
             ),
-            
             const SizedBox(height: 12),
-            
+
             SizedBox(
               width: double.infinity,
               height: 54,
               child: OutlinedButton(
                 onPressed: () => Navigator.pop(context),
                 style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.white.withValues(alpha: 0.8),
-                  side: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                  foregroundColor: VoxColors.textSecondary(context),
+                  side: BorderSide(color: VoxColors.borderStrong(context)),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16)),
                 ),
-                child: const Text('Skip', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                child: const Text('Skip',
+                    style: TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 16)),
               ),
             ),
-            
             const SizedBox(height: 24),
           ],
         ),
@@ -379,22 +450,26 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     );
   }
 
-  Widget _buildBullet(String text) {
+  Widget _buildBullet(BuildContext context, String text) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Padding(
-            padding: EdgeInsets.only(top: 6, right: 8),
-            child: Icon(Icons.circle, size: 6, color: Color(0xFF4B9EFF)),
+          Padding(
+            padding: const EdgeInsets.only(top: 6, right: 8),
+            child: Icon(Icons.circle,
+                size: 6, color: VoxColors.primary(context)),
           ),
           Expanded(
-            child: Text(text, style: TextStyle(fontSize: 13, color: Colors.white.withValues(alpha: 0.8), height: 1.4)),
+            child: Text(text,
+                style: TextStyle(
+                    fontSize: 13,
+                    color: VoxColors.textSecondary(context),
+                    height: 1.4)),
           ),
         ],
       ),
     );
   }
 }
-

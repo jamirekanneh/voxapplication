@@ -1,7 +1,8 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'ai_service.dart';
+import 'theme_provider.dart';
 
 class SavedAssessmentsPage extends StatefulWidget {
   const SavedAssessmentsPage({super.key});
@@ -40,20 +41,20 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF161B2E),
+        backgroundColor: VoxColors.surface(ctx),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text(
+        title: Text(
           'Delete Q&A?',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+          style: TextStyle(color: VoxColors.onSurface(ctx), fontWeight: FontWeight.w900),
         ),
         content: Text(
           'Delete "$title"? This cannot be undone.',
-          style: const TextStyle(color: Colors.white70),
+          style: TextStyle(color: VoxColors.textSecondary(ctx)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel', style: TextStyle(color: Colors.white54)),
+            child: Text('Cancel', style: TextStyle(color: VoxColors.textHint(ctx))),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -65,8 +66,8 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: const Text('Q&A deleted.'),
-                    backgroundColor: const Color(0xFF1E2540),
+                    content: Text('Q&A deleted.'),
+                    backgroundColor: VoxColors.surface2(context),
                     behavior: SnackBarBehavior.floating,
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(12)),
@@ -76,12 +77,12 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFFFF5252).withValues(alpha: 0.85),
+              backgroundColor: VoxColors.danger,
               shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10)),
               elevation: 0,
             ),
-            child: const Text('Delete',
+            child: Text('Delete',
                 style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
           ),
         ],
@@ -96,13 +97,13 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(
         color: isHome
-            ? const Color(0xFF4B9EFF).withValues(alpha: 0.12)
-            : const Color(0xFF9B59B6).withValues(alpha: 0.12),
+            ? VoxColors.primary(context).withValues(alpha: 0.12)
+            : VoxColors.accent(context).withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(6),
         border: Border.all(
           color: isHome
-              ? const Color(0xFF4B9EFF).withValues(alpha: 0.3)
-              : const Color(0xFF9B59B6).withValues(alpha: 0.3),
+              ? VoxColors.primary(context).withValues(alpha: 0.3)
+              : VoxColors.accent(context).withValues(alpha: 0.3),
         ),
       ),
       child: Row(
@@ -111,7 +112,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
           Icon(
             isHome ? Icons.home_outlined : Icons.mic_none_rounded,
             size: 10,
-            color: isHome ? const Color(0xFF4B9EFF) : const Color(0xFF9B59B6),
+            color: isHome ? VoxColors.primary(context) : VoxColors.accent(context),
           ),
           const SizedBox(width: 4),
           Text(
@@ -121,8 +122,8 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               fontWeight: FontWeight.w700,
               letterSpacing: 0.5,
               color: isHome
-                  ? const Color(0xFF4B9EFF)
-                  : const Color(0xFF9B59B6),
+                  ? VoxColors.primary(context)
+                  : VoxColors.accent(context),
             ),
           ),
         ],
@@ -140,13 +141,13 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
         decoration: BoxDecoration(
           color: selected
-              ? const Color(0xFF4B9EFF)
-              : Colors.white.withValues(alpha: 0.05),
+              ? VoxColors.primary(context)
+              : VoxColors.onBg(context).withValues(alpha: 0.05),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: selected
-                ? const Color(0xFF4B9EFF)
-                : Colors.white.withValues(alpha: 0.1),
+                ? VoxColors.primary(context)
+                : VoxColors.onBg(context).withValues(alpha: 0.1),
           ),
         ),
         child: Row(
@@ -154,14 +155,14 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
           children: [
             Icon(icon,
                 size: 13,
-                color: selected ? const Color(0xFF0A0E1A) : Colors.white60),
+                color: selected ? VoxColors.onPrimary(context) : VoxColors.textSecondary(context)),
             const SizedBox(width: 5),
             Text(
               label,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
-                color: selected ? const Color(0xFF0A0E1A) : Colors.white60,
+                color: selected ? VoxColors.onPrimary(context) : VoxColors.textSecondary(context),
               ),
             ),
           ],
@@ -174,15 +175,15 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
   Widget build(BuildContext context) {
     if (currentUser == null || currentUser!.isAnonymous) {
       return Scaffold(
-        backgroundColor: const Color(0xFF0A0E1A),
+        backgroundColor: VoxColors.bg(context),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
           elevation: 0,
-          iconTheme: const IconThemeData(color: Colors.white),
-          title: const Text(
+          iconTheme: IconThemeData(color: VoxColors.onBg(context)),
+          title: Text(
             'Saved Q&A',
             style: TextStyle(
-                color: Colors.white, fontWeight: FontWeight.w900, fontSize: 20),
+                color: VoxColors.onBg(context), fontWeight: FontWeight.w900, fontSize: 20),
           ),
         ),
         body: Center(
@@ -193,17 +194,17 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                 width: 80,
                 height: 80,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4B9EFF).withValues(alpha: 0.1),
+                  color: VoxColors.primary(context).withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.lock_outline_rounded,
-                    color: Color(0xFF4B9EFF), size: 38),
+                child: Icon(Icons.lock_outline_rounded,
+                    color: VoxColors.primary(context), size: 38),
               ),
               const SizedBox(height: 20),
-              const Text(
+              Text(
                 'Sign in required',
                 style: TextStyle(
-                    color: Colors.white,
+                    color: VoxColors.onBg(context),
                     fontWeight: FontWeight.w900,
                     fontSize: 20),
               ),
@@ -211,7 +212,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               Text(
                 'Please sign in to view your\nsaved Q&A.',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.5), height: 1.5),
+                style: TextStyle(color: VoxColors.textSecondary(context), height: 1.5),
               ),
             ],
           ),
@@ -220,7 +221,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
     }
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: VoxColors.bg(context),
       body: SafeArea(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -231,18 +232,18 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white, size: 20),
+                    icon: Icon(Icons.arrow_back_ios_new_rounded,
+                        color: VoxColors.onBg(context), size: 20),
                     onPressed: () => Navigator.pop(context),
                   ),
-                  const Expanded(
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Saved Q&A',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: VoxColors.onBg(context),
                             fontWeight: FontWeight.w900,
                             fontSize: 22,
                             letterSpacing: -0.5,
@@ -251,7 +252,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                         Text(
                           'Your Q&A flashcard sets',
                           style: TextStyle(
-                              color: Colors.white38, fontSize: 12),
+                              color: VoxColors.textSecondary(context), fontSize: 12),
                         ),
                       ],
                     ),
@@ -260,13 +261,13 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: const Color(0xFF4B9EFF).withValues(alpha: 0.1),
+                      color: VoxColors.primary(context).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                          color: const Color(0xFF4B9EFF).withValues(alpha: 0.2)),
+                          color: VoxColors.primary(context).withValues(alpha: 0.2)),
                     ),
-                    child: const Icon(Icons.bookmarks_outlined,
-                        color: Color(0xFF4B9EFF), size: 18),
+                    child: Icon(Icons.bookmarks_outlined,
+                        color: VoxColors.primary(context), size: 18),
                   ),
                 ],
               ),
@@ -289,7 +290,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
             ),
 
             const SizedBox(height: 16),
-            const Divider(height: 1, color: Colors.white10),
+            Divider(height: 1, color: VoxColors.border(context)),
 
             // â”€â”€ List â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Expanded(
@@ -300,16 +301,16 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                     .snapshots(),
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(
+                    return Center(
                       child: CircularProgressIndicator(
-                          color: Color(0xFF4B9EFF), strokeWidth: 2),
+                          color: VoxColors.primary(context), strokeWidth: 2),
                     );
                   }
                   if (snapshot.hasError) {
                     return Center(
                       child: Text(
                         'Error loading saved Q&A: ${snapshot.error}',
-                        style: const TextStyle(color: Colors.white70),
+                        style: TextStyle(color: VoxColors.textSecondary(context)),
                       ),
                     );
                   }
@@ -364,10 +365,10 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                         child: Container(
                           margin: const EdgeInsets.only(bottom: 10),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.04),
+                            color: VoxColors.surface(context),
                             borderRadius: BorderRadius.circular(16),
                             border: Border.all(
-                                color: Colors.white.withValues(alpha: 0.08)),
+                                color: VoxColors.border(context)),
                           ),
                           child: Padding(
                             padding: const EdgeInsets.all(14),
@@ -378,12 +379,12 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                                   width: 46,
                                   height: 46,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF4B9EFF)
+                                    color: VoxColors.primary(context)
                                         .withValues(alpha: 0.12),
                                     borderRadius: BorderRadius.circular(12),
                                   ),
-                                  child: const Icon(Icons.style_outlined,
-                                      color: Color(0xFF4B9EFF), size: 22),
+                                  child: Icon(Icons.style_outlined,
+                                      color: VoxColors.primary(context), size: 22),
                                 ),
                                 const SizedBox(width: 12),
 
@@ -399,9 +400,9 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                                           Expanded(
                                             child: Text(
                                               title,
-                                              style: const TextStyle(
+                                              style: TextStyle(
                                                 fontWeight: FontWeight.w800,
-                                                color: Colors.white,
+                                                color: VoxColors.onSurface(context),
                                                 fontSize: 14,
                                               ),
                                               maxLines: 1,
@@ -427,8 +428,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                                             '$questions question${questions == 1 ? '' : 's'}',
                                             style: TextStyle(
                                               fontSize: 11,
-                                              color: Colors.white
-                                                  .withValues(alpha: 0.45),
+                                              color: VoxColors.textHint(context),
                                             ),
                                           ),
                                           const SizedBox(width: 10),
@@ -441,8 +441,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
                                             dateStr,
                                             style: TextStyle(
                                               fontSize: 11,
-                                              color: Colors.white
-                                                  .withValues(alpha: 0.45),
+                                              color: VoxColors.textHint(context),
                                             ),
                                           ),
                                         ],
@@ -453,8 +452,8 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
 
                                 // Delete
                                 IconButton(
-                                  icon: const Icon(Icons.delete_outline,
-                                      color: Colors.redAccent, size: 20),
+                                  icon: Icon(Icons.delete_outline,
+                                      color: VoxColors.danger, size: 20),
                                   onPressed: () => _confirmDelete(
                                       docs[index].id, title),
                                   padding: EdgeInsets.zero,
@@ -487,17 +486,17 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: const Color(0xFF4B9EFF).withValues(alpha: 0.08),
+                color: VoxColors.primary(context).withValues(alpha: 0.08),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(Icons.bookmarks_outlined,
-                  color: Color(0xFF4B9EFF), size: 36),
+              child: Icon(Icons.bookmarks_outlined,
+                  color: VoxColors.primary(context), size: 36),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'No saved Q&A yet',
               style: TextStyle(
-                  color: Colors.white,
+                  color: VoxColors.onBg(context),
                   fontWeight: FontWeight.w900,
                   fontSize: 20),
             ),
@@ -506,7 +505,7 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
               'Generate a Q&A set from any document in Home or note in Notes, then tap Save.',
               textAlign: TextAlign.center,
               style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.45),
+                  color: VoxColors.textSecondary(context),
                   fontSize: 13,
                   height: 1.6),
             ),
@@ -522,12 +521,12 @@ class _SavedAssessmentsPageState extends State<SavedAssessmentsPage> {
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.filter_list_off_rounded,
-              color: Colors.white.withValues(alpha: 0.2), size: 48),
+              color: VoxColors.onBg(context).withValues(alpha: 0.2), size: 48),
           const SizedBox(height: 16),
           Text(
             'No $_filter Q&A',
-            style: const TextStyle(
-                color: Colors.white60, fontWeight: FontWeight.w700),
+            style: TextStyle(
+                color: VoxColors.textSecondary(context), fontWeight: FontWeight.w700),
           ),
         ],
       ),
@@ -564,13 +563,13 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
   Widget build(BuildContext context) {
     if (widget.flashcards.isEmpty) {
       return Scaffold(
-        backgroundColor: const Color(0xFF0A0E1A),
+        backgroundColor: VoxColors.bg(context),
         appBar: AppBar(
           backgroundColor: Colors.transparent,
-          iconTheme: const IconThemeData(color: Colors.white),
+          iconTheme: IconThemeData(color: VoxColors.onBg(context)),
         ),
-        body: const Center(
-          child: Text('No cards', style: TextStyle(color: Colors.white54)),
+        body: Center(
+          child: Text('No cards', style: TextStyle(color: VoxColors.textSecondary(context))),
         ),
       );
     }
@@ -580,7 +579,7 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
     final total = widget.flashcards.length;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: VoxColors.bg(context),
       body: SafeArea(
         child: Column(
           children: [
@@ -590,8 +589,8 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
               child: Row(
                 children: [
                   IconButton(
-                    icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                        color: Colors.white, size: 20),
+                    icon: Icon(Icons.arrow_back_ios_new_rounded,
+                        color: VoxColors.onBg(context), size: 20),
                     onPressed: () => Navigator.pop(context),
                   ),
                   Expanded(
@@ -600,8 +599,8 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                       children: [
                         Text(
                           widget.title,
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: VoxColors.onBg(context),
                             fontWeight: FontWeight.w900,
                             fontSize: 17,
                             letterSpacing: -0.3,
@@ -610,8 +609,8 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                         ),
                         Text(
                           'Card ${_currentCard + 1} of $total',
-                          style: const TextStyle(
-                              color: Colors.white38, fontSize: 12),
+                          style: TextStyle(
+                              color: VoxColors.textHint(context), fontSize: 12),
                         ),
                       ],
                     ),
@@ -627,21 +626,21 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                 borderRadius: BorderRadius.circular(4),
                 child: LinearProgressIndicator(
                   value: (_currentCard + 1) / total,
-                  backgroundColor: Colors.white.withValues(alpha: 0.05),
+                  backgroundColor: VoxColors.onBg(context).withValues(alpha: 0.05),
                   valueColor:
-                      const AlwaysStoppedAnimation<Color>(Color(0xFF4B9EFF)),
+                      AlwaysStoppedAnimation<Color>(VoxColors.primary(context)),
                   minHeight: 3,
                 ),
               ),
             ),
 
-            const Divider(height: 1, color: Colors.white10),
+            const Divider(height: 1, color: Colors.transparent),
             const SizedBox(height: 8),
 
             // â”€â”€ Tap hint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Text(
               'Tap card to reveal answer',
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.3), fontSize: 11),
+              style: TextStyle(color: VoxColors.textHint(context), fontSize: 11),
             ),
 
             // â”€â”€ Flashcard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -661,19 +660,19 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                       padding: const EdgeInsets.all(28),
                       decoration: BoxDecoration(
                         color: isFlipped
-                            ? const Color(0xFF161B2E)
-                            : Colors.white.withValues(alpha: 0.04),
+                            ? VoxColors.surface2(context)
+                            : VoxColors.surface(context),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
                           color: isFlipped
-                              ? const Color(0xFF4B9EFF).withValues(alpha: 0.35)
-                              : Colors.white.withValues(alpha: 0.08),
+                              ? VoxColors.primary(context).withValues(alpha: 0.35)
+                              : VoxColors.border(context),
                         ),
                         boxShadow: [
                           if (isFlipped)
                             BoxShadow(
                               color:
-                                  const Color(0xFF4B9EFF).withValues(alpha: 0.08),
+                                  VoxColors.primary(context).withValues(alpha: 0.08),
                               blurRadius: 24,
                               offset: const Offset(0, 8),
                             ),
@@ -688,8 +687,8 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                                 horizontal: 14, vertical: 5),
                             decoration: BoxDecoration(
                               color: isFlipped
-                                  ? const Color(0xFF4B9EFF).withValues(alpha: 0.15)
-                                  : Colors.white.withValues(alpha: 0.05),
+                                  ? VoxColors.primary(context).withValues(alpha: 0.15)
+                                  : VoxColors.onBg(context).withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
@@ -699,8 +698,8 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                                 fontWeight: FontWeight.w800,
                                 letterSpacing: 1.5,
                                 color: isFlipped
-                                    ? const Color(0xFF4B9EFF)
-                                    : Colors.grey[500],
+                                    ? VoxColors.primary(context)
+                                    : VoxColors.textHint(context),
                               ),
                             ),
                           ),
@@ -708,11 +707,11 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                           Text(
                             isFlipped ? card.answer : card.question,
                             textAlign: TextAlign.center,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 18,
                               height: 1.6,
                               fontWeight: FontWeight.w700,
-                              color: Colors.white,
+                              color: VoxColors.onBg(context),
                             ),
                           ),
                           const SizedBox(height: 20),
@@ -748,14 +747,14 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         side: BorderSide(
                           color: _currentCard > 0
-                              ? Colors.white.withValues(alpha: 0.18)
-                              : Colors.white.withValues(alpha: 0.05),
+                              ? VoxColors.border(context)
+                              : VoxColors.border(context).withValues(alpha: 0.3),
                         ),
-                        foregroundColor: Colors.white70,
+                        foregroundColor: VoxColors.textSecondary(context),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14)),
                       ),
-                      child: const Text('â† Previous',
+                      child: Text('â† Previous',
                           style: TextStyle(fontWeight: FontWeight.bold)),
                     ),
                   ),
@@ -769,16 +768,16 @@ class _AssessmentViewerScreenState extends State<AssessmentViewerScreen> {
                               })
                           : null,
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFF4B9EFF),
-                        foregroundColor: Colors.white,
+                        backgroundColor: VoxColors.primary(context),
+                        foregroundColor: VoxColors.onPrimary(context),
                         padding: const EdgeInsets.symmetric(vertical: 16),
                         shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(14)),
                         disabledBackgroundColor:
-                            Colors.white.withValues(alpha: 0.05),
+                            VoxColors.onBg(context).withValues(alpha: 0.05),
                         elevation: 0,
                       ),
-                      child: const Text('Next â†’',
+                      child: Text('Next â†’',
                           style: TextStyle(fontWeight: FontWeight.w900)),
                     ),
                   ),

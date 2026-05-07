@@ -26,6 +26,10 @@ class AnalyticsService extends ChangeNotifier {
   AnalyticsService._();
   static final AnalyticsService instance = AnalyticsService._();
 
+  // ── Streak Milestone Stream ──────────────────────────────────────────
+  final StreamController<int> _streakMilestoneController = StreamController<int>.broadcast();
+  Stream<int> get onStreakMilestone => _streakMilestoneController.stream;
+
   // ── SharedPrefs keys ──────────────────────────────────────
   static const _kOpens     = 'vox_opens';
   static const _kFeature   = 'vox_feature_ms';
@@ -345,6 +349,9 @@ class AnalyticsService extends ChangeNotifier {
       // This would normally call NotificationService, but since we are in a singleton, 
       // we can just notify listeners and let the UI handle the "Goal Reached" animation.
       debugPrint('🎉 Daily Goal Reached! Streak: $_currentStreak');
+      if (_currentStreak == 7) {
+        _streakMilestoneController.add(_currentStreak);
+      }
     }
   }
 

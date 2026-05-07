@@ -1,5 +1,6 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'ai_service.dart';
+import 'theme_provider.dart';
 
 class DraggableAiAssistant extends StatefulWidget {
   final bool visible;
@@ -10,7 +11,8 @@ class DraggableAiAssistant extends StatefulWidget {
 }
 
 class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
-  final ValueNotifier<Offset> _position = ValueNotifier<Offset>(const Offset(20, 100));
+  final ValueNotifier<Offset> _position =
+      ValueNotifier<Offset>(const Offset(20, 100));
   bool _isExpanded = false;
   final TextEditingController _controller = TextEditingController();
   final List<Map<String, String>> _messages = [];
@@ -25,11 +27,7 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
     super.dispose();
   }
 
-  void _onTap() {
-    setState(() {
-      _isExpanded = !_isExpanded;
-    });
-  }
+  void _onTap() => setState(() => _isExpanded = !_isExpanded);
 
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
@@ -40,7 +38,6 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
       _isTyping = true;
       _controller.clear();
     });
-
     _scrollToBottom();
 
     try {
@@ -55,7 +52,10 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _messages.add({'role': 'assistant', 'content': 'Sorry, I encountered an error: $e'});
+          _messages.add({
+            'role': 'assistant',
+            'content': 'Sorry, I encountered an error: $e'
+          });
           _isTyping = false;
         });
         _scrollToBottom();
@@ -95,12 +95,15 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
                   child: GestureDetector(
                     onPanUpdate: (details) {
                       _position.value += details.delta;
-                      // Keep within screen bounds
-                      double x = _position.value.dx.clamp(0.0, size.width - 60);
-                      double y = _position.value.dy.clamp(0.0, size.height - 60);
+                      final x =
+                          _position.value.dx.clamp(0.0, size.width - 60);
+                      final y =
+                          _position.value.dy.clamp(0.0, size.height - 60);
                       _position.value = Offset(x, y);
                     },
-                    child: _isExpanded ? _buildExpandedChat() : _buildAssistantBubble(),
+                    child: _isExpanded
+                        ? _buildExpandedChat(context)
+                        : _buildAssistantBubble(context),
                   ),
                 ),
               ),
@@ -111,29 +114,30 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
     );
   }
 
-  Widget _buildAssistantBubble() {
+  Widget _buildAssistantBubble(BuildContext context) {
+    final primary = VoxColors.primary(context);
     return GestureDetector(
       onTap: _onTap,
       child: Container(
         width: 60,
         height: 60,
         decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
+          color: VoxColors.surface(context),
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: const Color(0xFF4B9EFF).withValues(alpha: 0.4),
+              color: primary.withValues(alpha: 0.4),
               blurRadius: 15,
               spreadRadius: 2,
             ),
           ],
-          border: Border.all(color: const Color(0xFF4B9EFF), width: 2),
+          border: Border.all(color: primary, width: 2),
         ),
-        child: const Center(
+        child: Center(
           child: Text(
             'V',
             style: TextStyle(
-              color: Color(0xFF4B9EFF),
+              color: primary,
               fontSize: 28,
               fontWeight: FontWeight.w900,
               fontFamily: 'Serif',
@@ -144,41 +148,43 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
     );
   }
 
-  Widget _buildExpandedChat() {
+  Widget _buildExpandedChat(BuildContext context) {
+    final primary = VoxColors.primary(context);
     return Container(
       width: 300,
       height: 400,
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: VoxColors.surface(context),
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Color(0xFF0A0E1A).withValues(alpha: 0.2),
+            color: Colors.black.withValues(alpha: 0.18),
             blurRadius: 20,
             spreadRadius: 5,
           ),
         ],
-        border: Border.all(color: const Color(0xFF4B9EFF).withValues(alpha: 0.5)),
+        border: Border.all(color: primary.withValues(alpha: 0.5)),
       ),
       child: Column(
         children: [
           // Header
           Container(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            decoration: const BoxDecoration(
-              color: Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.only(
+            padding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            decoration: BoxDecoration(
+              color: VoxColors.surface2(context),
+              borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(20),
                 topRight: Radius.circular(20),
               ),
             ),
             child: Row(
               children: [
-                const Expanded(
+                Expanded(
                   child: Text(
                     'Vox Assistant',
                     style: TextStyle(
-                      color: Color(0xFF4B9EFF),
+                      color: primary,
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
@@ -188,7 +194,8 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
                 const SizedBox(width: 8),
                 GestureDetector(
                   onTap: _onTap,
-                  child: const Icon(Icons.close, color: Colors.white70, size: 20),
+                  child: Icon(Icons.close,
+                      color: VoxColors.textSecondary(context), size: 20),
                 ),
               ],
             ),
@@ -201,28 +208,33 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
               itemCount: _messages.length + (_isTyping ? 1 : 0),
               itemBuilder: (context, index) {
                 if (index == _messages.length) {
-                  return _buildTypingIndicator();
+                  return _buildTypingIndicator(context);
                 }
                 final msg = _messages[index];
                 final isUser = msg['role'] == 'user';
-                return _buildMessageBubble(msg['content']!, isUser);
+                return _buildMessageBubble(
+                    context, msg['content']!, isUser);
               },
             ),
           ),
           // Input
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(
-              border: Border(top: BorderSide(color: Color(0x1F0A0E1A))),
+            decoration: BoxDecoration(
+              border:
+                  Border(top: BorderSide(color: VoxColors.border(context))),
             ),
             child: Row(
               children: [
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    decoration: const InputDecoration(
+                    style: TextStyle(color: VoxColors.onSurface(context)),
+                    decoration: InputDecoration(
                       hintText: 'Ask me anything about Vox...',
-                      hintStyle: TextStyle(fontSize: 13),
+                      hintStyle: TextStyle(
+                          fontSize: 13,
+                          color: VoxColors.textHint(context)),
                       border: InputBorder.none,
                     ),
                     onSubmitted: (_) => _sendMessage(),
@@ -230,7 +242,7 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
                 ),
                 IconButton(
                   onPressed: _sendMessage,
-                  icon: const Icon(Icons.send_rounded, color: Color(0xFF4B9EFF)),
+                  icon: Icon(Icons.send_rounded, color: primary),
                 ),
               ],
             ),
@@ -240,14 +252,17 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
     );
   }
 
-  Widget _buildMessageBubble(String content, bool isUser) {
+  Widget _buildMessageBubble(
+      BuildContext context, String content, bool isUser) {
+    final primary = VoxColors.primary(context);
     return Align(
       alignment: isUser ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: isUser ? const Color(0xFF4B9EFF) : const Color(0xFFF3F3F3),
+          color: isUser ? primary : VoxColors.surface2(context),
           borderRadius: BorderRadius.circular(15).copyWith(
             bottomRight: isUser ? Radius.zero : null,
             bottomLeft: !isUser ? Radius.zero : null,
@@ -256,7 +271,7 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
         child: Text(
           content,
           style: TextStyle(
-            color: isUser ? Color(0xFF0A0E1A) : Color(0xDD0A0E1A),
+            color: isUser ? Colors.white : VoxColors.onSurface(context),
             fontSize: 13,
           ),
         ),
@@ -264,22 +279,26 @@ class _DraggableAiAssistantState extends State<DraggableAiAssistant> {
     );
   }
 
-  Widget _buildTypingIndicator() {
+  Widget _buildTypingIndicator(BuildContext context) {
     return Align(
       alignment: Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.symmetric(vertical: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
-          color: const Color(0xFFF3F3F3),
-          borderRadius: BorderRadius.circular(15).copyWith(bottomLeft: Radius.zero),
+          color: VoxColors.surface2(context),
+          borderRadius:
+              BorderRadius.circular(15).copyWith(bottomLeft: Radius.zero),
         ),
-        child: const Text(
+        child: Text(
           'Typing...',
-          style: TextStyle(color: Color(0x730A0E1A), fontSize: 11, fontStyle: FontStyle.italic),
+          style: TextStyle(
+              color: VoxColors.textHint(context),
+              fontSize: 11,
+              fontStyle: FontStyle.italic),
         ),
       ),
     );
   }
 }
-

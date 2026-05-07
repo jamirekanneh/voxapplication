@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:provider/provider.dart';
@@ -12,6 +13,8 @@ import 'mini_player_bar.dart';
 import 'temp_library_provider.dart';
 import 'ai_result_page.dart';
 import 'custom_commands_provider.dart';
+import 'theme_provider.dart';
+import 'analytics_service.dart';
 
 class VoxHomePage extends StatefulWidget {
   const VoxHomePage({super.key});
@@ -25,6 +28,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
   final stt.SpeechToText _speech = stt.SpeechToText();
   String _searchQuery = '';
   bool _isListening = false;
+  StreamSubscription<int>? _streakSubscription;
 
   String _selectedFolder = 'All Files';
   final List<String> _folders = ['All Files', 'PDFs', 'Documents', 'Scans'];
@@ -41,6 +45,12 @@ class _VoxHomePageState extends State<VoxHomePage> {
   void initState() {
     super.initState();
     _resolveUser();
+
+    _streakSubscription = AnalyticsService.instance.onStreakMilestone.listen((streak) {
+      if (mounted) {
+        _showStreakMilestoneDialog(streak);
+      }
+    });
 
     // Wire assistant commands after first frame so context is ready
     WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -90,16 +100,61 @@ class _VoxHomePageState extends State<VoxHomePage> {
       SnackBar(
         content: Row(
           children: [
-            const Icon(Icons.graphic_eq_rounded,
-                color: Color(0xFF4B9EFF), size: 16),
+            Icon(Icons.graphic_eq_rounded,
+                color: VoxColors.primary(context), size: 16),
             const SizedBox(width: 8),
-            Text(message, style: const TextStyle(color: Colors.white)),
+            Text(message, style: TextStyle(color: VoxColors.onSurface(context))),
           ],
         ),
-        backgroundColor: const Color(0xFF141A29),
+        backgroundColor: VoxColors.surface(context),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
         margin: const EdgeInsets.only(bottom: 90, left: 20, right: 20),
+      ),
+    );
+  }
+
+  void _showStreakMilestoneDialog(int streak) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: VoxColors.bg(context),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🎉✨🎈', style: TextStyle(fontSize: 64)),
+            const SizedBox(height: 16),
+            Text(
+              'Amazing Job!',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w900,
+                color: VoxColors.primary(context),
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'You hit a $streak Day Reading Streak!',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 16,
+                color: VoxColors.onBg(context),
+              ),
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: VoxColors.primary(context),
+                foregroundColor: Colors.white,
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+              ),
+              child: const Text('Keep it up!'),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -124,6 +179,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
   void dispose() {
     _speech.stop();
     _searchController.dispose();
+    _streakSubscription?.cancel();
     super.dispose();
   }
 
@@ -215,7 +271,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
   Future<void> _showDocumentOptions(String fileName, String content) async {
     final choice = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Color(0xFF141A29),
+      backgroundColor: VoxColors.surface(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -235,8 +291,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
             ),
             Text(
               fileName,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: VoxColors.onSurface(context),
                 fontWeight: FontWeight.bold,
                 fontSize: 15,
               ),
@@ -246,13 +302,13 @@ class _VoxHomePageState extends State<VoxHomePage> {
             const SizedBox(height: 4),
             Text(
               'What would you like to do?',
-              style: TextStyle(color: Colors.grey[400], fontSize: 13),
+              style: TextStyle(color: VoxColors.textSecondary(context), fontSize: 13),
             ),
             const SizedBox(height: 20),
             _docOptionTile(
               ctx,
               icon: Icons.headphones_rounded,
-              iconColor: const Color(0xFF4B9EFF),
+              iconColor: VoxColors.primary(context),
               title: 'Read Document',
               subtitle: 'Listen to the document read aloud',
               value: 'read',
@@ -336,7 +392,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
-          color: Color(0xFF1c2333),
+          color: VoxColors.surface2(context),
           borderRadius: BorderRadius.circular(16),
         ),
         child: Row(
@@ -357,8 +413,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: VoxColors.onSurface(context),
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
                     ),
@@ -366,12 +422,12 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    style: TextStyle(color: VoxColors.textSecondary(context), fontSize: 12),
                   ),
                 ],
               ),
             ),
-            const Icon(Icons.chevron_right, color: Colors.grey, size: 20),
+            Icon(Icons.chevron_right, color: Colors.grey, size: 20),
           ],
         ),
       ),
@@ -400,7 +456,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Microphone permission denied'),
-            backgroundColor: Color(0xFF333333),
+            backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -475,31 +531,31 @@ class _VoxHomePageState extends State<VoxHomePage> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF0A0E1A),
+        backgroundColor: VoxColors.surface(context),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+          side: BorderSide(color: VoxColors.border(context)),
         ),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.delete_outline, color: Colors.redAccent),
-            SizedBox(width: 8),
-            Text('Delete Selected?', style: TextStyle(color: Colors.white)),
+            Icon(Icons.delete_outline, color: VoxColors.danger),
+            const SizedBox(width: 8),
+            Text('Delete Selected?', style: TextStyle(color: VoxColors.onSurface(context))),
           ],
         ),
         content: Text(
           '$count file${count == 1 ? '' : 's'} will be moved to the Recycle Bin and permanently deleted after 30 days.',
-          style: TextStyle(color: Colors.white.withValues(alpha: 0.7)),
+          style: TextStyle(color: VoxColors.textSecondary(context)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+            child: Text('Cancel', style: TextStyle(color: VoxColors.textSecondary(context))),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
+              backgroundColor: VoxColors.danger,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
             ),
@@ -519,7 +575,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
           provider.remove(id);
         }
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count file${count == 1 ? '' : 's'} deleted.'), backgroundColor: const Color(0xFF333333)));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count file${count == 1 ? '' : 's'} deleted.'), backgroundColor: VoxColors.surface(context)));
         }
       } else {
         final uid = _resolvedUid ?? FirebaseAuth.instance.currentUser?.uid;
@@ -549,12 +605,12 @@ class _VoxHomePageState extends State<VoxHomePage> {
         await batch.commit();
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count file${count == 1 ? '' : 's'} moved to Recycle Bin.'), backgroundColor: const Color(0xFF333333)));
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count file${count == 1 ? '' : 's'} moved to Recycle Bin.'), backgroundColor: VoxColors.surface(context)));
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete: $e'), backgroundColor: Colors.redAccent));
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete: $e'), backgroundColor: VoxColors.danger));
       }
     }
 
@@ -569,7 +625,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
     final lang = context.watch<LanguageProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A), // Vox Dark Navy
+      backgroundColor: VoxColors.bg(context), // Vox Dark Navy
       resizeToAvoidBottomInset: false,
       body: SafeArea(
         child: Padding(
@@ -582,19 +638,19 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                   decoration: BoxDecoration(
-                    color: const Color(0xFF0A0E1A),
+                    color: VoxColors.bg(context),
                     borderRadius: BorderRadius.circular(16),
                   ),
                   child: Row(
                     children: [
                       IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white, size: 22),
+                        icon: Icon(Icons.close, color: VoxColors.onBg(context), size: 22),
                         onPressed: _exitSelectionMode,
                         tooltip: 'Cancel',
                       ),
                       Text(
                         '${_selectedIds.length} selected',
-                        style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 15),
+                        style: TextStyle(color: VoxColors.onBg(context), fontWeight: FontWeight.w700, fontSize: 15),
                       ),
                       const Spacer(),
                       TextButton.icon(
@@ -607,18 +663,18 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             }
                           });
                         },
-                        icon: Icon(_selectedIds.length == _visibleIds.length ? Icons.deselect : Icons.select_all, color: const Color(0xFF4B9EFF), size: 18),
-                        label: Text(_selectedIds.length == _visibleIds.length ? 'Deselect' : 'Select All', style: const TextStyle(color: Color(0xFF4B9EFF), fontWeight: FontWeight.w700, fontSize: 12)),
+                        icon: Icon(_selectedIds.length == _visibleIds.length ? Icons.deselect : Icons.select_all, color: VoxColors.primary(context), size: 18),
+                        label: Text(_selectedIds.length == _visibleIds.length ? 'Deselect' : 'Select All', style: TextStyle(color: VoxColors.primary(context), fontWeight: FontWeight.w700, fontSize: 12)),
                       ),
                       const SizedBox(width: 4),
                       ElevatedButton.icon(
                         onPressed: _selectedIds.isNotEmpty ? _deleteSelected : null,
-                        icon: const Icon(Icons.delete_outline, size: 18),
+                        icon: Icon(Icons.delete_outline, size: 18),
                         label: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent,
+                          backgroundColor: VoxColors.danger,
                           foregroundColor: Colors.white,
-                          disabledBackgroundColor: Colors.grey[700],
+                          disabledBackgroundColor: VoxColors.border(context),
                           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                         ),
@@ -637,7 +693,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             style: TextStyle(
                                 fontSize: 36,
                                 fontWeight: FontWeight.w900,
-                                color: Colors.white,
+                                color: Colors.white, // Keep white for header if it's primary blue?
                                 letterSpacing: 2)),
                         const SizedBox(width: 12),
                       ],
@@ -653,20 +709,20 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         decoration: InputDecoration(
                           hintText: lang.t('search_hint'),
                           counterText: '',
-                          prefixIcon: const Icon(Icons.search, size: 18, color: Colors.white54),
+                          prefixIcon: Icon(Icons.search, size: 18, color: VoxColors.onBg(context).withValues(alpha: 0.5)),
                           suffixIcon: GestureDetector(
                             onTap: _listen,
                             child: Icon(
                               _isListening ? Icons.mic : Icons.mic_none,
                               size: 18,
                               color: _isListening
-                                  ? Colors.redAccent
-                                  : Color(0x8A0A0E1A),
+                                  ? VoxColors.danger
+                                  : VoxColors.onBg(context).withValues(alpha: 0.4),
                             ),
                           ),
                           filled: true,
-                          fillColor: Colors.white.withValues(alpha: 0.08),
-                          hoverColor: Colors.white.withValues(alpha: 0.12),
+                          fillColor: VoxColors.onBg(context).withValues(alpha: 0.08),
+                          hoverColor: VoxColors.onBg(context).withValues(alpha: 0.12),
                           contentPadding: EdgeInsets.zero,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(20),
@@ -688,13 +744,13 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                 horizontal: 10, vertical: 6),
                             decoration: BoxDecoration(
                               color: provider.assistantModeEnabled
-                                  ? const Color(0xFF4B9EFF).withValues(alpha: 0.15)
-                                  : Colors.white.withValues(alpha: 0.05),
+                                  ? VoxColors.primary(context).withValues(alpha: 0.15)
+                                  : VoxColors.onBg(context).withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
                                   color: provider.assistantModeEnabled
-                                      ? const Color(0xFF4B9EFF)
-                                      : Colors.white.withValues(alpha: 0.1)),
+                                   ? VoxColors.primary(context)
+                                   : VoxColors.onBg(context).withValues(alpha: 0.1)),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -705,9 +761,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                       : provider.assistantModeEnabled
                                           ? Icons.mic_rounded
                                           : Icons.mic_none_rounded,
-                                  color: provider.assistantModeEnabled
-                                      ? const Color(0xFF4B9EFF)
-                                      : Colors.white54,
+                                   color: provider.assistantModeEnabled
+                                       ? VoxColors.primary(context)
+                                       : VoxColors.textSecondary(context),
                                   size: 14,
                                 ),
                                 const SizedBox(width: 6),
@@ -715,8 +771,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                   'Assistant',
                                   style: TextStyle(
                                     color: provider.assistantModeEnabled
-                                        ? const Color(0xFF4B9EFF)
-                                        : Colors.white54,
+                                        ? VoxColors.primary(context)
+                                        : VoxColors.textSecondary(context),
                                     fontSize: 10,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: 0.5,
@@ -727,10 +783,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                   Container(
                                     width: 6,
                                     height: 6,
-                                    decoration: const BoxDecoration(
-                                      color: Color(0xFF4B9EFF),
-                                      shape: BoxShape.circle,
-                                    ),
+                                    decoration: BoxDecoration(
+                                    color: VoxColors.primary(context),
+                                    shape: BoxShape.circle,
+                                  ),
                                   ),
                                 ],
                               ],
@@ -743,9 +799,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 ),
                 Text(
                   lang.t('library'),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 18,
-                    color: Color(0xFF4B9EFF), // Vox Blue instead of yellow
+                    color: VoxColors.primary(context), // Vox Blue instead of yellow
                     fontWeight: FontWeight.w900,
                     letterSpacing: 1.2,
                   ),
@@ -753,29 +809,29 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 const SizedBox(height: 10),
                 Text(
                   lang.t('tap_hint'),
-                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                  style: TextStyle(color: VoxColors.textHint(context), fontSize: 11),
                 ),
               ],
 
-              // â”€â”€ Guest banner â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+              // ——— Guest banner ———————————————————————————————————
               if (_isAnonymousUser) ...[
                 const SizedBox(height: 8),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.05),
+                    color: VoxColors.cardFill(context),
                     borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                    border: Border.all(color: VoxColors.border(context)),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.info_outline, color: Color(0xFF4B9EFF), size: 15),
+                      Icon(Icons.info_outline, color: VoxColors.primary(context), size: 15),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Guest mode â€” files are temporary. Create an account to save them.',
+                          'Guest mode — files are temporary. Create an account to save them.',
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.6),
+                            color: VoxColors.textSecondary(context),
                             fontSize: 11,
                             height: 1.4,
                           ),
@@ -1106,7 +1162,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
       floatingActionButton: FloatingActionButton(
         backgroundColor: Color(0xFF0A0E1A),
         onPressed: () => Navigator.pushNamed(context, '/upload'),
-        child: const Icon(Icons.file_upload_outlined, color: Colors.white),
+        child: Icon(Icons.file_upload_outlined, color: Colors.white),
       ),
     );
   }
@@ -1132,7 +1188,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
             children: [
               Text(
                 '$selected cards',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF4B9EFF),
@@ -1260,7 +1316,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   BoxShadow(color: const Color(0xFF4B9EFF).withValues(alpha: 0.4), blurRadius: 6, spreadRadius: 1),
                 ],
               ),
-              child: const Icon(Icons.check, color: Colors.white, size: 16),
+              child: Icon(Icons.check, color: Colors.white, size: 16),
             ),
           ),
       ],

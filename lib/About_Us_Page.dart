@@ -1,20 +1,16 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'language_provider.dart';
+import 'theme_provider.dart';
 
 class AboutUsPage extends StatelessWidget {
   const AboutUsPage({super.key});
-
-  static const Color primaryGold = Color(0xFF4B9EFF);
-  static const Color creamBg = Color(0xFF0A0E1A);
-  static const Color cardGrey = Color(0xFF161B2E);
-  static const Color darkText = Colors.white;
 
   @override
   Widget build(BuildContext context) {
     final t = context.watch<LanguageProvider>().t;
     return Scaffold(
-      backgroundColor: creamBg,
+      backgroundColor: VoxColors.bg(context),
       body: Column(
         children: [
           _buildHeader(context, t),
@@ -24,14 +20,12 @@ class AboutUsPage extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // â”€â”€ Developers Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                  _sectionLabel('Developers'),
+                  _sectionLabel(context, 'Developers'),
                   const SizedBox(height: 12),
-
-                  // â”€â”€ ØªÙ… Ø§Ù„ØªØ¹Ø¯ÙŠÙ„ Ù‡Ù†Ø§ Ù„Ø¹Ø±Ø¶ Ø§Ù„Ø¨Ø·Ø§Ù‚Ø§Øª Ø¹Ù…ÙˆØ¯ÙŠÙ‹Ø§ ÙˆØ§Ø­Ø¯ ØªÙ„Ùˆ Ø§Ù„Ø¢Ø®Ø± â”€â”€
                   Column(
                     children: [
                       _memberCard(
+                        context,
                         'assets/images/Abdurahman.jpeg',
                         'Abdurrahman Masduki',
                         '20212609',
@@ -40,8 +34,9 @@ class AboutUsPage extends StatelessWidget {
                         'Flutter Project Lead & Final Decision Maker',
                         isLeader: true,
                       ),
-                      const SizedBox(height: 14), // Ù…Ø³Ø§ÙØ© Ø¨ÙŠÙ† Ø§Ù„Ø¨Ø·Ø§Ù‚Ø§Øª
+                      const SizedBox(height: 14),
                       _memberCard(
+                        context,
                         'assets/images/shaheer.jpeg',
                         'Shaheer Ahmed Farooqi',
                         '20224848',
@@ -51,6 +46,7 @@ class AboutUsPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 14),
                       _memberCard(
+                        context,
                         'assets/images/Jamire.jpeg',
                         'Jamire M. Kanneh',
                         '20213799',
@@ -60,6 +56,7 @@ class AboutUsPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 14),
                       _memberCard(
+                        context,
                         'assets/images/Abubakir.jpeg',
                         'Abdubakr Idris',
                         '20223372',
@@ -69,21 +66,14 @@ class AboutUsPage extends StatelessWidget {
                       ),
                     ],
                   ),
-
-                  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                   const SizedBox(height: 28),
-
-                  // â”€â”€ Supervisor Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                  _sectionLabel('Supervisor'),
+                  _sectionLabel(context, 'Supervisor'),
                   const SizedBox(height: 12),
-                  _supervisorCard(),
-
+                  _supervisorCard(context),
                   const SizedBox(height: 28),
-
-                  // â”€â”€ About App Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-                  _sectionLabel('About the App'),
+                  _sectionLabel(context, 'About the App'),
                   const SizedBox(height: 12),
-                  _aboutCard(),
+                  _aboutCard(context),
                 ],
               ),
             ),
@@ -93,7 +83,6 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 
-  // â”€â”€ Header Widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildHeader(BuildContext context, String Function(String) t) {
     return Container(
       width: double.infinity,
@@ -103,9 +92,9 @@ class AboutUsPage extends StatelessWidget {
         left: 20,
         right: 20,
       ),
-      decoration: const BoxDecoration(
-        color: primaryGold,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+      decoration: BoxDecoration(
+        color: VoxColors.primary(context),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
       ),
       child: Row(
         children: [
@@ -154,19 +143,19 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 
-  Widget _sectionLabel(String label) {
+  Widget _sectionLabel(BuildContext context, String label) {
     return Text(
       label,
-      style: const TextStyle(
+      style: TextStyle(
         fontSize: 18,
         fontWeight: FontWeight.w900,
-        color: darkText,
+        color: VoxColors.onBg(context),
       ),
     );
   }
 
-  // â”€â”€ Member Card Widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _memberCard(
+    BuildContext context,
     String imagePath,
     String name,
     String id,
@@ -176,14 +165,14 @@ class AboutUsPage extends StatelessWidget {
     bool isLeader = false,
   }) {
     return Container(
-      // ØªÙ… ØªØºÙŠÙŠØ± Ø§Ù„Ø¹Ø±Ø¶ Ù„ÙŠØ£Ø®Ø° Ø§Ù„Ù…Ø³Ø§Ø­Ø© Ø§Ù„Ù…ØªØ§Ø­Ø© Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ Ù…Ø¹ Ù…Ø±Ø§Ø¹Ø§Ø© Ø§Ù„Ø­ÙˆØ§Ù
       width: double.infinity,
       decoration: BoxDecoration(
-        color: cardGrey,
+        color: VoxColors.surface(context),
         borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: VoxColors.border(context)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.2),
+            color: Colors.black.withValues(alpha: 0.08),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -195,9 +184,9 @@ class AboutUsPage extends StatelessWidget {
           Container(
             width: 80,
             constraints: const BoxConstraints(minHeight: 165),
-            decoration: const BoxDecoration(
-              color: primaryGold,
-              borderRadius: BorderRadius.only(
+            decoration: BoxDecoration(
+              color: VoxColors.primary(context),
+              borderRadius: const BorderRadius.only(
                 topLeft: Radius.circular(14),
                 bottomLeft: Radius.circular(14),
               ),
@@ -229,10 +218,10 @@ class AboutUsPage extends StatelessWidget {
                       Expanded(
                         child: Text(
                           name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 15,
                             fontWeight: FontWeight.w900,
-                            color: darkText,
+                            color: VoxColors.onSurface(context),
                           ),
                         ),
                       ),
@@ -244,15 +233,15 @@ class AboutUsPage extends StatelessWidget {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: Color(0x420A0E1A),
+                            color: VoxColors.primary(context).withValues(alpha: 0.15),
                             borderRadius: BorderRadius.circular(5),
                           ),
-                          child: const Text(
+                          child: Text(
                             'Leader',
                             style: TextStyle(
                               fontSize: 9,
                               fontWeight: FontWeight.bold,
-                              color: Colors.white,
+                              color: VoxColors.primary(context),
                             ),
                           ),
                         ),
@@ -264,15 +253,15 @@ class AboutUsPage extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w600,
-                      color: Colors.white.withValues(alpha: 0.5),
+                      color: VoxColors.textSecondary(context),
                     ),
                   ),
                   const SizedBox(height: 4),
                   Text(
                     email,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 13,
-                      color: primaryGold,
+                      color: VoxColors.primary(context),
                       fontWeight: FontWeight.w800,
                       decoration: TextDecoration.underline,
                     ),
@@ -280,10 +269,10 @@ class AboutUsPage extends StatelessWidget {
                   const SizedBox(height: 10),
                   Text(
                     role,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
                       fontWeight: FontWeight.w900,
-                      color: darkText,
+                      color: VoxColors.onSurface(context),
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -291,7 +280,7 @@ class AboutUsPage extends StatelessWidget {
                     resp,
                     style: TextStyle(
                       fontSize: 11,
-                      color: Colors.white.withValues(alpha: 0.4),
+                      color: VoxColors.textSecondary(context),
                       height: 1.3,
                       fontWeight: FontWeight.w500,
                     ),
@@ -305,15 +294,14 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 
-  // â”€â”€ Supervisor Card Widget â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Widget _supervisorCard() {
+  Widget _supervisorCard(BuildContext context) {
     return Container(
       width: double.infinity,
       decoration: BoxDecoration(
-        color: cardGrey,
+        color: VoxColors.surface(context),
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
-          color: primaryGold.withValues(alpha: 0.5),
+          color: VoxColors.primary(context).withValues(alpha: 0.5),
           width: 1.5,
         ),
       ),
@@ -322,9 +310,9 @@ class AboutUsPage extends StatelessWidget {
           Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(vertical: 10),
-            decoration: const BoxDecoration(
-              color: primaryGold,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(14)),
+            decoration: BoxDecoration(
+              color: VoxColors.primary(context),
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(14)),
             ),
             child: const Center(
               child: Text(
@@ -347,7 +335,7 @@ class AboutUsPage extends StatelessWidget {
                   height: 80,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: primaryGold, width: 2.5),
+                    border: Border.all(color: VoxColors.primary(context), width: 2.5),
                     image: const DecorationImage(
                       image: AssetImage('assets/images/IMG_3331.jpg'),
                       fit: BoxFit.cover,
@@ -355,12 +343,12 @@ class AboutUsPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 12),
-                const Text(
-                  'Prof. Dr. Nadire Ã‡avuÅŸ',
+                Text(
+                  'Prof. Dr. Nadire Çavuş',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.w900,
-                    color: darkText,
+                    color: VoxColors.onSurface(context),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -370,7 +358,7 @@ class AboutUsPage extends StatelessWidget {
                   style: TextStyle(
                     fontSize: 12.5,
                     height: 1.6,
-                    color: Colors.white.withValues(alpha: 0.7),
+                    color: VoxColors.textSecondary(context),
                   ),
                 ),
               ],
@@ -381,8 +369,7 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 
-  // â”€â”€ About App Widget (Merged with Main Features) â”€â”€â”€â”€â”€â”€â”€â”€
-  Widget _aboutCard() {
+  Widget _aboutCard(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -390,10 +377,11 @@ class AboutUsPage extends StatelessWidget {
           width: double.infinity,
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
-            color: cardGrey,
+            color: VoxColors.surface(context),
             borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: VoxColors.border(context)),
           ),
-          child: const Column(
+          child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
@@ -401,22 +389,21 @@ class AboutUsPage extends StatelessWidget {
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w900,
-                  color: darkText,
+                  color: VoxColors.onSurface(context),
                 ),
               ),
-              SizedBox(height: 10),
+              const SizedBox(height: 10),
               Text(
                 'This application is designed to assist users, especially students and individuals with limited abilities. The Vox app allows users upload or scan documents and have them read aloud using text-to-speech technology. The app also supports voice commands for a hands-free experience. Users can also record notes using the app and transcribe recordings to text using speech-to-text features. The Vox app is also equipped with a large dictionary that supports various fields like medical, legal, general and technical searches. This app also suports six main languages: English, Spanish, French, Arabic, Turkish and Chinese.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.6,
-                  color: Colors.white,
+                  color: VoxColors.textSecondary(context),
                 ),
               ),
             ],
           ),
         ),
-
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 6),
           child: Text(
@@ -424,54 +411,48 @@ class AboutUsPage extends StatelessWidget {
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w800,
-              color: darkText,
+              color: VoxColors.onBg(context),
             ),
           ),
         ),
-
-        _featureRow('Upload/Scan documents'),
+        _featureRow(context, 'Upload/Scan documents'),
         const SizedBox(height: 8),
-        _featureRow('Text-to-speech reading'),
+        _featureRow(context, 'Text-to-speech reading'),
         const SizedBox(height: 8),
-        _featureRow('Speech to text Notes'),
-        _featureRow('Dictionary'),
+        _featureRow(context, 'Speech to text Notes'),
+        _featureRow(context, 'Dictionary'),
         const SizedBox(height: 8),
       ],
     );
   }
 
-  Widget _featureRow(String text) {
+  Widget _featureRow(BuildContext context, String text) {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+      margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: cardGrey,
+        color: VoxColors.surface(context),
         borderRadius: BorderRadius.circular(12),
-        boxShadow: [
-          BoxShadow(
-            color: Color(0xFF0A0E1A).withValues(alpha: 0.04),
-            blurRadius: 4,
-            offset: const Offset(0, 2),
-          ),
-        ],
+        border: Border.all(color: VoxColors.border(context)),
       ),
       child: Row(
         children: [
           Container(
             width: 7,
             height: 7,
-            decoration: const BoxDecoration(
-              color: primaryGold,
+            decoration: BoxDecoration(
+              color: VoxColors.primary(context),
               shape: BoxShape.circle,
             ),
           ),
           const SizedBox(width: 12),
           Text(
             text,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w600,
-              color: darkText,
+              color: VoxColors.onSurface(context),
             ),
           ),
         ],
@@ -479,4 +460,3 @@ class AboutUsPage extends StatelessWidget {
     );
   }
 }
-

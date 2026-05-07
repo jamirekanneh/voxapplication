@@ -19,6 +19,7 @@ import 'temp_library_provider.dart';
 import 'temp_notes_provider.dart';
 import 'global_stt_wrapper.dart';
 import 'custom_commands_provider.dart';
+import 'theme_provider.dart';
 import 'analytics_service.dart';
 import 'notification_service.dart';
 import 'saved_assessments_page.dart';
@@ -100,6 +101,7 @@ void main() async {
   runApp(
     MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
         ChangeNotifierProvider(create: (_) => LanguageProvider()),
         ChangeNotifierProvider(create: (_) => TtsService()),
         ChangeNotifierProvider(create: (_) => TempLibraryProvider()),
@@ -152,6 +154,15 @@ class _TheVoxAppState extends State<TheVoxApp> {
         emailLink: link,
       );
       await prefs.remove('pendingEmailLink');
+
+      // Give the navigator a moment to be ready, then navigate to home.
+      // This is critical: without this, sign-in completes silently while
+      // the splash screen has already navigated to the sign-in page.
+      await Future.delayed(const Duration(milliseconds: 300));
+      globalNavigatorKey.currentState?.pushNamedAndRemoveUntil(
+        '/home',
+        (route) => false,
+      );
     } catch (e) {
       debugPrint("Magic link sign-in error: $e");
     }
@@ -159,9 +170,13 @@ class _TheVoxAppState extends State<TheVoxApp> {
 
   @override
   Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: globalNavigatorKey,
+      themeMode: themeProvider.themeMode,
+      theme: AppTheme.light,
+      darkTheme: AppTheme.dark,
       // Wrap the entire app routing navigator with GlobalSttWrapper
       builder: (context, child) => GlobalSttWrapper(child: child!),
       home: const SplashScreen(),

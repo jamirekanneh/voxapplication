@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
@@ -14,6 +14,7 @@ import 'language_provider.dart';
 import 'temp_notes_provider.dart';
 import 'tts_service.dart';
 import 'ai_result_page.dart';
+import 'theme_provider.dart';
 
 const int _kMaxTitleLength = 100;
 const Duration _kMaxRecordingDuration = Duration(hours: 1);
@@ -198,11 +199,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           content: const Text(
             'Microphone permission denied. Enable it in Settings.',
           ),
-          backgroundColor: const Color(0xFF333333),
+          backgroundColor: VoxColors.surface(context),
           behavior: SnackBarBehavior.floating,
           action: SnackBarAction(
             label: 'Settings',
-            textColor: const Color(0xFF4B9EFF),
+            textColor: VoxColors.primary(context),
             onPressed: openAppSettings,
           ),
         ),
@@ -211,7 +212,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Microphone permission is required to record.'),
-          backgroundColor: Color(0xFF333333),
+          backgroundColor: VoxColors.danger,
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -444,22 +445,22 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
 
     if (rawTitle.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Please add a title before saving.'),
-          backgroundColor: Color(0xFF333333),
+        SnackBar(
+          content: const Text('Please add a title before saving.'),
+          backgroundColor: VoxColors.danger,
           behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
         ),
       );
       return;
     }
     if (transcript.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Transcript is empty. Please record or type content.'),
-          backgroundColor: Color(0xFF333333),
+        SnackBar(
+          content: const Text('Transcript is empty. Please record or type content.'),
+          backgroundColor: VoxColors.danger,
           behavior: SnackBarBehavior.floating,
-          margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
         ),
       );
       return;
@@ -491,13 +492,13 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           context.read<TempNotesProvider>().add(title, transcript);
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text(
+              SnackBar(
+                content: const Text(
                   'Note saved temporarily. Create an account to keep it.',
                 ),
-                backgroundColor: Color(0xFF333333),
+                backgroundColor: VoxColors.surface(context),
                 behavior: SnackBarBehavior.floating,
-                margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+                margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
               ),
             );
           }
@@ -517,7 +518,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
               SnackBar(
                 content: Text(lang.t('note_saved')),
                 behavior: SnackBarBehavior.floating,
-                backgroundColor: const Color(0xFF333333),
+                backgroundColor: VoxColors.surface(context),
                 margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
               ),
             );
@@ -578,16 +579,21 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        backgroundColor: VoxColors.surface(context),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: VoxColors.border(context)),
+        ),
+        title: Row(
           children: [
-            Icon(Icons.delete_outline, color: Colors.redAccent),
-            SizedBox(width: 8),
-            Text('Delete Note?'),
+            Icon(Icons.delete_outline, color: VoxColors.danger),
+            const SizedBox(width: 8),
+            Text('Delete Note?', style: TextStyle(color: VoxColors.onSurface(context))),
           ],
         ),
-        content: const Text(
+        content: Text(
           'This item will be stored in the Recycle Bin and permanently deleted after 30 days.',
+          style: TextStyle(color: VoxColors.textSecondary(context)),
         ),
         actions: [
           TextButton(
@@ -600,7 +606,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
+              backgroundColor: VoxColors.danger,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -649,7 +655,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           SnackBar(
             content: Row(
               children: [
-                const Icon(
+                Icon(
                   Icons.delete_sweep_outlined,
                   color: Colors.white,
                   size: 18,
@@ -662,7 +668,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 ),
               ],
             ),
-            backgroundColor: const Color(0xFF333333),
+            backgroundColor: VoxColors.surface(context),
             behavior: SnackBarBehavior.floating,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
@@ -680,7 +686,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   ? 'Cannot delete while offline.'
                   : 'Delete failed: ${e.message}',
             ),
-            backgroundColor: const Color(0xFF333333),
+            backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -692,11 +698,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     tempNotes.remove(id);
     if (_isEditing && _editingId == id) _cancelEdit();
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Note deleted.'),
+      SnackBar(
+        content: const Text('Note deleted.'),
         behavior: SnackBarBehavior.floating,
-        backgroundColor: Color(0xFF333333),
-        margin: EdgeInsets.only(bottom: 30, left: 20, right: 20),
+        backgroundColor: VoxColors.surface(context),
+        margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
       ),
     );
   }
@@ -752,16 +758,21 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        backgroundColor: VoxColors.surface(context),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: VoxColors.border(context)),
+        ),
+        title: Row(
           children: [
-            Icon(Icons.delete_outline, color: Colors.redAccent),
-            SizedBox(width: 8),
-            Text('Delete Selected?'),
+            Icon(Icons.delete_outline, color: VoxColors.danger),
+            const SizedBox(width: 8),
+            Text('Delete Selected?', style: TextStyle(color: VoxColors.onSurface(context))),
           ],
         ),
         content: Text(
           '$count note${count == 1 ? '' : 's'} will be moved to the Recycle Bin and permanently deleted after 30 days.',
+          style: TextStyle(color: VoxColors.textSecondary(context)),
         ),
         actions: [
           TextButton(
@@ -774,7 +785,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.redAccent,
+              backgroundColor: VoxColors.danger,
               foregroundColor: Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(10),
@@ -930,7 +941,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             Expanded(
                               child: Text(
                                 title,
-                                style: const TextStyle(
+                                style: TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: -0.5,
@@ -1022,7 +1033,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           ),
                           child: Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.auto_awesome,
                                 size: 13,
                                 color: Color(0xFF4B9EFF),
@@ -1133,7 +1144,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                 children: [
                                   Text(
                                     content,
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontSize: 15,
                                       height: 1.75,
                                       color: Color(0xDD0A0E1A),
@@ -1256,14 +1267,14 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     children: [
                       Text(
                         _formatDuration(localPos),
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white54,
                           fontSize: 12,
                         ),
                       ),
                       Text(
                         _formatDuration(localDur),
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white54,
                           fontSize: 12,
                         ),
@@ -1396,7 +1407,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
             children: [
               Text(
                 '$selected cards',
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
                   color: Color(0xFF4B9EFF),
@@ -1474,7 +1485,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   minLines: 4,
                   textCapitalization: TextCapitalization.sentences,
                   onChanged: (_) => setState(() {}),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 15,
                     height: 1.6,
                     color: Colors.white,
@@ -1537,7 +1548,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           ),
                         ],
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.mic,
                         color: Colors.white,
                         size: 34,
@@ -1549,7 +1560,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 // Timer
                 Text(
                   _formatDuration(_recordingDuration),
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: Colors.white,
                     fontSize: 28,
                     fontWeight: FontWeight.w800,
@@ -1640,7 +1651,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
               borderRadius: BorderRadius.circular(24),
               border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
             ),
-            child: const Column(
+            child: Column(
               children: [
                 CircularProgressIndicator(
                   color: Color(0xFF4B9EFF),
@@ -1679,7 +1690,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
               children: [
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.check_circle,
                       color: Color(0xFF4B9EFF),
                       size: 18,
@@ -1696,7 +1707,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     const Spacer(),
                     Text(
                       _formatDuration(_recordingDuration),
-                      style: const TextStyle(
+                      style: TextStyle(
                         color: Colors.white38,
                         fontSize: 12,
                       ),
@@ -1734,7 +1745,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             if (_audioDuration > Duration.zero)
                               Text(
                                 '${_formatDuration(_currentPosition)} / ${_formatDuration(_audioDuration)}',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: Colors.white54,
                                   fontSize: 11,
                                 ),
@@ -1850,7 +1861,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
                   child: Row(
                     children: [
-                      const Icon(
+                      Icon(
                         Icons.article_outlined,
                         size: 14,
                         color: Color(0x730A0E1A),
@@ -1878,7 +1889,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   minLines: 3,
                   textCapitalization: TextCapitalization.sentences,
                   onChanged: (_) => setState(() {}),
-                  style: const TextStyle(fontSize: 14, height: 1.6),
+                  style: TextStyle(fontSize: 14, height: 1.6),
                   decoration: const InputDecoration(
                     hintText: 'Transcript appears here. Edit if needed...',
                     counterText: '',
@@ -1902,40 +1913,40 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     final lang = context.watch<LanguageProvider>();
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: VoxColors.bg(context),
       appBar: AppBar(
         title: _isNoteSelectionMode
             ? Row(
                 children: [
                   IconButton(
-                    icon: const Icon(
+                    icon: Icon(
                       Icons.close,
-                      color: Color(0xFF0A0E1A),
+                      color: VoxColors.onPrimary(context),
                       size: 22,
                     ),
                     onPressed: _exitNoteSelectionMode,
                   ),
                   Text(
                     '${_selectedNoteIds.length} selected',
-                    style: const TextStyle(
-                      color: Color(0xFF0A0E1A),
+                    style: TextStyle(
+                      color: VoxColors.onPrimary(context),
                       fontWeight: FontWeight.w700,
                       fontSize: 16,
                     ),
                   ),
                 ],
               )
-            : const Text(
+            : Text(
                 'Voice Notes',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: VoxColors.onBg(context),
                   fontWeight: FontWeight.w900,
                   fontSize: 22,
                   letterSpacing: -0.5,
                 ),
               ),
         backgroundColor: _isNoteSelectionMode
-            ? Color(0xFF4B9EFF).withValues(alpha: 0.1)
+            ? VoxColors.primary(context)
             : Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
@@ -1957,7 +1968,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             _visibleNoteIds.isNotEmpty
                         ? Icons.deselect
                         : Icons.select_all,
-                    color: const Color(0xFF0A0E1A),
+                    color: VoxColors.onPrimary(context),
                     size: 18,
                   ),
                   label: Text(
@@ -1965,8 +1976,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             _visibleNoteIds.isNotEmpty
                         ? 'Deselect'
                         : 'Select All',
-                    style: const TextStyle(
-                      color: Color(0xFF0A0E1A),
+                    style: TextStyle(
+                      color: VoxColors.onPrimary(context),
                       fontWeight: FontWeight.w700,
                       fontSize: 12,
                     ),
@@ -1978,7 +1989,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     onPressed: _selectedNoteIds.isNotEmpty
                         ? _deleteSelectedNotes
                         : null,
-                    icon: const Icon(Icons.delete_outline, size: 18),
+                    icon: Icon(Icons.delete_outline, size: 18),
                     label: const Text(
                       'Delete',
                       style: TextStyle(
@@ -1987,9 +1998,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       ),
                     ),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.redAccent,
+                      backgroundColor: VoxColors.danger,
                       foregroundColor: Colors.white,
-                      disabledBackgroundColor: Colors.grey[400],
+                      disabledBackgroundColor: VoxColors.textHint(context),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(20),
                       ),
@@ -2011,7 +2022,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: Color(0xFF0A0E1A).withValues(alpha: 0.08),
+                        color: VoxColors.onBg(context).withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Row(
@@ -2030,10 +2041,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           const SizedBox(width: 5),
                           Text(
                             lang.selectedLanguage,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 11,
                               fontWeight: FontWeight.w700,
-                              color: Colors.white70,
+                              color: VoxColors.textSecondary(context),
                             ),
                           ),
                         ],
@@ -2062,17 +2073,17 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         vertical: 8,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.05),
+                        color: VoxColors.onBg(context).withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.1),
+                          color: VoxColors.border(context),
                         ),
                       ),
                       child: Row(
                         children: [
-                          const Icon(
+                          Icon(
                             Icons.info_outline,
-                            color: Color(0xFF4B9EFF),
+                            color: VoxColors.primary(context),
                             size: 14,
                           ),
                           const SizedBox(width: 8),
@@ -2080,7 +2091,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             child: Text(
                               'Guest mode â€” notes are temporary. Sign up to keep them.',
                               style: TextStyle(
-                                color: Colors.white.withValues(alpha: 0.6),
+                                color: VoxColors.textSecondary(context),
                                 fontSize: 11,
                                 height: 1.4,
                               ),
@@ -2094,40 +2105,40 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   // â”€â”€ Title field â”€â”€
                   Container(
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.06),
+                      color: VoxColors.cardFill(context),
                       borderRadius: BorderRadius.circular(18),
-                      border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                      border: Border.all(color: VoxColors.border(context)),
                     ),
                     child: TextField(
                       controller: _titleController,
                       maxLength: _kMaxTitleLength,
                       textCapitalization: TextCapitalization.sentences,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w800,
                         fontSize: 17,
-                        color: Colors.white,
+                        color: VoxColors.onBg(context),
                         letterSpacing: -0.3,
                       ),
                       decoration: InputDecoration(
                         hintText: 'Note title...',
                         hintStyle: TextStyle(
-                          color: Colors.grey[400],
+                          color: VoxColors.textHint(context),
                           fontWeight: FontWeight.w500,
                           fontSize: 17,
                         ),
                         counterText: '',
                         border: InputBorder.none,
-                        prefixIcon: const Icon(
+                        prefixIcon: Icon(
                           Icons.bookmark_border,
-                          color: Colors.white54,
+                          color: VoxColors.textSecondary(context),
                           size: 20,
                         ),
                         suffixIcon: IconButton(
                           icon: Icon(
                             _isTitleDictating ? Icons.mic : Icons.mic_none,
                             color: _isTitleDictating
-                                ? const Color(0xFF4B9EFF)
-                                : Colors.white54,
+                                ? VoxColors.primary(context)
+                                : VoxColors.textSecondary(context),
                           ),
                           onPressed: () => _toggleDictation(true),
                         ),
@@ -2162,9 +2173,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                               }
                             },
                             style: OutlinedButton.styleFrom(
-                              foregroundColor: Colors.white70,
+                              foregroundColor: VoxColors.onBg(context),
                               side: BorderSide(
-                                color: Colors.white.withValues(alpha: 0.2),
+                                color: VoxColors.border(context),
                               ),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(30),
@@ -2197,17 +2208,17 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                       color: Colors.white,
                                     ),
                                   )
-                                : const Icon(Icons.save_alt, size: 18),
+                                : Icon(Icons.save_alt, size: 18),
                             label: Text(
                               _isEditing ? 'Update Note' : 'Save Note',
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF4B9EFF),
-                              foregroundColor: Colors.white,
-                              disabledBackgroundColor: Colors.white10,
+                              backgroundColor: VoxColors.primary(context),
+                              foregroundColor: VoxColors.onPrimary(context),
+                              disabledBackgroundColor: VoxColors.cardFill(context),
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(30),
                               ),
@@ -2223,15 +2234,15 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         width: double.infinity,
                         child: TextButton.icon(
                           onPressed: _cancelEdit,
-                          icon: const Icon(
+                          icon: Icon(
                             Icons.close,
                             size: 16,
-                            color: Colors.redAccent,
+                            color: VoxColors.danger,
                           ),
                           label: const Text(
                             'Cancel Edit',
                             style: TextStyle(
-                              color: Colors.redAccent,
+                              color: VoxColors.danger,
                               fontWeight: FontWeight.bold,
                             ),
                           ),
@@ -2248,7 +2259,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: Row(
                 children: [
-                  Expanded(child: Divider(color: Colors.grey[400])),
+                  Expanded(child: Divider(color: VoxColors.border(context))),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
                     child: Row(
@@ -2257,7 +2268,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         Text(
                           lang.t('saved_notes'),
                           style: TextStyle(
-                            color: Colors.grey[600],
+                            color: VoxColors.textSecondary(context),
                             fontSize: 11,
                             fontWeight: FontWeight.w800,
                             letterSpacing: 0.5,
@@ -2271,16 +2282,16 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           ),
                           decoration: BoxDecoration(
                             color: _isAnonymousUser
-                                ? Colors.orange[100]
-                                : Color(0xFF0A0E1A),
+                                ? Colors.orange.withValues(alpha: 0.2)
+                                : VoxColors.primary(context).withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
                             _isAnonymousUser ? 'GUEST' : 'SAVED',
                             style: TextStyle(
                               color: _isAnonymousUser
-                                  ? Colors.orange[800]
-                                  : const Color(0xFF4B9EFF),
+                                  ? Colors.orange
+                                  : VoxColors.primary(context),
                               fontSize: 9,
                               fontWeight: FontWeight.w800,
                             ),
@@ -2315,7 +2326,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           Text(
                             lang.t('no_notes'),
                             style: TextStyle(
-                              color: Colors.grey[400],
+                              color: VoxColors.textHint(context),
                               fontWeight: FontWeight.w600,
                             ),
                           ),
@@ -2323,7 +2334,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           Text(
                             'Record a note above to get started',
                             style: TextStyle(
-                              color: Colors.grey[400],
+                              color: VoxColors.textHint(context),
                               fontSize: 11,
                             ),
                           ),
@@ -2393,7 +2404,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           padding: const EdgeInsets.all(40),
                           child: Text(
                             'Could not load notes',
-                            style: TextStyle(color: Colors.grey[500]),
+                            style: TextStyle(color: VoxColors.textHint(context)),
                           ),
                         ),
                       );
@@ -2434,7 +2445,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             Text(
                               lang.t('no_notes'),
                               style: TextStyle(
-                                color: Colors.grey[400],
+                                color: VoxColors.textHint(context),
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -2499,7 +2510,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       ),
 
       bottomNavigationBar: BottomAppBar(
-        color: Color(0xFF141A29),
+        color: VoxColors.surface(context),
         shape: const CircularNotchedRectangle(),
         notchMargin: 8,
         child: SizedBox(
@@ -2510,26 +2521,26 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
               _navItem(
                 Icons.home,
                 lang.t('nav_home'),
-                Colors.grey[400]!,
+                VoxColors.textSecondary(context),
                 onTap: () => Navigator.pushReplacementNamed(context, '/home'),
               ),
               _navItem(
                 Icons.note_alt_outlined,
                 lang.t('nav_notes'),
-                Colors.white,
+                VoxColors.primary(context),
               ),
               const SizedBox(width: 48),
               _navItem(
                 Icons.book,
                 lang.t('nav_dictionary'),
-                Colors.grey[400]!,
+                VoxColors.textSecondary(context),
                 onTap: () =>
                     Navigator.pushReplacementNamed(context, '/dictionary'),
               ),
               _navItem(
                 Icons.menu,
                 lang.t('nav_menu'),
-                Colors.grey[400]!,
+                VoxColors.textSecondary(context),
                 onTap: () => Navigator.pushReplacementNamed(context, '/menu'),
               ),
             ],
@@ -2538,9 +2549,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Color(0xFF0A0E1A),
+        backgroundColor: VoxColors.primary(context),
         onPressed: () => Navigator.pushNamed(context, '/upload'),
-        child: const Icon(Icons.file_upload_outlined, color: Colors.white),
+        child: Icon(Icons.file_upload_outlined, color: VoxColors.onPrimary(context)),
       ),
     );
   }
@@ -2565,13 +2576,13 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF4B9EFF).withValues(alpha: 0.12)
-              : Colors.white.withValues(alpha: 0.04),
+              ? VoxColors.primary(context).withValues(alpha: 0.12)
+              : VoxColors.cardFill(context),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
             color: isSelected
-                ? const Color(0xFF4B9EFF)
-                : Colors.white.withValues(alpha: 0.06),
+                ? VoxColors.primary(context)
+                : VoxColors.border(context),
             width: isSelected ? 2 : 1,
           ),
         ),
@@ -2584,10 +2595,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 width: 40,
                 height: 40,
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4B9EFF),
+                  color: VoxColors.primary(context),
                   borderRadius: BorderRadius.circular(12),
                 ),
-                child: const Icon(Icons.check, color: Colors.white, size: 22),
+                child: Icon(Icons.check, color: VoxColors.onPrimary(context), size: 22),
               )
             else
               Container(
@@ -2595,18 +2606,18 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 height: 40,
                 decoration: BoxDecoration(
                   color: hasAudio
-                      ? const Color(0xFF4B9EFF).withValues(alpha: 0.1)
-                      : Colors.white.withValues(alpha: 0.05),
+                      ? VoxColors.primary(context).withValues(alpha: 0.1)
+                      : VoxColors.onBg(context).withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: hasAudio
-                        ? const Color(0xFF4B9EFF).withValues(alpha: 0.3)
-                        : Colors.white10,
+                        ? VoxColors.primary(context).withValues(alpha: 0.3)
+                        : VoxColors.border(context),
                   ),
                 ),
                 child: Icon(
                   hasAudio ? Icons.mic : Icons.article_outlined,
-                  color: hasAudio ? const Color(0xFF4B9EFF) : Colors.white38,
+                  color: hasAudio ? VoxColors.primary(context) : VoxColors.textSecondary(context),
                   size: 20,
                 ),
               ),
@@ -2622,10 +2633,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       Expanded(
                         child: Text(
                           title,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w800,
                             fontSize: 14,
-                            color: Colors.white,
+                            color: VoxColors.onBg(context),
                             letterSpacing: -0.2,
                           ),
                         ),
@@ -2637,7 +2648,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             vertical: 2,
                           ),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF4B9EFF).withValues(alpha: 0.1),
+                            color: VoxColors.primary(context).withValues(alpha: 0.1),
                             borderRadius: BorderRadius.circular(5),
                           ),
                           child: const Text(
@@ -2658,7 +2669,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         Icon(
                           Icons.graphic_eq,
                           size: 11,
-                          color: Colors.white.withValues(alpha: 0.3),
+                          color: VoxColors.textSecondary(context),
                         ),
                         const SizedBox(width: 4),
                         Text(

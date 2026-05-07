@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:just_audio/just_audio.dart';
@@ -7,6 +7,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'language_provider.dart';
 import 'analytics_service.dart';
+import 'theme_provider.dart';
 
 // â”€â”€ API language codes for dictionaryapi.dev â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const Map<String, String?> _apiLangCode = {
@@ -98,9 +99,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
     if (status != PermissionStatus.granted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Microphone permission denied'),
-            backgroundColor: Color(0xFF333333),
+          SnackBar(
+            content: const Text('Microphone permission denied'),
+            backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -128,9 +129,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
     if (!available) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Speech recognition not available on this device'),
-            backgroundColor: Color(0xFF333333),
+          SnackBar(
+            content: const Text('Speech recognition not available on this device'),
+            backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -596,19 +597,19 @@ class _DictionaryPageState extends State<DictionaryPage> {
     final unsupported = langCode == null;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: VoxColors.bg(context),
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         automaticallyImplyLeading: false,
         title: Row(
           children: [
-            const Text(
+            Text(
               'VOX',
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: FontWeight.w900,
-                color: Colors.white,
+                color: VoxColors.onBg(context),
                 letterSpacing: 5,
               ),
             ),
@@ -616,13 +617,13 @@ class _DictionaryPageState extends State<DictionaryPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
-                color: const Color(0xFF4B9EFF),
+                color: VoxColors.primary(context),
                 borderRadius: BorderRadius.circular(6),
               ),
               child: Text(
                 lang.t('nav_dictionary').toUpperCase(),
-                style: const TextStyle(
-                  color: Color(0xFFF0F4FF),
+                style: TextStyle(
+                  color: VoxColors.onPrimary(context),
                   fontSize: 9,
                   fontWeight: FontWeight.w800,
                   letterSpacing: 2,
@@ -641,15 +642,15 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   vertical: 4,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.08),
+                  color: VoxColors.onBg(context).withValues(alpha: 0.08),
                   borderRadius: BorderRadius.circular(20),
                 ),
                 child: Text(
                   lang.selectedLanguage,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
-                    color: Colors.white70,
+                    color: VoxColors.textSecondary(context),
                   ),
                 ),
               ),
@@ -677,22 +678,22 @@ class _DictionaryPageState extends State<DictionaryPage> {
                           ? 'Listening...'
                           : unsupported
                           ? 'Not available in Chinese'
-                          : 'Search any wordâ€¦',
+                          : 'Search any word...',
                       counterText: '',
-                      prefixIcon: const Icon(Icons.search, size: 20, color: Colors.white54),
+                      prefixIcon: Icon(Icons.search, size: 20, color: VoxColors.textHint(context)),
                       filled: true,
-                      fillColor: _isListening ? Colors.white.withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.06),
+                      fillColor: _isListening ? VoxColors.onBg(context).withValues(alpha: 0.12) : VoxColors.cardFill(context),
                       contentPadding: const EdgeInsets.symmetric(
                         horizontal: 16,
                         vertical: 14,
                       ),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                        borderSide: BorderSide(color: VoxColors.border(context)),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(18),
-                        borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                        borderSide: BorderSide(color: VoxColors.border(context)),
                       ),
                     ),
                     enabled: !unsupported,
@@ -710,15 +711,15 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       height: 48,
                       decoration: BoxDecoration(
                         color: _isListening
-                            ? Colors.red.withValues(alpha: 0.8)
-                            : Colors.white.withValues(alpha: 0.08),
+                            ? VoxColors.danger.withValues(alpha: 0.8)
+                            : VoxColors.onBg(context).withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(14),
                       ),
                       child: Icon(
                         _isListening
                             ? Icons.stop_rounded
                             : Icons.mic_none_rounded,
-                        color: _isListening ? Colors.white : Colors.white70,
+                        color: _isListening ? Colors.white : VoxColors.onBg(context).withValues(alpha: 0.7),
                         size: 22,
                       ),
                     ),
@@ -734,10 +735,10 @@ class _DictionaryPageState extends State<DictionaryPage> {
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: unsupported ? Colors.grey[800] : const Color(0xFF4B9EFF),
+                      color: unsupported ? VoxColors.border(context) : VoxColors.primary(context),
                       borderRadius: BorderRadius.circular(14),
                       boxShadow: unsupported ? [] : [
-                        BoxShadow(color: const Color(0xFF4B9EFF).withValues(alpha: 0.3), blurRadius: 8)
+                        BoxShadow(color: VoxColors.primary(context).withValues(alpha: 0.3), blurRadius: 8)
                       ],
                     ),
                     child: _loading
@@ -748,9 +749,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
                               strokeWidth: 2,
                             ),
                           )
-                        : const Icon(
+                        : Icon(
                             Icons.arrow_forward,
-                            color: Colors.white,
+                            color: VoxColors.onPrimary(context),
                             size: 20,
                           ),
                   ),
@@ -769,8 +770,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   Container(
                     width: 8,
                     height: 8,
-                    decoration: const BoxDecoration(
-                      color: Colors.red,
+                    decoration: BoxDecoration(
+                      color: VoxColors.danger,
                       shape: BoxShape.circle,
                     ),
                   ),
@@ -778,7 +779,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   Text(
                     'Listening in ${lang.selectedLanguage} â€” say a word',
                     style: TextStyle(
-                      color: Colors.grey[600],
+                      color: VoxColors.textHint(context),
                       fontSize: 12,
                       fontWeight: FontWeight.w500,
                     ),
@@ -855,7 +856,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Text('ðŸ“–', style: TextStyle(fontSize: 48)),
+                    const Text('📖', style: TextStyle(fontSize: 48)),
                     const SizedBox(height: 12),
                     const Text(
                       'VOX Dictionary',
@@ -939,7 +940,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                   children: [
                                     Text(
                                       _result!['word'] as String? ?? '',
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         color: Color(0xFFF0F4FF),
                                         fontSize: 28,
                                         fontWeight: FontWeight.w900,
@@ -960,7 +961,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                       ),
                                       child: Text(
                                         '${_resultSource.emoji} ${_resultSource.label} Dictionary',
-                                        style: const TextStyle(
+                                        style: TextStyle(
                                           color: Color(0xFF4B9EFF),
                                           fontSize: 10,
                                           fontWeight: FontWeight.w700,
@@ -995,7 +996,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                             const SizedBox(height: 6),
                             Text(
                               _phonetic,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 color: Color(0xFF4B9EFF),
                                 fontSize: 15,
                                 fontWeight: FontWeight.w400,
@@ -1064,7 +1065,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                       child: Center(
                                         child: Text(
                                           '$i',
-                                          style: const TextStyle(
+                                          style: TextStyle(
                                             fontSize: 10,
                                             fontWeight: FontWeight.w800,
                                             color: Color(0xFF0A0E1A),
@@ -1123,7 +1124,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                     ),
                                     child: Text(
                                       s,
-                                      style: const TextStyle(
+                                      style: TextStyle(
                                         fontSize: 12,
                                         fontWeight: FontWeight.w600,
                                         color: Color(0xDD0A0E1A),
@@ -1249,7 +1250,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
               const SizedBox(width: 6),
               Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
                   color: Color(0x730A0E1A),

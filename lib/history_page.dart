@@ -1,8 +1,9 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'language_provider.dart';
+import 'theme_provider.dart';
 
 class HistoryScreen extends StatelessWidget {
   HistoryScreen({super.key});
@@ -24,18 +25,18 @@ class HistoryScreen extends StatelessWidget {
     final t = lang.t;
 
     return Scaffold(
-      backgroundColor: const Color(0xFFF0F4FF), // Same as homepage
+      backgroundColor: VoxColors.bg(context),
       appBar: AppBar(
         title: Text(
           t('history_title'),
-          style: const TextStyle(color: Color(0xFF0A0E1A)),
+          style: TextStyle(color: VoxColors.onBg(context)),
         ),
-        backgroundColor: Colors.transparent,
+        backgroundColor: VoxColors.surface(context),
         elevation: 0,
-        iconTheme: const IconThemeData(color: Color(0xFF0A0E1A)),
+        iconTheme: IconThemeData(color: VoxColors.onBg(context)),
         actions: [
           IconButton(
-            icon: const Icon(Icons.add, color: Color(0xFF0A0E1A)),
+            icon: Icon(Icons.add, color: VoxColors.primary(context)),
             onPressed: () {
               addWord("Word ${DateTime.now().second}");
             },
@@ -46,8 +47,8 @@ class HistoryScreen extends StatelessWidget {
         stream: historyRef.orderBy("time", descending: true).snapshots(),
         builder: (context, snapshot) {
           if (!snapshot.hasData) {
-            return const Center(
-              child: CircularProgressIndicator(color: Color(0xFF0A0E1A)),
+            return Center(
+              child: CircularProgressIndicator(color: VoxColors.primary(context)),
             );
           }
 
@@ -57,7 +58,7 @@ class HistoryScreen extends StatelessWidget {
             return Center(
               child: Text(
                 t('history_empty'),
-                style: const TextStyle(color: Color(0x8A0A0E1A)),
+                style: TextStyle(color: VoxColors.textSecondary(context)),
               ),
             );
           }
@@ -76,30 +77,31 @@ class HistoryScreen extends StatelessWidget {
                 },
                 background: Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE0E0E0),
+                    color: VoxColors.surface2(context),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.centerLeft,
                   padding: const EdgeInsets.only(left: 20),
-                  child: const Icon(Icons.delete, color: Color(0xFF333333)),
+                  child: Icon(Icons.delete, color: VoxColors.danger),
                 ),
                 secondaryBackground: Container(
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE0E0E0),
+                    color: VoxColors.surface2(context),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   alignment: Alignment.centerRight,
                   padding: const EdgeInsets.only(right: 20),
-                  child: const Icon(Icons.delete, color: Color(0xFF333333)),
+                  child: Icon(Icons.delete, color: VoxColors.danger),
                 ),
                 child: Container(
                   margin: const EdgeInsets.only(bottom: 10),
                   decoration: BoxDecoration(
-                    color: const Color(0xFFE0E0E0),
+                    color: VoxColors.surface(context),
                     borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: VoxColors.border(context)),
                     boxShadow: [
                       BoxShadow(
-                        color: Color(0xFF0A0E1A).withValues(alpha: 0.05),
+                        color: Colors.black.withValues(alpha: 0.05),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -108,15 +110,15 @@ class HistoryScreen extends StatelessWidget {
                   child: ListTile(
                     title: Text(
                       doc["word"],
-                      style: const TextStyle(
-                        color: Color(0xDD0A0E1A),
+                      style: TextStyle(
+                        color: VoxColors.onSurface(context),
                         fontWeight: FontWeight.w600,
                         fontSize: 14,
                       ),
                     ),
-                    trailing: const Icon(
+                    trailing: Icon(
                       Icons.chevron_right,
-                      color: Color(0x730A0E1A),
+                      color: VoxColors.textHint(context),
                     ),
                   ),
                 ),
@@ -128,4 +130,3 @@ class HistoryScreen extends StatelessWidget {
     );
   }
 }
-

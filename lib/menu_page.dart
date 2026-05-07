@@ -1,10 +1,11 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'language_provider.dart';
+import 'theme_provider.dart';
 import 'profile_page.dart';
 import 'contact_us_page.dart';
 import 'about_us_page.dart';
@@ -209,15 +210,15 @@ class _MenuPageState extends State<MenuPage> {
     // Initials / guest icon
     return CircleAvatar(
       radius: radius,
-      backgroundColor: const Color(0xFFBFA050),
+      backgroundColor: VoxColors.primary(context),
       child: !_hasProfile
-          ? Icon(Icons.person, size: radius, color: const Color(0xFFF0F4FF))
+          ? Icon(Icons.person, size: radius, color: Colors.white)
           : Text(
               _username.isNotEmpty ? _username[0].toUpperCase() : '?',
               style: TextStyle(
                 fontSize: radius * 0.85,
                 fontWeight: FontWeight.w900,
-                color: const Color(0xFFF0F4FF),
+                color: Colors.white,
               ),
             ),
     );
@@ -229,7 +230,7 @@ class _MenuPageState extends State<MenuPage> {
   void _showLanguagePicker(BuildContext context, LanguageProvider lang) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF141A29),
+      backgroundColor: VoxColors.surface(context),
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
@@ -246,17 +247,17 @@ class _MenuPageState extends State<MenuPage> {
                 height: 4,
                 margin: const EdgeInsets.only(bottom: 20),
                 decoration: BoxDecoration(
-                  color: Colors.white24,
+                  color: VoxColors.border(context),
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
             ),
             Text(
               lang.t('select_language'),
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: VoxColors.onSurface(context),
               ),
             ),
             const SizedBox(height: 16),
@@ -281,13 +282,13 @@ class _MenuPageState extends State<MenuPage> {
                             ),
                             decoration: BoxDecoration(
                               color: lang.selectedLanguage == l
-                                  ? const Color(0xFF4B9EFF)
-                                  : Colors.white.withValues(alpha: 0.04),
+                                    ? VoxColors.primary(context)
+                                    : VoxColors.onBg(context).withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(14),
                               border: Border.all(
                                 color: lang.selectedLanguage == l
-                                    ? const Color(0xFF4B9EFF)
-                                    : Colors.white.withValues(alpha: 0.08),
+                                    ? VoxColors.primary(context)
+                                    : VoxColors.border(context),
                               ),
                             ),
                             child: Row(
@@ -297,15 +298,15 @@ class _MenuPageState extends State<MenuPage> {
                                   l,
                                   style: TextStyle(
                                     color: lang.selectedLanguage == l
-                                        ? const Color(0xFF0A0E1A)
-                                        : Colors.white,
+                                    ? Colors.white
+                                    : VoxColors.onSurface(context),
                                     fontWeight: FontWeight.w700,
                                   ),
                                 ),
                                 if (lang.selectedLanguage == l)
                                   const Icon(
                                     Icons.check_circle,
-                                    color: Color(0xFF0A0E1A),
+                                    color: Colors.white,
                                     size: 18,
                                   ),
                               ],
@@ -330,7 +331,7 @@ class _MenuPageState extends State<MenuPage> {
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: const Color(0xFF141A29),
+        backgroundColor: VoxColors.surface(context),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
         child: Padding(
           padding: const EdgeInsets.all(28),
@@ -344,14 +345,14 @@ class _MenuPageState extends State<MenuPage> {
                   vertical: 5,
                 ),
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFF5252).withValues(alpha: 0.1),
+                  color: VoxColors.danger.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: const Color(0xFFFF5252).withValues(alpha: 0.2)),
+                  border: Border.all(color: VoxColors.danger.withValues(alpha: 0.2)),
                 ),
                 child: const Text(
                   "LOGOUT",
                   style: TextStyle(
-                    color: Color(0xFFFF5252),
+                    color: VoxColors.danger,
                     fontSize: 10,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 2,
@@ -361,17 +362,17 @@ class _MenuPageState extends State<MenuPage> {
               const SizedBox(height: 16),
               Text(
                 lang.t('logout_title'),
-                style: const TextStyle(
+                style: TextStyle(
                   fontSize: 24,
                   fontWeight: FontWeight.w900,
-                  color: Colors.white,
+                  color: VoxColors.onSurface(context),
                   letterSpacing: -1,
                 ),
               ),
               const SizedBox(height: 12),
               Text(
                 lang.t('logout_body'),
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 14),
+                style: TextStyle(color: VoxColors.textSecondary(context), fontSize: 14),
               ),
               const SizedBox(height: 28),
               Row(
@@ -380,8 +381,8 @@ class _MenuPageState extends State<MenuPage> {
                     child: OutlinedButton(
                       onPressed: () => Navigator.pop(ctx),
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.white,
-                        side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                        foregroundColor: VoxColors.onSurface(context),
+                        side: BorderSide(color: VoxColors.border(context)),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
                         ),
@@ -406,7 +407,7 @@ class _MenuPageState extends State<MenuPage> {
                         }
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFF5252),
+                        backgroundColor: VoxColors.danger,
                         foregroundColor: Colors.white,
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14),
@@ -453,7 +454,8 @@ class _MenuPageState extends State<MenuPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  HELPERS
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Widget _buildMenuItem({
+  Widget _buildMenuItem(
+    BuildContext context, {
     required IconData icon,
     required String title,
     String? trailing,
@@ -466,17 +468,21 @@ class _MenuPageState extends State<MenuPage> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
-          color: isDanger ? const Color(0xFFFF5252).withValues(alpha: 0.1) : Colors.white.withValues(alpha: 0.04),
+          color: isDanger
+              ? VoxColors.danger.withValues(alpha: 0.08)
+              : VoxColors.cardFill(context),
           borderRadius: BorderRadius.circular(14),
           border: Border.all(
-            color: isDanger ? const Color(0xFFFF5252).withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.08),
+            color: isDanger
+                ? VoxColors.danger.withValues(alpha: 0.2)
+                : VoxColors.border(context),
           ),
         ),
         child: Row(
           children: [
             Icon(
               icon,
-              color: isDanger ? const Color(0xFFFF5252) : const Color(0xFF4B9EFF),
+              color: isDanger ? VoxColors.danger : VoxColors.primary(context),
               size: 20,
             ),
             const SizedBox(width: 12),
@@ -486,19 +492,24 @@ class _MenuPageState extends State<MenuPage> {
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
-                  color: isDanger ? const Color(0xFFFF5252) : Colors.white,
+                  color: isDanger ? VoxColors.danger : VoxColors.onSurface(context),
                 ),
               ),
             ),
             if (trailing != null)
               Text(
                 trailing,
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12),
+                style: TextStyle(
+                  color: VoxColors.textSecondary(context),
+                  fontSize: 12,
+                ),
               )
             else
               Icon(
                 isDanger ? Icons.logout : Icons.chevron_right,
-                color: isDanger ? const Color(0xFFFF5252).withValues(alpha: 0.5) : Colors.white24,
+                color: isDanger
+                    ? VoxColors.danger.withValues(alpha: 0.5)
+                    : VoxColors.textHint(context),
                 size: 18,
               ),
           ],
@@ -507,7 +518,47 @@ class _MenuPageState extends State<MenuPage> {
     );
   }
 
-  Widget _sectionLabel(String label) {
+  /// Theme toggle row — shows a sun/moon icon with a Switch
+  Widget _buildThemeToggle(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+    final isDark = themeProvider.isDark;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: VoxColors.cardFill(context),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: VoxColors.border(context)),
+      ),
+      child: Row(
+        children: [
+          Icon(
+            isDark ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+            color: VoxColors.primary(context),
+            size: 20,
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              isDark ? 'Dark Mode' : 'Light Mode',
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: VoxColors.onSurface(context),
+              ),
+            ),
+          ),
+          Switch(
+            value: !isDark, // ON = light mode
+            onChanged: (_) => themeProvider.toggle(),
+            activeThumbColor: VoxColors.primary(context),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sectionLabel(BuildContext context, String label) {
     return Padding(
       padding: const EdgeInsets.only(left: 4, bottom: 8, top: 12),
       child: Text(
@@ -515,7 +566,7 @@ class _MenuPageState extends State<MenuPage> {
         style: TextStyle(
           fontSize: 10,
           fontWeight: FontWeight.w800,
-          color: Colors.white.withValues(alpha: 0.3),
+          color: VoxColors.textHint(context),
           letterSpacing: 2,
         ),
       ),
@@ -531,7 +582,7 @@ class _MenuPageState extends State<MenuPage> {
 
     return FloatingBotWrapper(
       child: Scaffold(
-        backgroundColor: const Color(0xFF0A0E1A),
+        backgroundColor: VoxColors.bg(context),
         body: Column(
         children: [
           // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -543,19 +594,19 @@ class _MenuPageState extends State<MenuPage> {
               left: 20,
               right: 20,
             ),
-            decoration: const BoxDecoration(
-              color: Color(0xFF0A0E1A),
-              borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
-              border: Border(bottom: BorderSide(color: Colors.white10)),
+            decoration: BoxDecoration(
+              color: VoxColors.bg(context),
+              borderRadius: const BorderRadius.vertical(bottom: Radius.circular(32)),
+              border: Border(bottom: BorderSide(color: VoxColors.border(context))),
             ),
             child: Column(
               children: [
-                const Text(
+                Text(
                   "VOX",
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w900,
-                    color: Color(0xFF4B9EFF),
+                    color: VoxColors.primary(context),
                     letterSpacing: 8,
                   ),
                 ),
@@ -570,22 +621,22 @@ class _MenuPageState extends State<MenuPage> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Color(0xFF0A0E1A).withValues(alpha: 0.2),
+                      color: VoxColors.primary(context).withValues(alpha: 0.1),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(
                           Icons.wifi_off,
-                          color: Color(0xFFF0F4FF),
+                          color: VoxColors.primary(context),
                           size: 13,
                         ),
-                        SizedBox(width: 6),
+                        const SizedBox(width: 6),
                         Text(
                           "Offline â€” showing cached data",
                           style: TextStyle(
-                            color: Color(0xFFF0F4FF),
+                            color: VoxColors.primary(context),
                             fontSize: 11,
                             fontWeight: FontWeight.w600,
                           ),
@@ -603,7 +654,7 @@ class _MenuPageState extends State<MenuPage> {
                           height: 72,
                           decoration: BoxDecoration(
                             shape: BoxShape.circle,
-                            color: Colors.white.withValues(alpha: 0.2),
+                            color: VoxColors.border(context),
                           ),
                         )
                       : Stack(
@@ -613,7 +664,7 @@ class _MenuPageState extends State<MenuPage> {
                               decoration: BoxDecoration(
                                 shape: BoxShape.circle,
                                 border: Border.all(
-                                  color: const Color(0xFF4B9EFF),
+                                  color: VoxColors.primary(context),
                                   width: 2.0,
                                 ),
                               ),
@@ -624,13 +675,13 @@ class _MenuPageState extends State<MenuPage> {
                               right: 2,
                               child: Container(
                                 padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFF4B9EFF),
+                                decoration: BoxDecoration(
+                                  color: VoxColors.primary(context),
                                   shape: BoxShape.circle,
                                 ),
-                                child: const Icon(
+                                child: Icon(
                                   Icons.edit,
-                                  color: Color(0xFF0A0E1A),
+                                  color: VoxColors.bg(context),
                                   size: 10,
                                 ),
                               ),
@@ -646,30 +697,29 @@ class _MenuPageState extends State<MenuPage> {
                         width: 100,
                         height: 14,
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.3),
+                          color: VoxColors.onBg(context).withValues(alpha: 0.15),
                           borderRadius: BorderRadius.circular(6),
                         ),
                       )
                     : Text(
-                        // Show name if profile exists, otherwise "Guest"
                         _hasProfile
                             ? (_username.isNotEmpty ? _username : "Vox User")
                             : lang.t('guest'),
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: VoxColors.onBg(context),
                           fontSize: 20,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
 
-                // Email subtitle (only when profile exists)
+                // Email subtitle
                 if (!_loadingProfile && _hasProfile && _email.isNotEmpty)
                   Padding(
                     padding: const EdgeInsets.only(top: 2),
                     child: Text(
                       _email,
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.6),
+                        color: VoxColors.textSecondary(context),
                         fontSize: 11,
                         fontWeight: FontWeight.w500,
                       ),
@@ -686,13 +736,13 @@ class _MenuPageState extends State<MenuPage> {
                       vertical: 3,
                     ),
                     decoration: BoxDecoration(
-                      color: Color(0xFF0A0E1A).withValues(alpha: 0.15),
+                      color: VoxColors.primary(context).withValues(alpha: 0.12),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: Text(
                       lang.t('no_account'),
-                      style: const TextStyle(
-                        color: Color(0xFF4B9EFF),
+                      style: TextStyle(
+                        color: VoxColors.primary(context),
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
                       ),
@@ -709,20 +759,25 @@ class _MenuPageState extends State<MenuPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  _sectionLabel(lang.t('section_account')),
+                  _sectionLabel(context, lang.t('section_account')),
                   _buildMenuItem(
+                    context,
                     icon: Icons.person_outline_rounded,
                     title: lang.t('menu_profile'),
                     onTap: () => _openProfile(context),
                   ),
                   _buildMenuItem(
+                    context,
                     icon: Icons.language_rounded,
                     title: lang.t('menu_language'),
                     trailing: lang.selectedLanguage,
                     onTap: () => _showLanguagePicker(context, lang),
                   ),
-                  _sectionLabel(lang.t('section_app')),
+                  _sectionLabel(context, 'PREFERENCES'),
+                  _buildThemeToggle(context),
+                  _sectionLabel(context, lang.t('section_app')),
                   _buildMenuItem(
+                    context,
                     icon: Icons.bar_chart_outlined,
                     title: lang.t('menu_statistics'),
                     onTap: () => Navigator.push(
@@ -732,6 +787,7 @@ class _MenuPageState extends State<MenuPage> {
                   ),
                   if (_hasProfile) ...[
                     _buildMenuItem(
+                      context,
                       icon: Icons.bookmarks_outlined,
                       title: 'Saved Q&A',
                       onTap: () => Navigator.push(
@@ -742,6 +798,7 @@ class _MenuPageState extends State<MenuPage> {
                       ),
                     ),
                     _buildMenuItem(
+                      context,
                       icon: Icons.lightbulb_outline_rounded,
                       title: 'Recommendations',
                       onTap: () => Navigator.push(
@@ -753,6 +810,7 @@ class _MenuPageState extends State<MenuPage> {
                     ),
                   ],
                   _buildMenuItem(
+                    context,
                     icon: Icons.mic_none_rounded,
                     title: 'Personalized Commands',
                     onTap: () {
@@ -765,6 +823,7 @@ class _MenuPageState extends State<MenuPage> {
                     },
                   ),
                   _buildMenuItem(
+                    context,
                     icon: Icons.info_outline_rounded,
                     title: lang.t('menu_about'),
                     onTap: () => Navigator.push(
@@ -773,6 +832,7 @@ class _MenuPageState extends State<MenuPage> {
                     ),
                   ),
                   _buildMenuItem(
+                    context,
                     icon: Icons.question_answer_outlined,
                     title: 'FAQs',
                     onTap: () => Navigator.push(
@@ -783,6 +843,7 @@ class _MenuPageState extends State<MenuPage> {
                     ),
                   ),
                   _buildMenuItem(
+                    context,
                     icon: Icons.mail_outline_rounded,
                     title: lang.t('menu_contact'),
                     onTap: () => Navigator.push(
@@ -792,13 +853,13 @@ class _MenuPageState extends State<MenuPage> {
                   ),
                   if (_hasProfile) ...[
                     _buildMenuItem(
+                      context,
                       icon: Icons.delete_sweep_rounded,
                       title: 'Recycle Bin',
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) =>
-                              const RecycleBinPage(),
+                          builder: (_) => const RecycleBinPage(),
                         ),
                       ),
                     ),
@@ -808,6 +869,7 @@ class _MenuPageState extends State<MenuPage> {
                   if (_hasProfile || !_isFirebaseAnonymous) ...[
                     const SizedBox(height: 4),
                     _buildMenuItem(
+                      context,
                       icon: Icons.logout_rounded,
                       title: lang.t('menu_logout'),
                       isDanger: true,
@@ -823,7 +885,7 @@ class _MenuPageState extends State<MenuPage> {
       ),
 
       bottomNavigationBar: BottomAppBar(
-        color: Color(0xFF141A29),
+        color: VoxColors.surface(context),
         shape: const CircularNotchedRectangle(),
         child: SizedBox(
           height: 65,
@@ -831,33 +893,41 @@ class _MenuPageState extends State<MenuPage> {
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _navItem(
+                context,
                 Icons.home,
                 lang.t('nav_home'),
-                Colors.grey[400]!,
+                VoxColors.textSecondary(context),
                 onTap: () => Navigator.pushReplacementNamed(context, '/home'),
               ),
               _navItem(
+                context,
                 Icons.note_alt_outlined,
                 lang.t('nav_notes'),
-                Colors.grey[400]!,
+                VoxColors.textSecondary(context),
                 onTap: () => Navigator.pushReplacementNamed(context, '/notes'),
               ),
               const SizedBox(width: 48),
               _navItem(
+                context,
                 Icons.book,
                 lang.t('nav_dictionary'),
-                Colors.grey[400]!,
+                VoxColors.textSecondary(context),
                 onTap: () =>
                     Navigator.pushReplacementNamed(context, '/dictionary'),
               ),
-              _navItem(Icons.menu, lang.t('nav_menu'), Colors.white),
+              _navItem(
+                context,
+                Icons.menu,
+                lang.t('nav_menu'),
+                VoxColors.primary(context),
+              ),
             ],
           ),
         ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Color(0xFF0A0E1A),
+        backgroundColor: VoxColors.primary(context),
         onPressed: () => Navigator.pushNamed(context, '/upload'),
         child: const Icon(Icons.file_upload_outlined, color: Colors.white),
       ),
@@ -865,6 +935,7 @@ class _MenuPageState extends State<MenuPage> {
   }
 
   Widget _navItem(
+    BuildContext context,
     IconData icon,
     String label,
     Color color, {

@@ -1,10 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'analytics_service.dart';
 import 'language_provider.dart';
+import 'theme_provider.dart';
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  STATISTICS PAGE
@@ -19,19 +20,13 @@ class StatisticsPage extends StatefulWidget {
 }
 
 class _StatisticsPageState extends State<StatisticsPage> {
-  // â”€â”€ Colour constants â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  static const Color _gold = Color(0xFF4B9EFF);
-  static const Color _cream = Color(0xFF0A0E1A);
-  static const Color _card = Color(0xFF141A29);
-  static const Color _accent = Color(0xFF4B9EFF);
-  static const Color _dark = Colors.white;
 
-  static const List<Color> _barColors = [
-    Color(0xFF4B9EFF),
-    Color(0xFF5C8A6E),
-    Color(0xFF7A6BAB),
-    Color(0xFFB05C5C),
-    Color(0xFF4A7FA0),
+  static List<Color> _barColors(BuildContext context) => [
+    VoxColors.primary(context),
+    VoxColors.primary(context).withValues(alpha: 0.8),
+    VoxColors.primary(context).withValues(alpha: 0.6),
+    VoxColors.primary(context).withValues(alpha: 0.4),
+    VoxColors.primary(context).withValues(alpha: 0.2),
   ];
 
   bool _loading = true;
@@ -135,11 +130,11 @@ class _StatisticsPageState extends State<StatisticsPage> {
     try {
       await AnalyticsService.instance.syncToFirebase();
       await _fetchFirebaseData();
-      if (mounted) {
+        if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Developer analytics synced from cloud'),
-            backgroundColor: Color(0xFF333333),
+          SnackBar(
+            content: const Text('Developer analytics synced from cloud'),
+            backgroundColor: VoxColors.surface(context),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -228,7 +223,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         'title': 'Guest Conversion Risk',
         'desc':
             'Active user is in Guest Mode. Local-only data increases churn risk. Recommend non-intrusive Magic Link prompts.',
-        'color': _accent,
+        'color': VoxColors.primary(context),
       });
     }
 
@@ -265,13 +260,13 @@ class _StatisticsPageState extends State<StatisticsPage> {
   Widget build(BuildContext context) {
     context.watch<LanguageProvider>(); // rebuild on language switch
     return Scaffold(
-      backgroundColor: _cream,
+      backgroundColor: VoxColors.bg(context),
       body: Column(
         children: [
           _buildHeader(context),
           if (_loading)
-            const Expanded(
-              child: Center(child: CircularProgressIndicator(color: _gold)),
+            Expanded(
+              child: Center(child: CircularProgressIndicator(color: VoxColors.primary(context))),
             )
           else
             Expanded(
@@ -295,24 +290,24 @@ class _StatisticsPageState extends State<StatisticsPage> {
       margin: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _gold.withValues(alpha: 0.06),
+        color: VoxColors.primary(context).withValues(alpha: 0.06),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _gold.withValues(alpha: 0.2)),
+        border: Border.all(color: VoxColors.primary(context).withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.privacy_tip_outlined, color: _gold, size: 20),
+          Icon(Icons.privacy_tip_outlined, color: VoxColors.primary(context), size: 20),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
+                Text(
                   'Guest Mode: No Cloud Sync',
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w800,
-                    color: Colors.white,
+                    color: VoxColors.onBg(context),
                   ),
                 ),
                 const SizedBox(height: 2),
@@ -320,7 +315,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   'Stats are saved locally only. Create an account to backup your progress to the cloud.',
                   style: TextStyle(
                     fontSize: 11,
-                    color: Colors.white.withValues(alpha: 0.5),
+                    color: VoxColors.textSecondary(context),
                     height: 1.3,
                   ),
                 ),
@@ -344,9 +339,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
         left: 20,
         right: 20,
       ),
-      decoration: const BoxDecoration(
-        color: _gold,
-        borderRadius: BorderRadius.vertical(bottom: Radius.circular(28)),
+      decoration: BoxDecoration(
+        color: VoxColors.primary(context),
+        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(28)),
       ),
       child: Row(
         children: [
@@ -359,7 +354,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 color: Colors.white.withValues(alpha: 0.25),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.arrow_back_ios_new_rounded,
                 color: Colors.white,
                 size: 16,
@@ -367,7 +362,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
             ),
           ),
           const SizedBox(width: 14),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -376,7 +371,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
-                    color: Colors.white,
+                    color: VoxColors.onPrimary(context),
                     letterSpacing: -0.3,
                   ),
                 ),
@@ -384,7 +379,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                   'Developer analytics & metrics',
                   style: TextStyle(
                     fontSize: 12,
-                    color: Colors.white70,
+                    color: Colors.white.withValues(alpha: 0.8),
                     fontWeight: FontWeight.w500,
                   ),
                 ),
@@ -416,7 +411,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                               ),
                             ),
                           )
-                        : const Icon(
+                        : Icon(
                             Icons.cloud_sync_rounded,
                             color: Colors.white,
                             size: 18,
@@ -430,7 +425,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                     color: Colors.white.withValues(alpha: 0.2),
                     borderRadius: BorderRadius.circular(12),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.speed_rounded,
                     color: Colors.white,
                     size: 22,
@@ -539,12 +534,12 @@ class _StatisticsPageState extends State<StatisticsPage> {
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
-              color: _card,
+              color: VoxColors.surface(context),
               borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: _accent.withValues(alpha: 0.1)),
+              border: Border.all(color: VoxColors.border(context)),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withValues(alpha: 0.2),
+                  color: Colors.black.withValues(alpha: 0.15),
                   blurRadius: 10,
                   offset: const Offset(0, 4),
                 ),
@@ -565,9 +560,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
                         insight['color'] as Color,
                       ),
                       if (!isLast)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 12),
-                          child: Divider(color: Colors.white10, height: 1),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          child: Divider(color: VoxColors.border(context), height: 1),
                         ),
                     ],
                   );
@@ -589,7 +584,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         color: Colors.white.withValues(alpha: 0.03),
         borderRadius: BorderRadius.circular(12),
       ),
-      child: const Row(
+      child: Row(
         children: [
           Icon(Icons.terminal_rounded, color: Colors.grey, size: 16),
           SizedBox(width: 10),
@@ -597,7 +592,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
             child: Text(
               'These insights are generated by analyzing local and cloud telemetry to guide technical debt reduction and feature roadmapping.',
               style: TextStyle(
-                color: Colors.grey,
+                color: VoxColors.textHint(context),
                 fontSize: 10,
                 fontStyle: FontStyle.italic,
               ),
@@ -634,8 +629,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
               const SizedBox(height: 4),
               Text(
                 description,
-                style: const TextStyle(
-                  color: Colors.white70,
+                style: TextStyle(
+                  color: VoxColors.textSecondary(context),
                   fontSize: 12,
                   height: 1.4,
                 ),
@@ -652,10 +647,10 @@ class _StatisticsPageState extends State<StatisticsPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _sectionLabel(String text) => Text(
     text,
-    style: const TextStyle(
+    style: TextStyle(
       fontSize: 16,
       fontWeight: FontWeight.w900,
-      color: _dark,
+      color: VoxColors.onBg(context),
       letterSpacing: -0.3,
     ),
   );
@@ -672,7 +667,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _card,
+        color: VoxColors.surface(context),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -688,19 +683,19 @@ class _StatisticsPageState extends State<StatisticsPage> {
           Container(
             width: 34,
             height: 34,
-            decoration: BoxDecoration(
-              color: _gold.withValues(alpha: 0.18),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: Icon(icon, color: _gold, size: 18),
+              decoration: BoxDecoration(
+                color: VoxColors.primary(context).withValues(alpha: 0.18),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(icon, color: VoxColors.primary(context), size: 18),
           ),
           const SizedBox(height: 12),
           Text(
             value,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 24,
               fontWeight: FontWeight.w900,
-              color: _dark,
+              color: VoxColors.onBg(context),
               letterSpacing: -0.5,
             ),
             maxLines: 1,
@@ -709,10 +704,10 @@ class _StatisticsPageState extends State<StatisticsPage> {
           const SizedBox(height: 2),
           Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 11,
               fontWeight: FontWeight.w700,
-              color: _dark,
+              color: VoxColors.onBg(context),
             ),
           ),
           Text(sub, style: TextStyle(fontSize: 10, color: Colors.grey[500])),
@@ -756,7 +751,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: _card,
+        color: VoxColors.surface(context),
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
@@ -769,16 +764,16 @@ class _StatisticsPageState extends State<StatisticsPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Row(
+          Row(
             children: [
-              Icon(Icons.cloud_done_outlined, color: _gold, size: 18),
+              Icon(Icons.cloud_done_outlined, color: VoxColors.primary(context), size: 18),
               SizedBox(width: 8),
               Text(
                 'Top Triggers by Time Evaluated',
                 style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w900,
-                  color: _dark,
+                  color: VoxColors.onBg(context),
                 ),
               ),
             ],
@@ -792,7 +787,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 ? (timeMs / totalTime * 100).round()
                 : 0;
 
-            final color = _barColors[rank.clamp(0, _barColors.length - 1)];
+            final color = _barColors(context)[rank.clamp(0, _barColors(context).length - 1)];
 
             return Padding(
               padding: const EdgeInsets.only(bottom: 12),
@@ -823,10 +818,10 @@ class _StatisticsPageState extends State<StatisticsPage> {
                       children: [
                         Text(
                           name,
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 13,
                             fontWeight: FontWeight.w600,
-                            color: _dark,
+                            color: VoxColors.onBg(context),
                           ),
                         ),
                         Text(
@@ -854,12 +849,15 @@ class _StatisticsPageState extends State<StatisticsPage> {
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         gradient: LinearGradient(
-          colors: [_accent.withValues(alpha: 0.15), _accent.withValues(alpha: 0.05)],
+          colors: [
+            VoxColors.primary(context).withValues(alpha: 0.15),
+            VoxColors.primary(context).withValues(alpha: 0.05)
+          ],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
-        border: Border.all(color: _accent.withValues(alpha: 0.2)),
+        border: Border.all(color: VoxColors.primary(context).withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
@@ -873,8 +871,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 child: CircularProgressIndicator(
                   value: service.todayGoalProgress,
                   strokeWidth: 8,
-                  backgroundColor: Colors.white.withValues(alpha: 0.05),
-                  valueColor: const AlwaysStoppedAnimation<Color>(_gold),
+                  backgroundColor: VoxColors.onBg(context).withValues(alpha: 0.05),
+                  valueColor: AlwaysStoppedAnimation<Color>(VoxColors.primary(context)),
                 ),
               ),
               Column(
@@ -882,16 +880,16 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 children: [
                   Text(
                     '${(service.todayGoalProgress * 100).toInt()}%',
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: VoxColors.onBg(context),
                       fontWeight: FontWeight.w900,
                       fontSize: 16,
                     ),
                   ),
-                  const Text(
+                  Text(
                     'GOAL',
                     style: TextStyle(
-                      color: Colors.white54,
+                      color: VoxColors.textHint(context),
                       fontSize: 8,
                       fontWeight: FontWeight.bold,
                     ),
@@ -908,7 +906,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
               children: [
                 Row(
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.local_fire_department_rounded,
                       color: Colors.orangeAccent,
                       size: 22,
@@ -916,8 +914,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
                     const SizedBox(width: 6),
                     Text(
                       '${service.currentStreak} Day Streak',
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: VoxColors.onBg(context),
                         fontWeight: FontWeight.w900,
                         fontSize: 18,
                       ),
@@ -927,7 +925,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 const SizedBox(height: 4),
                 Text(
                   'Goal: ${service.dailyGoalMinutes} mins / day',
-                  style: const TextStyle(color: Colors.white70, fontSize: 13),
+                  style: TextStyle(color: VoxColors.textSecondary(context), fontSize: 13),
                 ),
                 const SizedBox(height: 12),
                 GestureDetector(
@@ -938,13 +936,13 @@ class _StatisticsPageState extends State<StatisticsPage> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.08),
+                      color: VoxColors.onBg(context).withValues(alpha: 0.08),
                       borderRadius: BorderRadius.circular(20),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Edit Daily Goal',
                       style: TextStyle(
-                        color: _gold,
+                        color: VoxColors.primary(context),
                         fontSize: 11,
                         fontWeight: FontWeight.bold,
                       ),
@@ -964,18 +962,18 @@ class _StatisticsPageState extends State<StatisticsPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: _card,
+        backgroundColor: VoxColors.surface(ctx),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        title: const Text(
+        title: Text(
           'Daily Reading Goal',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+          style: TextStyle(color: VoxColors.onBg(ctx), fontWeight: FontWeight.w900),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               'Set your daily target in minutes to stay consistent.',
-              style: TextStyle(color: Colors.white70, fontSize: 13),
+              style: TextStyle(color: VoxColors.textSecondary(ctx), fontSize: 13),
             ),
             const SizedBox(height: 20),
             StatefulBuilder(
@@ -983,8 +981,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
                 children: [
                   Text(
                     '$newGoal Minutes',
-                    style: const TextStyle(
-                      color: _gold,
+                    style: TextStyle(
+                      color: VoxColors.primary(ctx),
                       fontSize: 24,
                       fontWeight: FontWeight.w900,
                     ),
@@ -994,7 +992,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
                     min: 5,
                     max: 120,
                     divisions: 23,
-                    activeColor: _gold,
+                    activeColor: VoxColors.primary(ctx),
                     onChanged: (v) => setState(() => newGoal = v.toInt()),
                   ),
                 ],
@@ -1005,9 +1003,9 @@ class _StatisticsPageState extends State<StatisticsPage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text(
+            child: Text(
               'Cancel',
-              style: TextStyle(color: Colors.white54),
+              style: TextStyle(color: VoxColors.textHint(ctx)),
             ),
           ),
           ElevatedButton(
@@ -1016,14 +1014,14 @@ class _StatisticsPageState extends State<StatisticsPage> {
               Navigator.pop(ctx);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: _gold,
+              backgroundColor: VoxColors.primary(ctx),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
-            child: const Text(
+            child: Text(
               'Save Goal',
-              style: TextStyle(color: _cream, fontWeight: FontWeight.bold),
+              style: TextStyle(color: VoxColors.onPrimary(ctx), fontWeight: FontWeight.bold),
             ),
           ),
         ],

@@ -1,4 +1,4 @@
-﻿import 'dart:async';
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -6,6 +6,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_tts/flutter_tts.dart';
+import 'theme_provider.dart';
 
 const _kDevWhatsApp = '905488265289';
 const _kEmailJSServiceId = String.fromEnvironment(
@@ -20,12 +21,7 @@ const _kEmailJSPublicKey = String.fromEnvironment(
   'EMAILJS_PUBLIC_KEY',
   defaultValue: '7lv-I2bSLiEeBpoYg',
 );
-const _kBgColor = Color(0xFF0A0E1A);
-const _kHeaderColor = Color(0xFF0A0E1A);
-const _kTextLight = Colors.white;
-const _kWaGreen = Color(0xFF25D366);
-const _kDarkBtn = Color(0xFF141A29);
-const _kNavy = Color(0xFF141A29);
+// Replaced hardcoded constants with dynamic tokens in the build methods
 
 enum ContactPreference { email, whatsapp }
 
@@ -143,7 +139,7 @@ class _BlinkingHintState extends State<_BlinkingHint>
     opacity: _a,
     child: Text(
       widget.text,
-      style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 13),
+      style: TextStyle(color: VoxColors.textHint(context), fontSize: 13),
     ),
   );
 }
@@ -160,7 +156,7 @@ class _MicButton extends StatelessWidget {
       width: 38,
       height: 38,
       decoration: BoxDecoration(
-        color: isListening ? const Color(0xFFE53935) : _kDarkBtn,
+        color: isListening ? VoxColors.danger : VoxColors.surface(context),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Icon(
@@ -348,7 +344,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
   void _showError(String msg) => ScaffoldMessenger.of(context).showSnackBar(
     SnackBar(
       content: Text(msg),
-      backgroundColor: Colors.red.shade700,
+      backgroundColor: VoxColors.danger,
       behavior: SnackBarBehavior.floating,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
     ),
@@ -359,7 +355,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: VoxColors.bg(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -374,7 +370,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
               width: 40,
               height: 4,
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.2),
+                color: VoxColors.border(context),
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
@@ -383,10 +379,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
               child: TextField(
                 autofocus: true,
                 decoration: InputDecoration(
-                  hintText: 'Search countryâ€¦',
+                   hintText: 'Search countryâ€¦',
                   prefixIcon: const Icon(Icons.search, size: 18),
                   filled: true,
-                  fillColor: Colors.white.withValues(alpha: 0.04),
+                  fillColor: VoxColors.onBg(context).withValues(alpha: 0.04),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 10,
@@ -431,7 +427,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           ),
                           decoration: BoxDecoration(
                             color: active
-                                ? const Color(0xFF4B9EFF)
+                                ? VoxColors.primary(context)
                                 : Colors.transparent,
                             borderRadius: BorderRadius.circular(12),
                           ),
@@ -449,7 +445,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                     fontWeight: FontWeight.w600,
                                     color: active
                                         ? Colors.white
-                                        : Colors.white.withValues(alpha: 0.8),
+                                        : VoxColors.onBg(context).withValues(alpha: 0.8),
                                   ),
                                 ),
                               ),
@@ -458,7 +454,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 style: TextStyle(
                                   color: active
                                       ? Colors.white70
-                                      : Colors.white.withValues(alpha: 0.5),
+                                      : VoxColors.textSecondary(context),
                                   fontSize: 13,
                                 ),
                               ),
@@ -490,30 +486,30 @@ class _ContactUsPageState extends State<ContactUsPage> {
         prefixIcon: prefix,
         suffixIcon: suffix,
         filled: true,
-        fillColor: Colors.white.withValues(alpha: 0.04),
+        fillColor: VoxColors.onBg(context).withValues(alpha: 0.04),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 14,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+          borderSide: BorderSide(color: VoxColors.border(context)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+          borderSide: BorderSide(color: VoxColors.border(context)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: const BorderSide(color: Color(0xFF4B9EFF), width: 2),
+          borderSide: BorderSide(color: VoxColors.primary(context), width: 2),
         ),
         errorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.red.shade400, width: 1.5),
+          borderSide: BorderSide(color: VoxColors.danger, width: 1.5),
         ),
         focusedErrorBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide(color: Colors.red.shade400, width: 2),
+          borderSide: BorderSide(color: VoxColors.danger, width: 2),
         ),
       );
 
@@ -524,7 +520,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
       style: TextStyle(
         fontSize: 11,
         fontWeight: FontWeight.w800,
-        color: Colors.white.withValues(alpha: 0.6),
+        color: VoxColors.textHint(context),
         letterSpacing: 2,
       ),
     ),
@@ -549,11 +545,11 @@ class _ContactUsPageState extends State<ContactUsPage> {
         Container(
           height: 52,
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.04),
+            color: VoxColors.onBg(context).withValues(alpha: 0.04),
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Color(0xFF0A0E1A).withValues(alpha: 0.06),
+                color: Colors.black.withValues(alpha: 0.06),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -572,11 +568,11 @@ class _ContactUsPageState extends State<ContactUsPage> {
                   child: Container(
                     margin: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
-                      color: isEmail ? _kNavy : _kWaGreen,
+                      color: isEmail ? VoxColors.surface(context) : VoxColors.accent(context),
                       borderRadius: BorderRadius.circular(12),
                       boxShadow: [
                         BoxShadow(
-                          color: (isEmail ? Color(0xFF0A0E1A) : _kWaGreen)
+                          color: (isEmail ? Colors.black : VoxColors.accent(context))
                               .withValues(alpha: 0.25),
                           blurRadius: 8,
                           offset: const Offset(0, 2),
@@ -602,8 +598,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               Icons.mail_outline_rounded,
                               size: 16,
                               color: isEmail
-                                  ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.4),
+                                  ? VoxColors.onPrimary(context)
+                                  : VoxColors.onBg(context).withValues(alpha: 0.4),
                             ),
                             const SizedBox(width: 7),
                             Text(
@@ -612,8 +608,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
                                 color: isEmail
-                                    ? Colors.white
-                                    : Colors.white.withValues(alpha: 0.6),
+                                    ? VoxColors.onPrimary(context)
+                                    : VoxColors.onBg(context).withValues(alpha: 0.6),
                                 letterSpacing: 0.2,
                               ),
                             ),
@@ -636,8 +632,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               Icons.chat_rounded,
                               size: 16,
                               color: !isEmail
-                                  ? Colors.white
-                                  : Colors.white.withValues(alpha: 0.4),
+                                  ? VoxColors.onPrimary(context)
+                                  : VoxColors.onBg(context).withValues(alpha: 0.4),
                             ),
                             const SizedBox(width: 7),
                             Text(
@@ -646,8 +642,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 fontSize: 14,
                                 fontWeight: FontWeight.w700,
                                 color: !isEmail
-                                    ? Colors.white
-                                    : Colors.white.withValues(alpha: 0.6),
+                                    ? VoxColors.onPrimary(context)
+                                    : VoxColors.onBg(context).withValues(alpha: 0.6),
                                 letterSpacing: 0.2,
                               ),
                             ),
@@ -671,7 +667,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                 width: 6,
                 height: 6,
                 decoration: BoxDecoration(
-                  color: isEmail ? _kNavy : _kWaGreen,
+                  color: isEmail ? VoxColors.primary(context) : VoxColors.accent(context),
                   shape: BoxShape.circle,
                 ),
               ),
@@ -682,7 +678,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                     : 'WhatsApp opens â€” tap Send to deliver your message',
                 style: TextStyle(
                   fontSize: 11.5,
-                  color: isEmail ? Colors.white.withValues(alpha: 0.5) : _kWaGreen,
+                  color: isEmail ? VoxColors.textSecondary(context) : VoxColors.accent(context),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -709,26 +705,26 @@ class _ContactUsPageState extends State<ContactUsPage> {
           Container(
             width: 72,
             height: 72,
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
-              color: _kNavy,
+              color: VoxColors.surface(context),
             ),
-            child: const Icon(
+            child: Icon(
               Icons.check_rounded,
-              color: Color(0xFF4B9EFF),
+              color: VoxColors.primary(context),
               size: 38,
             ),
           ),
           const SizedBox(height: 24),
 
           // â”€â”€ Title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-          const Text(
+          Text(
             'Thank you for contacting us!',
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 22,
               fontWeight: FontWeight.w800,
-              color: Colors.white,
+              color: VoxColors.onBg(context),
               letterSpacing: -0.3,
             ),
           ),
@@ -738,7 +734,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: Colors.white.withValues(alpha: 0.8),
+              color: VoxColors.textSecondary(context),
               height: 1.5,
             ),
           ),
@@ -748,7 +744,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
-              color: Colors.white.withValues(alpha: 0.8),
+              color: VoxColors.textSecondary(context),
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -763,7 +759,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                 _sent = false;
               }),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF4B9EFF),
+                backgroundColor: VoxColors.primary(context),
                 foregroundColor: Colors.white,
                 padding: const EdgeInsets.symmetric(vertical: 15),
                 shape: RoundedRectangleBorder(
@@ -796,7 +792,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                 _sent = false;
               }),
               style: OutlinedButton.styleFrom(
-                foregroundColor: Colors.white.withValues(alpha: 0.6),
+                foregroundColor: VoxColors.textSecondary(context),
                 padding: const EdgeInsets.symmetric(vertical: 13),
                 side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
                 shape: RoundedRectangleBorder(
@@ -820,7 +816,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
   Widget build(BuildContext context) {
     final isWa = _contactPref == ContactPreference.whatsapp;
     return Scaffold(
-      backgroundColor: _kBgColor,
+      backgroundColor: VoxColors.bg(context),
       body: Column(
         children: [
           Container(
@@ -831,8 +827,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
               left: 20,
               right: 20,
             ),
-            decoration: const BoxDecoration(
-              color: _kHeaderColor,
+            decoration: BoxDecoration(
+              color: VoxColors.primary(context),
               borderRadius: BorderRadius.vertical(bottom: Radius.circular(32)),
             ),
             child: Row(
@@ -845,15 +841,15 @@ class _ContactUsPageState extends State<ContactUsPage> {
                       color: Colors.white.withValues(alpha: 0.25),
                       shape: BoxShape.circle,
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.arrow_back_ios_new_rounded,
-                      color: _kTextLight,
+                      color: VoxColors.onPrimary(context),
                       size: 16,
                     ),
                   ),
                 ),
                 const SizedBox(width: 16),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -862,7 +858,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                         style: TextStyle(
                           fontSize: 22,
                           fontWeight: FontWeight.w900,
-                          color: _kTextLight,
+                          color: VoxColors.onPrimary(context),
                           letterSpacing: -0.5,
                         ),
                       ),
@@ -871,7 +867,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                         "We'd love to hear from you",
                         style: TextStyle(
                           fontSize: 12,
-                          color: _kTextLight,
+                          color: VoxColors.onPrimary(context),
                           fontWeight: FontWeight.w500,
                         ),
                       ),
@@ -884,9 +880,9 @@ class _ContactUsPageState extends State<ContactUsPage> {
                     color: Colors.white.withValues(alpha: 0.25),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.mail_outline_rounded,
-                    color: _kTextLight,
+                    color: VoxColors.onPrimary(context),
                     size: 20,
                   ),
                 ),
@@ -1230,7 +1226,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               onPressed: _isSending ? null : _send,
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: isWa
-                                    ? _kWaGreen
+                                    ? VoxColors.accent(context)
                                     : const Color(0xFF4B9EFF),
                                 foregroundColor: Colors.white,
                                 disabledBackgroundColor: const Color(

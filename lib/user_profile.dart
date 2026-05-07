@@ -9,6 +9,7 @@ import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:app_links/app_links.dart';
+import 'theme_provider.dart';
 
 enum _SnackTone { neutral, success, error }
 
@@ -59,16 +60,6 @@ String _googleSignInUserMessage(Object e) {
   return raw;
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-//  COLORS
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-class VoxColors {
-  static const Color navy = Color(0xFF0A0E1A);
-  static const Color blue = Color(0xFF4B9EFF);
-  static const Color neonBlue = Color(0xFF4B9EFF);
-  static const Color white = Color(0xFFFFFFFF);
-  static const Color accent = Color(0xFF4B9EFF);
-}
 
 // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 //  ENTRY POINT
@@ -543,7 +534,7 @@ class _UserProfilePageState extends State<UserProfilePage>
   Future<void> _onStartFreshTapped() async {
     final confirmed = await showDialog<bool>(
       context: context,
-      barrierColor: VoxColors.navy.withValues(alpha: 0.8),
+      barrierColor: VoxColors.bg(context).withValues(alpha: 0.8),
       builder: (ctx) => AlertDialog(
         title: const Text('Start Fresh?'),
         content: const Text(
@@ -557,7 +548,7 @@ class _UserProfilePageState extends State<UserProfilePage>
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            style: ElevatedButton.styleFrom(backgroundColor: VoxColors.danger),
             child: const Text('Delete & Start Fresh'),
           ),
         ],
@@ -848,9 +839,9 @@ class _UserProfilePageState extends State<UserProfilePage>
   }) {
     if (!mounted) return;
     final bg = switch (tone) {
-      _SnackTone.success => const Color(0xFF1B5E20),
-      _SnackTone.error => const Color(0xFFC62828),
-      _SnackTone.neutral => const Color(0xFF333333),
+      _SnackTone.success => VoxColors.primary(context),
+      _SnackTone.error => VoxColors.danger,
+      _SnackTone.neutral => VoxColors.surface(context),
     };
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
@@ -871,25 +862,25 @@ class _UserProfilePageState extends State<UserProfilePage>
       backgroundColor: Colors.transparent,
       builder: (sheetContext) => Container(
         padding: const EdgeInsets.all(28),
-        decoration: const BoxDecoration(
-          color: VoxColors.navy,
+        decoration: BoxDecoration(
+          color: VoxColors.bg(context),
           borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text(
+            Text(
               "Heads up.",
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.w900,
-                color: Colors.white,
+                color: VoxColors.onBg(context),
               ),
             ),
             const SizedBox(height: 12),
             Text(
               "Without an account, your activity won't be saved.",
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.6)),
+              style: TextStyle(color: VoxColors.textSecondary(context)),
             ),
             const SizedBox(height: 32),
             Row(
@@ -898,13 +889,16 @@ class _UserProfilePageState extends State<UserProfilePage>
                   child: OutlinedButton(
                     onPressed: () => Navigator.pop(sheetContext),
                     style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.white,
-                      side: const BorderSide(color: Colors.white24),
+                      foregroundColor: VoxColors.onBg(context),
+                      side: BorderSide(color: VoxColors.border(context)),
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14)),
                       padding: const EdgeInsets.symmetric(vertical: 14),
                     ),
-                    child: const Text("Add Email"),
+                    child: Text(
+                      "Add Email",
+                      style: TextStyle(color: VoxColors.onPrimary(context)),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -920,7 +914,7 @@ class _UserProfilePageState extends State<UserProfilePage>
                       nav.pushReplacementNamed('/home');
                     },
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: VoxColors.blue,
+                      backgroundColor: VoxColors.primary(context),
                       foregroundColor: Colors.white,
                       shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(14)),
@@ -994,17 +988,17 @@ class _UserProfilePageState extends State<UserProfilePage>
                 padding: const EdgeInsets.all(4),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: VoxColors.blue, width: 3),
+                  border: Border.all(color: VoxColors.primary(context), width: 3),
                 ),
                 child: CircleAvatar(
                   radius: 52,
-                  backgroundColor: VoxColors.blue.withValues(alpha: 0.1),
+                  backgroundColor: VoxColors.primary(context).withValues(alpha: 0.1),
                   backgroundImage: _base64Image != null
                       ? _safeMemoryImage(_base64Image!)
                       : null,
                   child: _base64Image == null
-                      ? const Icon(Icons.camera_alt_outlined,
-                          color: VoxColors.blue, size: 28)
+                      ? Icon(Icons.camera_alt_outlined,
+                          color: VoxColors.primary(context), size: 28)
                       : null,
                 ),
               ),
@@ -1031,9 +1025,9 @@ class _UserProfilePageState extends State<UserProfilePage>
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: TextButton(
                 onPressed: _requestEmailSwitch,
-                child: const Text(
+                child: Text(
                   'Switch Email',
-                  style: TextStyle(color: VoxColors.blue),
+                  style: TextStyle(color: VoxColors.primary(context)),
                 ),
               ),
             ),
@@ -1058,7 +1052,7 @@ class _UserProfilePageState extends State<UserProfilePage>
                 onPressed: _showGuestWarning,
                 child: Text(
                   'Continue without account',
-                  style: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
+                  style: TextStyle(color: VoxColors.textHint(context)),
                 ),
               ),
             ),
@@ -1112,17 +1106,17 @@ class _ReturningUserView extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.04),
+              color: VoxColors.cardFill(context),
               borderRadius: BorderRadius.circular(24),
             ),
             child: Column(
               children: [
                 Text(
                   email,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: VoxColors.onBg(context),
                   ),
                 ),
                 const SizedBox(height: 32),
@@ -1136,7 +1130,7 @@ class _ReturningUserView extends StatelessWidget {
                   onPressed: onStartFresh,
                   child: const Text(
                     'START FRESH',
-                    style: TextStyle(color: Colors.red),
+                    style: TextStyle(color: VoxColors.danger),
                   ),
                 ),
               ],
@@ -1153,8 +1147,8 @@ class _VerifyingView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Center(
-      child: CircularProgressIndicator(color: VoxColors.blue),
+    return Center(
+      child: CircularProgressIndicator(color: VoxColors.primary(context)),
     );
   }
 }
@@ -1191,20 +1185,20 @@ class _AwaitingLinkView extends StatelessWidget {
           child: Container(
             padding: const EdgeInsets.all(24),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.03),
+              color: VoxColors.cardFill(context),
               borderRadius: BorderRadius.circular(24),
             ),
             child: Column(
               children: [
-                const Icon(Icons.email_outlined,
-                    size: 48, color: VoxColors.blue),
+                Icon(Icons.email_outlined,
+                    size: 48, color: VoxColors.primary(context)),
                 const SizedBox(height: 16),
                 Text(
                   email,
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 16,
                     fontWeight: FontWeight.w600,
-                    color: Colors.white,
+                    color: VoxColors.onBg(context),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -1212,7 +1206,7 @@ class _AwaitingLinkView extends StatelessWidget {
                   "We've sent a magic sign-in link to your email. Click it to continue.",
                   textAlign: TextAlign.center,
                   style:
-                      TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 13),
+                      TextStyle(color: VoxColors.textSecondary(context), fontSize: 13),
                 ),
                 const SizedBox(height: 32),
                 _VoxButton(
@@ -1229,8 +1223,8 @@ class _AwaitingLinkView extends StatelessWidget {
                         : 'Resend email',
                     style: TextStyle(
                       color: onResend == null
-                          ? Colors.white38
-                          : VoxColors.blue,
+                          ? VoxColors.textHint(context)
+                          : VoxColors.primary(context),
                     ),
                   ),
                 ),
@@ -1266,13 +1260,13 @@ class _VoxHeader extends StatelessWidget {
             padding:
                 const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
             decoration: BoxDecoration(
-              color: VoxColors.blue.withValues(alpha: 0.1),
+              color: VoxColors.primary(context).withValues(alpha: 0.1),
               borderRadius: BorderRadius.circular(6),
             ),
             child: Text(
               tag,
-              style: const TextStyle(
-                color: VoxColors.blue,
+              style: TextStyle(
+                color: VoxColors.primary(context),
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
                 letterSpacing: 1,
@@ -1282,17 +1276,17 @@ class _VoxHeader extends StatelessWidget {
           const SizedBox(height: 16),
           Text(
             title,
-            style: const TextStyle(
+            style: TextStyle(
               fontSize: 42,
               fontWeight: FontWeight.w900,
-              color: Colors.white,
+              color: VoxColors.onBg(context),
               height: 1.1,
             ),
           ),
           const SizedBox(height: 12),
           Text(
             subtitle,
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+            style: TextStyle(color: VoxColors.textSecondary(context)),
           ),
         ],
       ),
@@ -1323,28 +1317,28 @@ class _VoxTextField extends StatelessWidget {
         controller: controller,
         enabled: enabled,
         keyboardType: keyboardType,
-        style: const TextStyle(color: Colors.white),
+        style: TextStyle(color: VoxColors.onBg(context)),
         decoration: InputDecoration(
-          prefixIcon: Icon(icon, color: VoxColors.blue),
+          prefixIcon: Icon(icon, color: VoxColors.primary(context)),
           labelText: label,
-          labelStyle: TextStyle(color: Colors.white.withValues(alpha: 0.4)),
+          labelStyle: TextStyle(color: VoxColors.textHint(context)),
           filled: true,
-          fillColor: Colors.white.withValues(alpha: 0.05),
+          fillColor: VoxColors.cardFill(context),
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide.none,
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+            borderSide: BorderSide(color: VoxColors.border(context)),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: const BorderSide(color: VoxColors.blue, width: 1.5),
+            borderSide: BorderSide(color: VoxColors.primary(context), width: 1.5),
           ),
           disabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+            borderSide: BorderSide(color: VoxColors.border(context).withValues(alpha: 0.5)),
           ),
         ),
       ),
@@ -1370,28 +1364,28 @@ class _VoxButton extends StatelessWidget {
       child: ElevatedButton(
         onPressed: isLoading ? null : onTap,
         style: ElevatedButton.styleFrom(
-          backgroundColor: VoxColors.blue,
-          disabledBackgroundColor: VoxColors.blue.withValues(alpha: 0.4),
+          backgroundColor: VoxColors.primary(context),
+          disabledBackgroundColor: VoxColors.primary(context).withValues(alpha: 0.4),
           minimumSize: const Size(double.infinity, 56),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           elevation: 0,
         ),
         child: isLoading
-            ? const SizedBox(
+            ? SizedBox(
                 height: 24,
                 width: 24,
                 child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2),
+                    color: VoxColors.onPrimary(context), strokeWidth: 2),
               )
             : Text(
                 label,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w800,
-                  color: Colors.white,
-                  fontSize: 15,
-                  letterSpacing: 0.5,
-                ),
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                color: VoxColors.onPrimary(context),
+                fontSize: 15,
+                letterSpacing: 0.5,
+              ),
               ),
       ),
     );
@@ -1407,19 +1401,19 @@ class _DividerRow extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 16),
       child: Row(
         children: [
-          Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.1))),
+          Expanded(child: Divider(color: VoxColors.border(context))),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
             child: Text(
               'OR',
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.3),
+                color: VoxColors.textHint(context),
                 fontSize: 10,
                 fontWeight: FontWeight.w700,
               ),
             ),
           ),
-          Expanded(child: Divider(color: Colors.white.withValues(alpha: 0.1))),
+          Expanded(child: Divider(color: VoxColors.border(context))),
         ],
       ),
     );
@@ -1442,21 +1436,29 @@ class _GoogleButton extends StatelessWidget {
           minimumSize: const Size(double.infinity, 56),
           shape:
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          side: const BorderSide(color: Colors.white24),
+          side: BorderSide(color: VoxColors.border(context)),
         ),
         child: isLoading
-            ? const SizedBox(
+            ? SizedBox(
                 height: 24,
                 width: 24,
                 child: CircularProgressIndicator(
-                    color: VoxColors.blue, strokeWidth: 2),
+                    color: VoxColors.primary(context), strokeWidth: 2),
               )
-            : const Text(
-                'Continue with Google',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                ),
+            : Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Image.asset('assets/images/btn_google_signin.png', height: 24),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Continue with Google',
+                    style: TextStyle(
+                      color: VoxColors.onBg(context),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
               ),
       ),
     );
@@ -1471,7 +1473,7 @@ class VoxScaffoldWrapper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: VoxColors.navy,
+      backgroundColor: VoxColors.bg(context),
       body: SafeArea(
         child: SingleChildScrollView(
           padding: const EdgeInsets.symmetric(vertical: 24),

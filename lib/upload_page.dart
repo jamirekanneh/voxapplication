@@ -1,4 +1,4 @@
-﻿import 'dart:convert';
+import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
@@ -13,6 +13,7 @@ import 'package:archive/archive.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'dart:typed_data';
+import 'theme_provider.dart';
 import 'temp_library_provider.dart';
 import 'language_provider.dart';
 import 'tts_service.dart';
@@ -149,7 +150,7 @@ class _UploadPageState extends State<UploadPage> {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(snackMsg),
-        backgroundColor: const Color(0xFF333333),
+        backgroundColor: VoxColors.surface(context),
         behavior: SnackBarBehavior.floating,
       ),
     );
@@ -215,7 +216,7 @@ class _UploadPageState extends State<UploadPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('File type .$extension is not supported. Supported types: ${allowedTypes.keys.join(', ')}'),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -231,7 +232,7 @@ class _UploadPageState extends State<UploadPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('File is too large. Maximum size for .$extension files is ${maxSizeMB}MB.'),
-            backgroundColor: Colors.redAccent,
+            backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -243,9 +244,9 @@ class _UploadPageState extends State<UploadPage> {
     if (file.size == 0) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Cannot upload empty files.'),
-            backgroundColor: Colors.redAccent,
+          SnackBar(
+            content: const Text('Cannot upload empty files.'),
+            backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -297,9 +298,9 @@ class _UploadPageState extends State<UploadPage> {
       setState(() => _isUploading = false);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('File is too large. Maximum size is 50MB.'),
-            backgroundColor: Color(0xFF333333),
+          SnackBar(
+            content: const Text('File is too large. Maximum size is 50MB.'),
+            backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -361,9 +362,9 @@ class _UploadPageState extends State<UploadPage> {
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Upload failed. Please try again.'),
-            backgroundColor: Color(0xFF333333),
+          SnackBar(
+            content: const Text('Upload failed. Please try again.'),
+            backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -391,11 +392,11 @@ class _UploadPageState extends State<UploadPage> {
             content: const Text(
               'Camera permission is blocked. Enable it in Settings.',
             ),
-            backgroundColor: const Color(0xFF333333),
+            backgroundColor: VoxColors.surface(context),
             behavior: SnackBarBehavior.floating,
             action: SnackBarAction(
               label: 'OPEN SETTINGS',
-              textColor: const Color(0xFFF0F4FF),
+              textColor: VoxColors.primary(context),
               onPressed: openAppSettings,
             ),
           ),
@@ -422,7 +423,7 @@ class _UploadPageState extends State<UploadPage> {
     // Ask: single or multi-page
     final choice = await showModalBottomSheet<String>(
       context: context,
-      backgroundColor: Color(0xFF141A29),
+      backgroundColor: VoxColors.surface(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -436,14 +437,14 @@ class _UploadPageState extends State<UploadPage> {
               height: 4,
               margin: const EdgeInsets.only(bottom: 20),
               decoration: BoxDecoration(
-                color: Colors.grey[700],
+                color: VoxColors.border(context),
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            const Text(
+            Text(
               'Scan Document',
               style: TextStyle(
-                color: Colors.white,
+                color: VoxColors.onSurface(context),
                 fontWeight: FontWeight.bold,
                 fontSize: 17,
               ),
@@ -451,7 +452,7 @@ class _UploadPageState extends State<UploadPage> {
             const SizedBox(height: 4),
             Text(
               'How many pages do you want to scan?',
-              style: TextStyle(color: Colors.grey[400], fontSize: 13),
+              style: TextStyle(color: VoxColors.textSecondary(context), fontSize: 13),
             ),
             const SizedBox(height: 20),
             _scanOptionTile(
@@ -501,39 +502,35 @@ class _UploadPageState extends State<UploadPage> {
             await showDialog<bool>(
               context: context,
               builder: (ctx) => AlertDialog(
-                backgroundColor: Colors.white,
+                backgroundColor: VoxColors.surface(context),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(20),
+                  side: BorderSide(color: VoxColors.border(context)),
                 ),
                 title: Text(
                   'Page ${images.length} captured',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
+                  style: TextStyle(fontWeight: FontWeight.bold, color: VoxColors.onSurface(context)),
                 ),
-                content: const Text('Scan another page?'),
+                content: Text('Scan another page?', style: TextStyle(color: VoxColors.textSecondary(context))),
                 actions: [
                   OutlinedButton(
                     onPressed: () => Navigator.pop(ctx, false),
-                    style: OutlinedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                    ),
-                    child: const Text(
+                    child: Text(
                       'Done',
-                      style: TextStyle(color: Color(0x8A0A0E1A)),
+                      style: TextStyle(color: VoxColors.textSecondary(context)),
                     ),
                   ),
                   ElevatedButton(
                     onPressed: () => Navigator.pop(ctx, true),
                     style: ElevatedButton.styleFrom(
-                      backgroundColor: Color(0xFF0A0E1A),
+                      backgroundColor: VoxColors.primary(context),
                       shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    child: const Text(
+                    child: Text(
                       'Add Page',
-                      style: TextStyle(color: Color(0xFFF0F4FF)),
+                      style: TextStyle(color: VoxColors.onPrimary(context)),
                     ),
                   ),
                 ],
@@ -583,13 +580,13 @@ class _UploadPageState extends State<UploadPage> {
         setState(() => _isUploading = false);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'No text detected. Try better lighting or hold the camera steadier.',
-              ),
-              backgroundColor: Color(0xFF333333),
-              behavior: SnackBarBehavior.floating,
+          SnackBar(
+            content: const Text(
+              'No text detected. Try better lighting or hold the camera steadier.',
             ),
+            backgroundColor: VoxColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
           );
         }
         return;
@@ -617,9 +614,9 @@ class _UploadPageState extends State<UploadPage> {
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Scan failed. Please try again.'),
-            backgroundColor: Color(0xFF333333),
+          SnackBar(
+            content: const Text('Scan failed. Please try again.'),
+            backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -639,8 +636,9 @@ class _UploadPageState extends State<UploadPage> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: Color(0xFF1c2333),
+          color: VoxColors.cardFill(context),
           borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: VoxColors.border(context)),
         ),
         child: Row(
           children: [
@@ -648,10 +646,10 @@ class _UploadPageState extends State<UploadPage> {
               width: 46,
               height: 46,
               decoration: BoxDecoration(
-                color: const Color(0xFF4B9EFF).withValues(alpha: 0.15),
+                color: VoxColors.primary(context).withValues(alpha: 0.15),
                 borderRadius: BorderRadius.circular(12),
               ),
-              child: Icon(icon, color: const Color(0xFF4B9EFF), size: 24),
+              child: Icon(icon, color: VoxColors.primary(context), size: 24),
             ),
             const SizedBox(width: 14),
             Expanded(
@@ -660,8 +658,8 @@ class _UploadPageState extends State<UploadPage> {
                 children: [
                   Text(
                     title,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: VoxColors.onSurface(context),
                       fontWeight: FontWeight.w700,
                       fontSize: 14,
                     ),
@@ -669,7 +667,7 @@ class _UploadPageState extends State<UploadPage> {
                   const SizedBox(height: 3),
                   Text(
                     subtitle,
-                    style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                    style: TextStyle(color: VoxColors.textSecondary(context), fontSize: 12),
                   ),
                 ],
               ),

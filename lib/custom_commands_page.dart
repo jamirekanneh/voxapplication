@@ -1,10 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'custom_commands_provider.dart';
+import 'theme_provider.dart';
 
 class CustomCommandsPage extends StatefulWidget {
   const CustomCommandsPage({super.key});
@@ -190,7 +191,7 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
         if (ok) Navigator.pop(context);
       },
       child: Scaffold(
-        backgroundColor: const Color(0xFF0A0E1A),
+        backgroundColor: VoxColors.bg(context),
         body: Column(
           children: [
             // â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -203,9 +204,9 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
                 right: 20,
               ),
               decoration: BoxDecoration(
-                color: const Color(0xFF0A0E1A),
+                color: VoxColors.bg(context),
                 border: Border(
-                  bottom: BorderSide(color: Colors.white.withValues(alpha: 0.05)),
+                  bottom: BorderSide(color: VoxColors.border(context)),
                 ),
               ),
               child: Column(
@@ -224,30 +225,30 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
                             if (!context.mounted) return;
                             if (ok) Navigator.pop(context);
                           },
-                          child: const Icon(
+                          child: Icon(
                             Icons.arrow_back_ios_new_rounded,
-                            color: Colors.white,
+                            color: VoxColors.onBg(context),
                             size: 20,
                           ),
                         ),
                       ),
-                      const Text(
+                      Text(
                         'Personalized Commands',
                         style: TextStyle(
                           fontSize: 20,
                           fontWeight: FontWeight.w900,
-                          color: Colors.white,
+                          color: VoxColors.onBg(context),
                           letterSpacing: -0.5,
                         ),
                       ),
                       const SizedBox(width: 20), // Balance the back button
                     ],
                   ),
-                  const Text(
+                  Text(
                     'Hey Vox! Double-tap anywhere to listen.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Color(0xFF4B9EFF),
+                      color: VoxColors.primary(context),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -267,10 +268,10 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
                           vertical: 10,
                         ),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF4B9EFF).withValues(alpha: 0.1),
+                          color: VoxColors.primary(context).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(20),
                           border: Border.all(
-                            color: const Color(0xFF4B9EFF).withValues(alpha: 0.3),
+                            color: VoxColors.primary(context).withValues(alpha: 0.3),
                           ),
                         ),
                         child: Row(
@@ -280,7 +281,7 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
                               provider.voiceFeedbackEnabled
                                   ? Icons.record_voice_over_rounded
                                   : Icons.voice_over_off_rounded,
-                              color: const Color(0xFF4B9EFF),
+                              color: VoxColors.primary(context),
                               size: 16,
                             ),
                             const SizedBox(width: 8),
@@ -288,8 +289,8 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
                               provider.voiceFeedbackEnabled
                                   ? 'Voice Responses: ON'
                                   : 'Voice Responses: OFF',
-                              style: const TextStyle(
-                                color: Color(0xFF4B9EFF),
+                              style: TextStyle(
+                                color: VoxColors.primary(context),
                                 fontWeight: FontWeight.w800,
                                 fontSize: 12,
                               ),
@@ -304,7 +305,7 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
               ),
             ),
 
-            // â”€â”€ Guest banner â€” matches VoxHomePage style â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+            // — Guest banner — matches VoxHomePage style ———————————————————
             if (_isAnonymousUser) ...[
               const SizedBox(height: 8),
               Padding(
@@ -315,25 +316,25 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
-                    color: Color(0xFF0A0E1A).withValues(alpha: 0.06),
+                    color: VoxColors.cardFill(context),
                     borderRadius: BorderRadius.circular(10),
                     border: Border.all(
-                      color: Color(0xFF0A0E1A).withValues(alpha: 0.1),
+                      color: VoxColors.border(context),
                     ),
                   ),
-                  child: const Row(
+                  child: Row(
                     children: [
                       Icon(
                         Icons.info_outline,
-                        color: Color(0x8A0A0E1A),
+                        color: VoxColors.textHint(context),
                         size: 15,
                       ),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Guest mode â€” commands are temporary. Create an account to save them.',
+                          'Guest mode — commands are temporary. Create an account to save them.',
                           style: TextStyle(
-                            color: Color(0x8A0A0E1A),
+                            color: VoxColors.textHint(context),
                             fontSize: 11,
                             height: 1.4,
                           ),
@@ -373,11 +374,11 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
               height: 70,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                gradient: const LinearGradient(
+                gradient: LinearGradient(
                   colors: [
-                    Color(0xFF4B9EFF),
+                    VoxColors.primary(context),
                     Color(0xFF9028F5),
-                    Color(0xFF4B9EFF),
+                    VoxColors.primary(context),
                   ],
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -406,7 +407,7 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
         ),
 
         bottomNavigationBar: BottomAppBar(
-          color: const Color(0xFF141A29),
+          color: VoxColors.bg(context),
           shape: const CircularNotchedRectangle(),
           notchMargin: 8,
           child: SizedBox(
@@ -458,22 +459,22 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
             Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(
-                color: const Color(0xFF4B9EFF).withValues(alpha: 0.1),
+                color: VoxColors.primary(context).withValues(alpha: 0.1),
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
+              child: Icon(
                 Icons.mic_none_rounded,
                 size: 48,
-                color: Color(0xFF4B9EFF),
+                color: VoxColors.primary(context),
               ),
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'No personalized commands',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.w800,
-                color: Colors.white,
+                color: VoxColors.onBg(context),
               ),
             ),
             const SizedBox(height: 8),
@@ -481,7 +482,7 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
               'Tap the glowing orb to create\nyour first voice command',
               textAlign: TextAlign.center,
               style: TextStyle(
-                color: Colors.white.withValues(alpha: 0.5),
+                color: VoxColors.onBg(context).withValues(alpha: 0.5),
                 fontSize: 13,
               ),
             ),
@@ -505,11 +506,11 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, color: Colors.grey[400], size: 24),
+            Icon(icon, color: VoxColors.textHint(context), size: 24),
             Text(
               label,
               style: TextStyle(
-                color: Colors.grey[400],
+                color: VoxColors.textHint(context),
                 fontSize: 9,
                 fontWeight: FontWeight.bold,
               ),
@@ -538,9 +539,9 @@ class _CommandCard extends StatelessWidget {
       child: Container(
         margin: const EdgeInsets.only(bottom: 10),
         decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: 0.04),
+          color: VoxColors.cardFill(context),
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          border: Border.all(color: VoxColors.border(context)),
         ),
         child: Column(
           children: [
@@ -553,15 +554,15 @@ class _CommandCard extends StatelessWidget {
                 padding: const EdgeInsets.all(10),
                 decoration: BoxDecoration(
                   color: command.isEnabled
-                      ? const Color(0xFF4B9EFF).withValues(alpha: 0.15)
-                      : Colors.white.withValues(alpha: 0.05),
+                      ? VoxColors.primary(context).withValues(alpha: 0.15)
+                      : VoxColors.onBg(context).withValues(alpha: 0.05),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Icon(
                   command.action.icon,
                   color: command.isEnabled
-                      ? const Color(0xFF4B9EFF)
-                      : Colors.white.withValues(alpha: 0.3),
+                      ? VoxColors.primary(context)
+                      : VoxColors.onBg(context).withValues(alpha: 0.3),
                   size: 22,
                 ),
               ),
@@ -571,8 +572,8 @@ class _CommandCard extends StatelessWidget {
                   fontWeight: FontWeight.w800,
                   fontSize: 15,
                   color: command.isEnabled
-                      ? Colors.white
-                      : Colors.white.withValues(alpha: 0.4),
+                      ? VoxColors.onBg(context)
+                      : VoxColors.onBg(context).withValues(alpha: 0.4),
                   fontStyle: FontStyle.italic,
                 ),
               ),
@@ -585,8 +586,8 @@ class _CommandCard extends StatelessWidget {
                     style: TextStyle(
                       fontSize: 12,
                       color: command.isEnabled
-                          ? Colors.white.withValues(alpha: 0.7)
-                          : Colors.white.withValues(alpha: 0.3),
+                          ? VoxColors.onBg(context).withValues(alpha: 0.7)
+                          : VoxColors.onBg(context).withValues(alpha: 0.3),
                       fontWeight: FontWeight.w600,
                     ),
                   ),
@@ -594,9 +595,9 @@ class _CommandCard extends StatelessWidget {
                       command.parameter!.isNotEmpty)
                     Text(
                       'â†’ ${command.parameter}',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontSize: 11,
-                        color: Color(0xFF4B9EFF),
+                        color: VoxColors.primary(context),
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -619,8 +620,8 @@ class _CommandCard extends StatelessWidget {
                               ? Icons.toggle_on_rounded
                               : Icons.toggle_off_rounded,
                           color: command.isEnabled
-                              ? const Color(0xFF4B9EFF)
-                              : Colors.white.withValues(alpha: 0.3),
+                              ? VoxColors.primary(context)
+                              : VoxColors.onBg(context).withValues(alpha: 0.3),
                           size: 32,
                         ),
                       ),
@@ -636,7 +637,7 @@ class _CommandCard extends StatelessWidget {
                         padding: const EdgeInsets.all(6),
                         child: Icon(
                           Icons.edit_outlined,
-                          color: Colors.white.withValues(alpha: 0.5),
+                          color: VoxColors.onBg(context).withValues(alpha: 0.5),
                           size: 20,
                         ),
                       ),
@@ -651,7 +652,7 @@ class _CommandCard extends StatelessWidget {
                         padding: EdgeInsets.all(6),
                         child: Icon(
                           Icons.delete_outline_rounded,
-                          color: Colors.redAccent,
+                          color: VoxColors.danger,
                           size: 20,
                         ),
                       ),
@@ -672,30 +673,30 @@ class _CommandCard extends StatelessWidget {
       builder: (ctx) => Semantics(
         label: 'Delete command confirmation dialog',
         child: AlertDialog(
-          backgroundColor: const Color(0xFF0A0E1A),
+          backgroundColor: VoxColors.bg(context),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
-            side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+            side: BorderSide(color: VoxColors.border(context)),
           ),
-          title: const Text(
+          title: Text(
             'Delete Command?',
-            style: TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
+            style: TextStyle(fontWeight: FontWeight.w800, color: VoxColors.onBg(context)),
           ),
           content: Text(
             'Remove the command: "${command.phrase}"?\n\nThis item will be stored in the Recycle Bin and permanently deleted after 30 days.',
-            style: TextStyle(color: Colors.white.withValues(alpha: 0.8)),
+            style: TextStyle(color: VoxColors.onBg(context).withValues(alpha: 0.8)),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
               child: Text(
                 'Cancel',
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+                style: TextStyle(color: VoxColors.onBg(context).withValues(alpha: 0.5)),
               ),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
+                backgroundColor: VoxColors.danger,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(10),
@@ -743,7 +744,7 @@ void _showCommandSheet(BuildContext context, {CustomCommand? existing}) {
   showModalBottomSheet(
     context: context,
     isScrollControlled: true,
-    backgroundColor: const Color(0xFF0A0E1A),
+    backgroundColor: VoxColors.bg(context),
     shape: const RoundedRectangleBorder(
       borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
     ),
