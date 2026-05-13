@@ -1,4 +1,4 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
@@ -64,15 +64,15 @@ class _ReaderPageState extends State<ReaderPage> {
   ];
 
   static const _commandList = [
-    ['â–¶', 'play / resume', 'Resume reading'],
-    ['â¸', 'pause / wait', 'Pause reading'],
-    ['â©', 'forward / skip', 'Skip +10 seconds'],
-    ['âª', 'back / rewind', 'Go back âˆ’10 seconds'],
-    ['âš¡', 'faster / speed up', 'Increase speed'],
-    ['ðŸ¢', 'slower / slow down', 'Decrease speed'],
-    ['ðŸ”„', 'restart / beginning', 'Start from beginning'],
-    ['ðŸ›‘', 'stop / exit', 'Close reader'],
-    ['ðŸ”†', 'highlight / mark', 'Highlight last sentence'],
+    ['▶', 'play / resume', 'Resume reading'],
+    ['⏸', 'pause / wait', 'Pause reading'],
+    ['⏭', 'forward / skip', 'Skip +10 seconds'],
+    ['⏮', 'back / rewind', 'Go back -10 seconds'],
+    ['⚡', 'faster / speed up', 'Increase speed'],
+    ['🐢', 'slower / slow down', 'Decrease speed'],
+    ['🔄', 'restart / beginning', 'Start from beginning'],
+    ['🛑', 'stop / exit', 'Close reader'],
+    ['🖍️', 'highlight / mark', 'Highlight last sentence'],
   ];
 
   @override

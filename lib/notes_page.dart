@@ -1473,9 +1473,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         if (_recordingState == RecordingState.idle) ...[
           Container(
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.05),
+              color: VoxColors.surface(context),
               borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+              border: Border.all(color: VoxColors.border(context)),
             ),
             child: Column(
               children: [
@@ -1488,11 +1488,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   style: TextStyle(
                     fontSize: 15,
                     height: 1.6,
-                    color: Colors.white,
+                    color: VoxColors.onSurface(context),
                   ),
                   decoration: InputDecoration(
                     hintText: 'Type your note here...',
-                    hintStyle: TextStyle(color: Colors.grey[400], fontSize: 15),
+                    hintStyle: TextStyle(color: VoxColors.textHint(context), fontSize: 15),
                     border: InputBorder.none,
                     contentPadding: const EdgeInsets.all(16),
                     suffixIcon: Column(
@@ -1503,8 +1503,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           icon: Icon(
                             _isTranscriptDictating ? Icons.mic : Icons.mic_none,
                             color: _isTranscriptDictating
-                                ? const Color(0xFF4B9EFF)
-                                : Colors.white38,
+                                ? VoxColors.primary(context)
+                                : VoxColors.textHint(context),
                           ),
                           onPressed: () => _toggleDictation(false),
                         ),
