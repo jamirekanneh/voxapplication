@@ -32,9 +32,9 @@ android {
 
     signingConfigs {
         getByName("debug") {
-            // Use the default debug keystore location
+            // Use the project debug keystore (override with DEBUG_KEYSTORE_PATH when needed)
             val userHome = System.getProperty("user.home")
-            storeFile = file("$userHome/.android/debug.keystore")
+            storeFile = file(System.getenv("DEBUG_KEYSTORE_PATH") ?: "$userHome/.android/voxapplication-debug.keystore")
             storePassword = "android"
             keyAlias = "androiddebugkey"
             keyPassword = "android"

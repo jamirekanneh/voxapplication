@@ -321,14 +321,16 @@ class CommandDispatcher {
     VoiceAssistantInterpretation? interpreted;
     debugPrint('DISPATCH START: "$spokenText"');
     
-    // SPEED FIX: If the user hasn't set their Groq key, don't even TRY the AI.
+    // SPEED FIX: If the user hasn't set their OpenRouter key, don't even TRY the AI.
     // This removes the 10-20 second "slow" feeling of a failing request.
-    final isPlaceholder = kGroqKey.isEmpty || 
-                          kGroqKey.toLowerCase().contains('your_') || 
-                          kGroqKey.toLowerCase().contains('api_key');
+    final isPlaceholder = kOpenRouterKey.isEmpty ||
+        kOpenRouterKey.toLowerCase().contains('your_') ||
+        kOpenRouterKey.toLowerCase().contains('api_key');
                           
     if (isPlaceholder) {
-      debugPrint('DISPATCH: Groq key missing or placeholder, skipping AI phase.');
+      debugPrint(
+        'DISPATCH: OpenRouter key missing or placeholder, skipping AI phase.',
+      );
     } else {
       try {
         interpreted = await AiService.interpretVoiceAssistant(

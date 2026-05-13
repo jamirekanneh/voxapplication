@@ -30,25 +30,46 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     final user = FirebaseAuth.instance.currentUser;
 
     if (user == null) {
-      if (mounted) setState(() { _isGuest = true; _loading = false; });
+      if (mounted)
+        setState(() {
+          _isGuest = true;
+          _loading = false;
+        });
       return;
     }
 
     if (!user.isAnonymous) {
-      if (mounted) setState(() { _isGuest = false; _resolvedUid = user.uid; _loading = false; });
+      if (mounted)
+        setState(() {
+          _isGuest = false;
+          _resolvedUid = user.uid;
+          _loading = false;
+        });
       return;
     }
 
     final prefs = await SharedPreferences.getInstance();
     final hasProfile = prefs.getBool('hasProfile') ?? false;
     if (!hasProfile) {
-      if (mounted) setState(() { _isGuest = true; _loading = false; });
+      if (mounted)
+        setState(() {
+          _isGuest = true;
+          _loading = false;
+        });
       return;
     }
 
-    final uidDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
+    final uidDoc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
     if (uidDoc.exists) {
-      if (mounted) setState(() { _isGuest = false; _resolvedUid = user.uid; _loading = false; });
+      if (mounted)
+        setState(() {
+          _isGuest = false;
+          _resolvedUid = user.uid;
+          _loading = false;
+        });
       return;
     }
 
@@ -60,12 +81,21 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
           .limit(1)
           .get();
       if (query.docs.isNotEmpty) {
-        if (mounted) setState(() { _isGuest = false; _resolvedUid = query.docs.first.id; _loading = false; });
+        if (mounted)
+          setState(() {
+            _isGuest = false;
+            _resolvedUid = query.docs.first.id;
+            _loading = false;
+          });
         return;
       }
     }
 
-    if (mounted) setState(() { _isGuest = true; _loading = false; });
+    if (mounted)
+      setState(() {
+        _isGuest = true;
+        _loading = false;
+      });
   }
 
   CollectionReference get _bin => FirebaseFirestore.instance
@@ -78,9 +108,12 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _restore(BuildContext context, DocumentSnapshot doc) async {
     try {
-      final data = Map<String, dynamic>.from(doc.data() as Map<String, dynamic>);
+      final data = Map<String, dynamic>.from(
+        doc.data() as Map<String, dynamic>,
+      );
       final sourceCol = data['sourceCollection'] as String? ?? 'library';
-      final itemName = data['fileName'] as String? ?? data['phrase'] as String? ?? 'Item';
+      final itemName =
+          data['fileName'] as String? ?? data['phrase'] as String? ?? 'Item';
 
       data.remove('deletedAt');
       data.remove('sourceCollection');
@@ -93,11 +126,11 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
           'audioUrl': data['audioUrl'],
           'recordingDurationSeconds': data['recordingDurationSeconds'],
           'userId': _resolvedUid,
-          'timestamp': data['originalTimestamp'] ?? FieldValue.serverTimestamp(),
+          'timestamp':
+              data['originalTimestamp'] ?? FieldValue.serverTimestamp(),
         };
         noteData.removeWhere((_, v) => v == null);
         await FirebaseFirestore.instance.collection('notes').add(noteData);
-
       } else if (sourceCol == 'custom_commands') {
         // Restore as a custom command
         final cmdData = {
@@ -109,8 +142,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
           'userId': _resolvedUid,
         };
         cmdData.removeWhere((_, v) => v == null);
-        await FirebaseFirestore.instance.collection('custom_commands').add(cmdData);
-
+        await FirebaseFirestore.instance
+            .collection('custom_commands')
+            .add(cmdData);
       } else {
         // Restore as a library file
         final libData = {
@@ -118,7 +152,8 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
           'content': data['content'] ?? '',
           'fileType': data['fileType'] ?? 'file',
           'userId': _resolvedUid,
-          'timestamp': data['originalTimestamp'] ?? FieldValue.serverTimestamp(),
+          'timestamp':
+              data['originalTimestamp'] ?? FieldValue.serverTimestamp(),
         };
         libData.removeWhere((_, v) => v == null);
         await FirebaseFirestore.instance.collection('library').add(libData);
@@ -131,14 +166,20 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
           SnackBar(
             content: Row(
               children: [
-                const Icon(Icons.check_circle_outline, color: Colors.white, size: 18),
+                const Icon(
+                  Icons.check_circle_outline,
+                  color: Colors.white,
+                  size: 18,
+                ),
                 const SizedBox(width: 10),
                 Expanded(child: Text('"$itemName" restored successfully.')),
               ],
             ),
             backgroundColor: VoxColors.primary(context),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -150,7 +191,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
             content: const Text('Restore failed. Please try again.'),
             backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -161,9 +204,13 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  PERMANENT DELETE
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<void> _permanentDelete(BuildContext context, DocumentSnapshot doc) async {
+  Future<void> _permanentDelete(
+    BuildContext context,
+    DocumentSnapshot doc,
+  ) async {
     final data = doc.data() as Map<String, dynamic>;
-    final name = data['fileName'] as String? ?? data['phrase'] as String? ?? 'Item';
+    final name =
+        data['fileName'] as String? ?? data['phrase'] as String? ?? 'Item';
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -176,21 +223,36 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
           children: [
             const Icon(Icons.warning_amber_rounded, color: VoxColors.danger),
             const SizedBox(width: 8),
-            Text('Delete Forever?', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: VoxColors.onSurface(context))),
+            Text(
+              'Delete Forever?',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 17,
+                color: VoxColors.onSurface(context),
+              ),
+            ),
           ],
         ),
-        content: Text('"$name" will be permanently deleted and cannot be recovered.', style: TextStyle(color: VoxColors.textSecondary(context))),
+        content: Text(
+          '"$name" will be permanently deleted and cannot be recovered.',
+          style: TextStyle(color: VoxColors.textSecondary(context)),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: VoxColors.textHint(context))),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: VoxColors.textHint(context)),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: VoxColors.danger,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             child: const Text('Delete Forever'),
           ),
@@ -205,7 +267,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
             content: Text('"$name" permanently deleted.'),
             backgroundColor: VoxColors.surface(context),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -216,7 +280,10 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  EMPTY TRASH
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<void> _emptyTrash(BuildContext context, List<DocumentSnapshot> docs) async {
+  Future<void> _emptyTrash(
+    BuildContext context,
+    List<DocumentSnapshot> docs,
+  ) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -229,21 +296,36 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
           children: [
             const Icon(Icons.delete_forever, color: VoxColors.danger),
             const SizedBox(width: 8),
-            Text('Empty Trash?', style: TextStyle(fontWeight: FontWeight.w800, fontSize: 17, color: VoxColors.onSurface(context))),
+            Text(
+              'Empty Trash?',
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 17,
+                color: VoxColors.onSurface(context),
+              ),
+            ),
           ],
         ),
-        content: Text('All ${docs.length} item(s) will be permanently deleted. This cannot be undone.', style: TextStyle(color: VoxColors.textSecondary(context))),
+        content: Text(
+          'All ${docs.length} item(s) will be permanently deleted. This cannot be undone.',
+          style: TextStyle(color: VoxColors.textSecondary(context)),
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: VoxColors.textHint(context))),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: VoxColors.textHint(context)),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: VoxColors.danger,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             child: const Text('Empty Trash'),
           ),
@@ -268,7 +350,9 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
             ),
             backgroundColor: VoxColors.surface(context),
             behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
             margin: const EdgeInsets.all(16),
           ),
         );
@@ -296,12 +380,21 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     if (sourceCol == 'notes') return Icons.note_alt_outlined;
     if (sourceCol == 'custom_commands') return Icons.mic_none_rounded;
     switch (fileType?.toLowerCase()) {
-      case 'pdf': return Icons.picture_as_pdf_outlined;
-      case 'docx': case 'doc': return Icons.description_outlined;
-      case 'pptx': case 'ppt': return Icons.slideshow_outlined;
-      case 'scan': return Icons.document_scanner_outlined;
-      case 'txt': case 'md': return Icons.article_outlined;
-      default: return Icons.insert_drive_file_outlined;
+      case 'pdf':
+        return Icons.picture_as_pdf_outlined;
+      case 'docx':
+      case 'doc':
+        return Icons.description_outlined;
+      case 'pptx':
+      case 'ppt':
+        return Icons.slideshow_outlined;
+      case 'scan':
+        return Icons.document_scanner_outlined;
+      case 'txt':
+      case 'md':
+        return Icons.article_outlined;
+      default:
+        return Icons.insert_drive_file_outlined;
     }
   }
 
@@ -322,10 +415,14 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _cleanUpExpiredItems() async {
     if (_resolvedUid == null) return;
-    final thirtyDaysAgo = Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 30)));
-    
+    final thirtyDaysAgo = Timestamp.fromDate(
+      DateTime.now().subtract(const Duration(days: 30)),
+    );
+
     try {
-      final expiredQuery = await _bin.where('deletedAt', isLessThanOrEqualTo: thirtyDaysAgo).get();
+      final expiredQuery = await _bin
+          .where('deletedAt', isLessThanOrEqualTo: thirtyDaysAgo)
+          .get();
       if (expiredQuery.docs.isNotEmpty) {
         final batch = FirebaseFirestore.instance.batch();
         for (var doc in expiredQuery.docs) {
@@ -346,14 +443,27 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                 children: [
                   const Icon(Icons.info_outline, color: VoxColors.danger),
                   const SizedBox(width: 8),
-                  Text('Items Auto-Deleted', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: VoxColors.onSurface(context))),
+                  Text(
+                    'Items Auto-Deleted',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 18,
+                      color: VoxColors.onSurface(context),
+                    ),
+                  ),
                 ],
               ),
-              content: Text('${expiredQuery.docs.length} item(s) were permanently deleted because they have been in the Recycle Bin for more than 30 days.', style: TextStyle(color: VoxColors.textSecondary(context))),
+              content: Text(
+                '${expiredQuery.docs.length} item(s) were permanently deleted because they have been in the Recycle Bin for more than 30 days.',
+                style: TextStyle(color: VoxColors.textSecondary(context)),
+              ),
               actions: [
                 TextButton(
                   onPressed: () => Navigator.pop(ctx),
-                  child: Text('OK', style: TextStyle(color: VoxColors.primary(context))),
+                  child: Text(
+                    'OK',
+                    style: TextStyle(color: VoxColors.primary(context)),
+                  ),
                 ),
               ],
             ),
@@ -373,7 +483,12 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     if (_loading) {
       return Scaffold(
         backgroundColor: VoxColors.bg(context),
-        body: Center(child: CircularProgressIndicator(color: VoxColors.primary(context), strokeWidth: 2)),
+        body: Center(
+          child: CircularProgressIndicator(
+            color: VoxColors.primary(context),
+            strokeWidth: 2,
+          ),
+        ),
       );
     }
 
@@ -382,7 +497,13 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
       return Scaffold(
         backgroundColor: VoxColors.bg(context),
         appBar: AppBar(
-          title: Text('Recycle Bin', style: TextStyle(color: VoxColors.onBg(context), fontWeight: FontWeight.bold)),
+          title: Text(
+            'Recycle Bin',
+            style: TextStyle(
+              color: VoxColors.onBg(context),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
           backgroundColor: Colors.transparent,
           elevation: 0,
           iconTheme: IconThemeData(color: VoxColors.onBg(context)),
@@ -400,18 +521,31 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                     color: VoxColors.primary(context).withValues(alpha: 0.08),
                     shape: BoxShape.circle,
                   ),
-                  child: Icon(Icons.delete_outline_rounded, size: 46, color: VoxColors.primary(context)),
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    size: 46,
+                    color: VoxColors.primary(context),
+                  ),
                 ),
                 const SizedBox(height: 24),
                 Text(
                   'Sign in to use Recycle Bin',
-                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: VoxColors.onBg(context), letterSpacing: -0.5),
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.w900,
+                    color: VoxColors.onBg(context),
+                    letterSpacing: -0.5,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
                 Text(
                   'The Recycle Bin is for registered users only. Guest data is removed when you leave the app. Create an account to unlock 30-day recovery.',
-                  style: TextStyle(fontSize: 13, color: VoxColors.textSecondary(context), height: 1.6),
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: VoxColors.textSecondary(context),
+                    height: 1.6,
+                  ),
                   textAlign: TextAlign.center,
                 ),
               ],
@@ -422,14 +556,23 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     }
 
     // â”€â”€ Logged-in User View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-    final thirtyDaysAgo = Timestamp.fromDate(DateTime.now().subtract(const Duration(days: 30)));
+    final thirtyDaysAgo = Timestamp.fromDate(
+      DateTime.now().subtract(const Duration(days: 30)),
+    );
 
     return DefaultTabController(
       length: 4,
       child: Scaffold(
         backgroundColor: VoxColors.bg(context),
         appBar: AppBar(
-          title: Text('Recycle Bin', style: TextStyle(color: VoxColors.onBg(context), fontWeight: FontWeight.bold, fontSize: 20)),
+          title: Text(
+            'Recycle Bin',
+            style: TextStyle(
+              color: VoxColors.onBg(context),
+              fontWeight: FontWeight.bold,
+              fontSize: 20,
+            ),
+          ),
           backgroundColor: Colors.transparent,
           elevation: 0,
           iconTheme: IconThemeData(color: VoxColors.onBg(context)),
@@ -438,7 +581,10 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
             labelColor: VoxColors.onBg(context),
             unselectedLabelColor: VoxColors.textSecondary(context),
             indicatorColor: VoxColors.primary(context),
-            labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+            labelStyle: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ),
             tabs: const [
               Tab(text: 'Notes'),
               Tab(text: 'Recordings'),
@@ -462,16 +608,27 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Container(
-                      width: 70, height: 70,
+                      width: 70,
+                      height: 70,
                       decoration: BoxDecoration(
                         color: VoxColors.onBg(context).withValues(alpha: 0.04),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(Icons.delete_outline_rounded, size: 36, color: VoxColors.onBg(context).withValues(alpha: 0.2)),
+                      child: Icon(
+                        Icons.delete_outline_rounded,
+                        size: 36,
+                        color: VoxColors.onBg(context).withValues(alpha: 0.2),
+                      ),
                     ),
                     const SizedBox(height: 16),
-                    Text('Nothing here yet',
-                        style: TextStyle(color: VoxColors.textSecondary(context), fontWeight: FontWeight.w700, fontSize: 15)),
+                    Text(
+                      'Nothing here yet',
+                      style: TextStyle(
+                        color: VoxColors.textSecondary(context),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 15,
+                      ),
+                    ),
                   ],
                 ),
               );
@@ -482,12 +639,15 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
             // Categorize
             final notesDocs = docs.where((d) {
               final val = d.data() as Map<String, dynamic>;
-              return val['sourceCollection'] == 'notes' && val['audioUrl'] == null;
+              return val['sourceCollection'] == 'notes' &&
+                  val['audioUrl'] == null;
             }).toList();
-            
+
             final recordingsDocs = docs.where((d) {
               final val = d.data() as Map<String, dynamic>;
-              return val['sourceCollection'] == 'recordings' || (val['sourceCollection'] == 'notes' && val['audioUrl'] != null);
+              return val['sourceCollection'] == 'recordings' ||
+                  (val['sourceCollection'] == 'notes' &&
+                      val['audioUrl'] != null);
             }).toList();
 
             final uploadsDocs = docs.where((d) {
@@ -506,7 +666,10 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 10,
+                    ),
                     decoration: BoxDecoration(
                       color: VoxColors.cardFill(context),
                       borderRadius: BorderRadius.circular(12),
@@ -514,19 +677,33 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.info_outline_rounded, size: 15, color: VoxColors.textSecondary(context)),
+                        Icon(
+                          Icons.info_outline_rounded,
+                          size: 15,
+                          color: VoxColors.textSecondary(context),
+                        ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             'Items are permanently deleted after 30 days.',
-                            style: TextStyle(fontSize: 11, color: VoxColors.textSecondary(context), height: 1.4),
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: VoxColors.textSecondary(context),
+                              height: 1.4,
+                            ),
                           ),
                         ),
                         if (docs.isNotEmpty)
                           GestureDetector(
                             onTap: () => _emptyTrash(context, docs),
-                            child: const Text('Empty Trash',
-                                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: VoxColors.danger)),
+                            child: const Text(
+                              'Empty Trash',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: VoxColors.danger,
+                              ),
+                            ),
                           ),
                       ],
                     ),
@@ -564,11 +741,21 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                 color: VoxColors.primary(context).withValues(alpha: 0.06),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.delete_outline_rounded, size: 36, color: VoxColors.onBg(context).withValues(alpha: 0.2)),
+              child: Icon(
+                Icons.delete_outline_rounded,
+                size: 36,
+                color: VoxColors.onBg(context).withValues(alpha: 0.2),
+              ),
             ),
             const SizedBox(height: 16),
-            Text('No deleted items here',
-                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: VoxColors.textHint(context))),
+            Text(
+              'No deleted items here',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w700,
+                color: VoxColors.textHint(context),
+              ),
+            ),
           ],
         ),
       );
@@ -582,7 +769,10 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
         final data = doc.data() as Map<String, dynamic>;
         final sourceCol = data['sourceCollection'] as String?;
         final fileType = data['fileType'] as String?;
-        final name = data['fileName'] as String? ?? data['phrase'] as String? ?? 'Unknown';
+        final name =
+            data['fileName'] as String? ??
+            data['phrase'] as String? ??
+            'Unknown';
         final daysLeft = _daysRemaining(data['deletedAt']);
         final typeColor = _colorForType(sourceCol);
         final typeIcon = _iconForType(fileType, sourceCol);
@@ -619,25 +809,40 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                         name,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontWeight: FontWeight.w700, fontSize: 14, color: VoxColors.onBg(context)),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14,
+                          color: VoxColors.onBg(context),
+                        ),
                       ),
                       const SizedBox(height: 4),
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 7,
+                              vertical: 2,
+                            ),
                             decoration: BoxDecoration(
                               color: typeColor.withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(6),
                             ),
-                            child: Text(typeLabel,
-                                style: TextStyle(fontSize: 9, fontWeight: FontWeight.w700, color: typeColor)),
+                            child: Text(
+                              typeLabel,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: typeColor,
+                              ),
+                            ),
                           ),
                           const SizedBox(width: 8),
                           Icon(
                             Icons.timer_outlined,
                             size: 11,
-                            color: daysLeft <= 3 ? VoxColors.danger : VoxColors.textSecondary(context),
+                            color: daysLeft <= 3
+                                ? VoxColors.danger
+                                : VoxColors.textSecondary(context),
                           ),
                           const SizedBox(width: 3),
                           Text(
@@ -646,8 +851,12 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                                 : 'Expires in $daysLeft day${daysLeft == 1 ? '' : 's'}',
                             style: TextStyle(
                               fontSize: 11,
-                              color: daysLeft <= 3 ? VoxColors.danger : VoxColors.textSecondary(context),
-                              fontWeight: daysLeft <= 3 ? FontWeight.w600 : FontWeight.normal,
+                              color: daysLeft <= 3
+                                  ? VoxColors.danger
+                                  : VoxColors.textSecondary(context),
+                              fontWeight: daysLeft <= 3
+                                  ? FontWeight.w600
+                                  : FontWeight.normal,
                             ),
                           ),
                         ],
@@ -662,17 +871,33 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                     GestureDetector(
                       onTap: () => _restore(context, doc),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
                         decoration: BoxDecoration(
-                          color: VoxColors.primary(context).withValues(alpha: 0.1),
+                          color: VoxColors.primary(
+                            context,
+                          ).withValues(alpha: 0.1),
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.restore_rounded, color: VoxColors.primary(context), size: 15),
+                            Icon(
+                              Icons.restore_rounded,
+                              color: VoxColors.primary(context),
+                              size: 15,
+                            ),
                             const SizedBox(width: 4),
-                            Text('Restore', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: VoxColors.primary(context))),
+                            Text(
+                              'Restore',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: VoxColors.primary(context),
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -681,7 +906,10 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                     GestureDetector(
                       onTap: () => _permanentDelete(context, doc),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
                         decoration: BoxDecoration(
                           color: VoxColors.danger.withValues(alpha: 0.08),
                           borderRadius: BorderRadius.circular(10),
@@ -689,9 +917,20 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                         child: const Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.delete_forever_rounded, color: VoxColors.danger, size: 15),
-                            const SizedBox(width: 4),
-                            Text('Delete', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: VoxColors.danger)),
+                            Icon(
+                              Icons.delete_forever_rounded,
+                              color: VoxColors.danger,
+                              size: 15,
+                            ),
+                            SizedBox(width: 4),
+                            Text(
+                              'Delete',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: VoxColors.danger,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -706,4 +945,3 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     );
   }
 }
-

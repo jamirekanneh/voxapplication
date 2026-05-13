@@ -43,25 +43,24 @@ class VoxColors {
   VoxColors._();
 
   // ── Raw palette ──────────────────────────────────────────
-  static const Color _darkBg          = Color(0xFF0A0E1A);
-  static const Color _darkSurface     = Color(0xFF141A29);
-  static const Color _darkSurface2    = Color(0xFF1A1F33);
-  static const Color _darkSurface3    = Color(0xFF0F1629);
-  static const Color _neonBlue        = Color(0xFF4B9EFF);
-  static const Color _brightBlue      = Color(0xFF1A6FFF);
+  static const Color _darkBg = Color(0xFF0A0E1A);
+  static const Color _darkSurface = Color(0xFF141A29);
+  static const Color _darkSurface2 = Color(0xFF1A1F33);
+  static const Color _darkSurface3 = Color(0xFF0F1629);
+  static const Color _neonBlue = Color(0xFF4B9EFF);
+  static const Color _brightBlue = Color(0xFF1A6FFF);
 
-  static const Color _lightBg         = Color(0xFFEBF2FF);
-  static const Color _lightSurface    = Color(0xFFFFFFFF);
-  static const Color _lightSurface2   = Color(0xFFF0F5FF);
-  static const Color _lightSurface3   = Color(0xFFE0EAFF);
-  static const Color _lightOnBg       = Color(0xFF0A0E1A);
+  static const Color _lightBg = Color(0xFFEBF2FF);
+  static const Color _lightSurface = Color(0xFFFFFFFF);
+  static const Color _lightSurface2 = Color(0xFFF0F5FF);
+  static const Color _lightSurface3 = Color(0xFFE0EAFF);
+  static const Color _lightOnBg = Color(0xFF0A0E1A);
 
   // ── Context-aware tokens ─────────────────────────────────
   static bool _isDark(BuildContext ctx) =>
       Theme.of(ctx).brightness == Brightness.dark;
 
-  static Color bg(BuildContext ctx) =>
-      _isDark(ctx) ? _darkBg : _lightBg;
+  static Color bg(BuildContext ctx) => _isDark(ctx) ? _darkBg : _lightBg;
 
   static Color surface(BuildContext ctx) =>
       _isDark(ctx) ? _darkSurface : _lightSurface;
@@ -81,30 +80,25 @@ class VoxColors {
   static Color onSurface(BuildContext ctx) =>
       _isDark(ctx) ? Colors.white : _lightOnBg;
 
-  static Color textSecondary(BuildContext ctx) =>
-      _isDark(ctx)
-          ? Colors.white.withValues(alpha: 0.5)
-          : _lightOnBg.withValues(alpha: 0.55);
+  static Color textSecondary(BuildContext ctx) => _isDark(ctx)
+      ? Colors.white.withValues(alpha: 0.5)
+      : _lightOnBg.withValues(alpha: 0.55);
 
-  static Color textHint(BuildContext ctx) =>
-      _isDark(ctx)
-          ? Colors.white.withValues(alpha: 0.25)
-          : _lightOnBg.withValues(alpha: 0.3);
+  static Color textHint(BuildContext ctx) => _isDark(ctx)
+      ? Colors.white.withValues(alpha: 0.25)
+      : _lightOnBg.withValues(alpha: 0.3);
 
-  static Color border(BuildContext ctx) =>
-      _isDark(ctx)
-          ? Colors.white.withValues(alpha: 0.08)
-          : Colors.black.withValues(alpha: 0.09);
+  static Color border(BuildContext ctx) => _isDark(ctx)
+      ? Colors.white.withValues(alpha: 0.08)
+      : Colors.black.withValues(alpha: 0.09);
 
-  static Color borderStrong(BuildContext ctx) =>
-      _isDark(ctx)
-          ? Colors.white.withValues(alpha: 0.15)
-          : Colors.black.withValues(alpha: 0.15);
+  static Color borderStrong(BuildContext ctx) => _isDark(ctx)
+      ? Colors.white.withValues(alpha: 0.15)
+      : Colors.black.withValues(alpha: 0.15);
 
-  static Color cardFill(BuildContext ctx) =>
-      _isDark(ctx)
-          ? Colors.white.withValues(alpha: 0.04)
-          : Colors.white.withValues(alpha: 0.9);
+  static Color cardFill(BuildContext ctx) => _isDark(ctx)
+      ? Colors.white.withValues(alpha: 0.04)
+      : Colors.white.withValues(alpha: 0.9);
 
   static Color onPrimary(BuildContext ctx) => Colors.white;
 
@@ -146,22 +140,24 @@ class AppTheme {
       elevation: 0,
     ),
     cardColor: const Color(0xFF141A29),
-    dialogBackgroundColor: const Color(0xFF141A29),
     dividerColor: Colors.white12,
     switchTheme: SwitchThemeData(
-      thumbColor: WidgetStateProperty.resolveWith((states) =>
-          states.contains(WidgetState.selected)
-              ? const Color(0xFF4B9EFF)
-              : Colors.white38),
-      trackColor: WidgetStateProperty.resolveWith((states) =>
-          states.contains(WidgetState.selected)
-              ? const Color(0xFF4B9EFF).withValues(alpha: 0.35)
-              : Colors.white12),
+      thumbColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? const Color(0xFF4B9EFF)
+            : Colors.white38,
+      ),
+      trackColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? const Color(0xFF4B9EFF).withValues(alpha: 0.35)
+            : Colors.white12,
+      ),
     ),
     textTheme: const TextTheme(
       bodyMedium: TextStyle(color: Colors.white),
       bodySmall: TextStyle(color: Colors.white70),
     ),
+    dialogTheme: DialogThemeData(backgroundColor: const Color(0xFF141A29)),
   );
 
   // ── LIGHT (bright blue-predominant) ──────────────────────
@@ -186,21 +182,23 @@ class AppTheme {
       elevation: 0,
     ),
     cardColor: Colors.white,
-    dialogBackgroundColor: Colors.white,
     dividerColor: Colors.black12,
     switchTheme: SwitchThemeData(
-      thumbColor: WidgetStateProperty.resolveWith((states) =>
-          states.contains(WidgetState.selected)
-              ? const Color(0xFF1A6FFF)
-              : Colors.white),
-      trackColor: WidgetStateProperty.resolveWith((states) =>
-          states.contains(WidgetState.selected)
-              ? const Color(0xFF1A6FFF).withValues(alpha: 0.4)
-              : Colors.black12),
+      thumbColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? const Color(0xFF1A6FFF)
+            : Colors.white,
+      ),
+      trackColor: WidgetStateProperty.resolveWith(
+        (states) => states.contains(WidgetState.selected)
+            ? const Color(0xFF1A6FFF).withValues(alpha: 0.4)
+            : Colors.black12,
+      ),
     ),
     textTheme: const TextTheme(
       bodyMedium: TextStyle(color: Color(0xFF0A0E1A)),
       bodySmall: TextStyle(color: Color(0xFF3A4A6A)),
     ),
+    dialogTheme: DialogThemeData(backgroundColor: Colors.white),
   );
 }

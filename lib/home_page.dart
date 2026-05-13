@@ -46,7 +46,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
     super.initState();
     _resolveUser();
 
-    _streakSubscription = AnalyticsService.instance.onStreakMilestone.listen((streak) {
+    _streakSubscription = AnalyticsService.instance.onStreakMilestone.listen((
+      streak,
+    ) {
       if (mounted) {
         _showStreakMilestoneDialog(streak);
       }
@@ -100,10 +102,16 @@ class _VoxHomePageState extends State<VoxHomePage> {
       SnackBar(
         content: Row(
           children: [
-            Icon(Icons.graphic_eq_rounded,
-                color: VoxColors.primary(context), size: 16),
+            Icon(
+              Icons.graphic_eq_rounded,
+              color: VoxColors.primary(context),
+              size: 16,
+            ),
             const SizedBox(width: 8),
-            Text(message, style: TextStyle(color: VoxColors.onSurface(context))),
+            Text(
+              message,
+              style: TextStyle(color: VoxColors.onSurface(context)),
+            ),
           ],
         ),
         backgroundColor: VoxColors.surface(context),
@@ -137,10 +145,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
             Text(
               'You hit a $streak Day Reading Streak!',
               textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 16,
-                color: VoxColors.onBg(context),
-              ),
+              style: TextStyle(fontSize: 16, color: VoxColors.onBg(context)),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
@@ -148,8 +153,13 @@ class _VoxHomePageState extends State<VoxHomePage> {
               style: ElevatedButton.styleFrom(
                 backgroundColor: VoxColors.primary(context),
                 foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 32,
+                  vertical: 12,
+                ),
               ),
               child: const Text('Keep it up!'),
             ),
@@ -302,7 +312,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
             const SizedBox(height: 4),
             Text(
               'What would you like to do?',
-              style: TextStyle(color: VoxColors.textSecondary(context), fontSize: 13),
+              style: TextStyle(
+                color: VoxColors.textSecondary(context),
+                fontSize: 13,
+              ),
             ),
             const SizedBox(height: 20),
             _docOptionTile(
@@ -422,7 +435,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   const SizedBox(height: 2),
                   Text(
                     subtitle,
-                    style: TextStyle(color: VoxColors.textSecondary(context), fontSize: 12),
+                    style: TextStyle(
+                      color: VoxColors.textSecondary(context),
+                      fontSize: 12,
+                    ),
                   ),
                 ],
               ),
@@ -540,7 +556,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
           children: [
             Icon(Icons.delete_outline, color: VoxColors.danger),
             const SizedBox(width: 8),
-            Text('Delete Selected?', style: TextStyle(color: VoxColors.onSurface(context))),
+            Text(
+              'Delete Selected?',
+              style: TextStyle(color: VoxColors.onSurface(context)),
+            ),
           ],
         ),
         content: Text(
@@ -550,20 +569,24 @@ class _VoxHomePageState extends State<VoxHomePage> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: Text('Cancel', style: TextStyle(color: VoxColors.textSecondary(context))),
+            child: Text(
+              'Cancel',
+              style: TextStyle(color: VoxColors.textSecondary(context)),
+            ),
           ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: VoxColors.danger,
               foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
             ),
             child: Text('Delete $count'),
           ),
         ],
       ),
-
     );
     if (confirmed != true) return;
     if (!mounted) return;
@@ -575,7 +598,12 @@ class _VoxHomePageState extends State<VoxHomePage> {
           provider.remove(id);
         }
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count file${count == 1 ? '' : 's'} deleted.'), backgroundColor: VoxColors.surface(context)));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$count file${count == 1 ? '' : 's'} deleted.'),
+              backgroundColor: VoxColors.surface(context),
+            ),
+          );
         }
       } else {
         final uid = _resolvedUid ?? FirebaseAuth.instance.currentUser?.uid;
@@ -585,7 +613,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
         final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
 
         for (var docId in _selectedIds) {
-          final docRef = FirebaseFirestore.instance.collection('library').doc(docId);
+          final docRef = FirebaseFirestore.instance
+              .collection('library')
+              .doc(docId);
           final snapshot = await docRef.get();
           if (snapshot.exists) {
             final data = snapshot.data()!;
@@ -596,7 +626,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
               'fileType': data['fileType'] ?? 'file',
               'sourceCollection': 'library',
               'deletedAt': FieldValue.serverTimestamp(),
-              'originalTimestamp': data['timestamp'] ?? FieldValue.serverTimestamp(),
+              'originalTimestamp':
+                  data['timestamp'] ?? FieldValue.serverTimestamp(),
               'userId': uid,
             });
             batch.delete(docRef);
@@ -605,12 +636,24 @@ class _VoxHomePageState extends State<VoxHomePage> {
         await batch.commit();
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$count file${count == 1 ? '' : 's'} moved to Recycle Bin.'), backgroundColor: VoxColors.surface(context)));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '$count file${count == 1 ? '' : 's'} moved to Recycle Bin.',
+              ),
+              backgroundColor: VoxColors.surface(context),
+            ),
+          );
         }
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Failed to delete: $e'), backgroundColor: VoxColors.danger));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete: $e'),
+            backgroundColor: VoxColors.danger,
+          ),
+        );
       }
     }
 
@@ -636,7 +679,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
               // â”€â”€ Header / Selection Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
               if (_isSelectionMode) ...[
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: VoxColors.bg(context),
                     borderRadius: BorderRadius.circular(16),
@@ -644,13 +690,21 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   child: Row(
                     children: [
                       IconButton(
-                        icon: Icon(Icons.close, color: VoxColors.onBg(context), size: 22),
+                        icon: Icon(
+                          Icons.close,
+                          color: VoxColors.onBg(context),
+                          size: 22,
+                        ),
                         onPressed: _exitSelectionMode,
                         tooltip: 'Cancel',
                       ),
                       Text(
                         '${_selectedIds.length} selected',
-                        style: TextStyle(color: VoxColors.onBg(context), fontWeight: FontWeight.w700, fontSize: 15),
+                        style: TextStyle(
+                          color: VoxColors.onBg(context),
+                          fontWeight: FontWeight.w700,
+                          fontSize: 15,
+                        ),
                       ),
                       const Spacer(),
                       TextButton.icon(
@@ -663,20 +717,48 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             }
                           });
                         },
-                        icon: Icon(_selectedIds.length == _visibleIds.length ? Icons.deselect : Icons.select_all, color: VoxColors.primary(context), size: 18),
-                        label: Text(_selectedIds.length == _visibleIds.length ? 'Deselect' : 'Select All', style: TextStyle(color: VoxColors.primary(context), fontWeight: FontWeight.w700, fontSize: 12)),
+                        icon: Icon(
+                          _selectedIds.length == _visibleIds.length
+                              ? Icons.deselect
+                              : Icons.select_all,
+                          color: VoxColors.primary(context),
+                          size: 18,
+                        ),
+                        label: Text(
+                          _selectedIds.length == _visibleIds.length
+                              ? 'Deselect'
+                              : 'Select All',
+                          style: TextStyle(
+                            color: VoxColors.primary(context),
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
                       ),
                       const SizedBox(width: 4),
                       ElevatedButton.icon(
-                        onPressed: _selectedIds.isNotEmpty ? _deleteSelected : null,
+                        onPressed: _selectedIds.isNotEmpty
+                            ? _deleteSelected
+                            : null,
                         icon: Icon(Icons.delete_outline, size: 18),
-                        label: const Text('Delete', style: TextStyle(fontWeight: FontWeight.w700, fontSize: 12)),
+                        label: const Text(
+                          'Delete',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                          ),
+                        ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: VoxColors.danger,
                           foregroundColor: Colors.white,
                           disabledBackgroundColor: VoxColors.border(context),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 8,
+                          ),
                         ),
                       ),
                     ],
@@ -689,12 +771,15 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   children: [
                     Row(
                       children: [
-                        const Text("Vox",
-                            style: TextStyle(
-                                fontSize: 36,
-                                fontWeight: FontWeight.w900,
-                                color: Colors.white, // Keep white for header if it's primary blue?
-                                letterSpacing: 2)),
+                        Text(
+                          "Vox",
+                          style: TextStyle(
+                            fontSize: 36,
+                            fontWeight: FontWeight.w900,
+                            color: VoxColors.onBg(context),
+                            letterSpacing: 2,
+                          ),
+                        ),
                         const SizedBox(width: 12),
                       ],
                     ),
@@ -704,12 +789,19 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       child: TextField(
                         controller: _searchController,
                         maxLength: 100,
-                        onChanged: (v) =>
-                            setState(() => _searchQuery = v.trim().toLowerCase()),
+                        onChanged: (v) => setState(
+                          () => _searchQuery = v.trim().toLowerCase(),
+                        ),
                         decoration: InputDecoration(
                           hintText: lang.t('search_hint'),
                           counterText: '',
-                          prefixIcon: Icon(Icons.search, size: 18, color: VoxColors.onBg(context).withValues(alpha: 0.5)),
+                          prefixIcon: Icon(
+                            Icons.search,
+                            size: 18,
+                            color: VoxColors.onBg(
+                              context,
+                            ).withValues(alpha: 0.5),
+                          ),
                           suffixIcon: GestureDetector(
                             onTap: _listen,
                             child: Icon(
@@ -717,12 +809,18 @@ class _VoxHomePageState extends State<VoxHomePage> {
                               size: 18,
                               color: _isListening
                                   ? VoxColors.danger
-                                  : VoxColors.onBg(context).withValues(alpha: 0.4),
+                                  : VoxColors.onBg(
+                                      context,
+                                    ).withValues(alpha: 0.4),
                             ),
                           ),
                           filled: true,
-                          fillColor: VoxColors.onBg(context).withValues(alpha: 0.08),
-                          hoverColor: VoxColors.onBg(context).withValues(alpha: 0.12),
+                          fillColor: VoxColors.onBg(
+                            context,
+                          ).withValues(alpha: 0.08),
+                          hoverColor: VoxColors.onBg(
+                            context,
+                          ).withValues(alpha: 0.12),
                           contentPadding: EdgeInsets.zero,
                           border: OutlineInputBorder(
                             borderRadius: BorderRadius.circular(20),
@@ -736,21 +834,31 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       builder: (context, provider, _) => Tooltip(
                         message: 'Assistant Mode (Voice Activated)',
                         child: GestureDetector(
-                          onTap: () => provider
-                              .setAssistantMode(!provider.assistantModeEnabled),
+                          onTap: () => provider.setAssistantMode(
+                            !provider.assistantModeEnabled,
+                          ),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 300),
                             padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 6),
+                              horizontal: 10,
+                              vertical: 6,
+                            ),
                             decoration: BoxDecoration(
                               color: provider.assistantModeEnabled
-                                  ? VoxColors.primary(context).withValues(alpha: 0.15)
-                                  : VoxColors.onBg(context).withValues(alpha: 0.05),
+                                  ? VoxColors.primary(
+                                      context,
+                                    ).withValues(alpha: 0.15)
+                                  : VoxColors.onBg(
+                                      context,
+                                    ).withValues(alpha: 0.05),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                  color: provider.assistantModeEnabled
-                                   ? VoxColors.primary(context)
-                                   : VoxColors.onBg(context).withValues(alpha: 0.1)),
+                                color: provider.assistantModeEnabled
+                                    ? VoxColors.primary(context)
+                                    : VoxColors.onBg(
+                                        context,
+                                      ).withValues(alpha: 0.1),
+                              ),
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,
@@ -759,11 +867,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                   provider.isListening
                                       ? Icons.graphic_eq_rounded
                                       : provider.assistantModeEnabled
-                                          ? Icons.mic_rounded
-                                          : Icons.mic_none_rounded,
-                                   color: provider.assistantModeEnabled
-                                       ? VoxColors.primary(context)
-                                       : VoxColors.textSecondary(context),
+                                      ? Icons.mic_rounded
+                                      : Icons.mic_none_rounded,
+                                  color: provider.assistantModeEnabled
+                                      ? VoxColors.primary(context)
+                                      : VoxColors.textSecondary(context),
                                   size: 14,
                                 ),
                                 const SizedBox(width: 6),
@@ -784,9 +892,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                     width: 6,
                                     height: 6,
                                     decoration: BoxDecoration(
-                                    color: VoxColors.primary(context),
-                                    shape: BoxShape.circle,
-                                  ),
+                                      color: VoxColors.primary(context),
+                                      shape: BoxShape.circle,
+                                    ),
                                   ),
                                 ],
                               ],
@@ -801,7 +909,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   lang.t('library'),
                   style: TextStyle(
                     fontSize: 18,
-                    color: VoxColors.primary(context), // Vox Blue instead of yellow
+                    color: VoxColors.primary(
+                      context,
+                    ), // Vox Blue instead of yellow
                     fontWeight: FontWeight.w900,
                     letterSpacing: 1.2,
                   ),
@@ -809,7 +919,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 const SizedBox(height: 10),
                 Text(
                   lang.t('tap_hint'),
-                  style: TextStyle(color: VoxColors.textHint(context), fontSize: 11),
+                  style: TextStyle(
+                    color: VoxColors.textHint(context),
+                    fontSize: 11,
+                  ),
                 ),
               ],
 
@@ -817,7 +930,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
               if (_isAnonymousUser) ...[
                 const SizedBox(height: 8),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
                   decoration: BoxDecoration(
                     color: VoxColors.cardFill(context),
                     borderRadius: BorderRadius.circular(10),
@@ -825,7 +941,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   ),
                   child: Row(
                     children: [
-                      Icon(Icons.info_outline, color: VoxColors.primary(context), size: 15),
+                      Icon(
+                        Icons.info_outline,
+                        color: VoxColors.primary(context),
+                        size: 15,
+                      ),
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
@@ -858,19 +978,32 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       child: AnimatedContainer(
                         duration: const Duration(milliseconds: 200),
                         margin: const EdgeInsets.only(right: 8),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 6,
+                        ),
                         decoration: BoxDecoration(
-                          color: isSelected ? const Color(0xFF4B9EFF) : Colors.white.withValues(alpha: 0.05),
+                          color: isSelected
+                              ? const Color(0xFF4B9EFF)
+                              : VoxColors.cardFill(context),
                           borderRadius: BorderRadius.circular(20),
-                          border: Border.all(color: isSelected ? Colors.transparent : Colors.white.withValues(alpha: 0.1)),
+                          border: Border.all(
+                            color: isSelected
+                                ? Colors.transparent
+                                : VoxColors.border(context),
+                          ),
                         ),
                         child: Center(
                           child: Text(
                             folder,
                             style: TextStyle(
-                              color: isSelected ? Colors.white : Colors.white.withValues(alpha: 0.6),
+                              color: isSelected
+                                  ? Colors.white
+                                  : VoxColors.textSecondary(context),
                               fontSize: 12,
-                              fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
+                              fontWeight: isSelected
+                                  ? FontWeight.w900
+                                  : FontWeight.w600,
                             ),
                           ),
                         ),
@@ -888,20 +1021,30 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   builder: (context, tempLibrary, _) {
                     // â”€â”€ Guest: in-memory items â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     if (_isAnonymousUser) {
-                      final items = tempLibrary.items
-                          .where((item) {
-                            final matchesSearch = item.fileName.toLowerCase().contains(_searchQuery);
-                            if (!matchesSearch) return false;
-                            
-                            final t = item.fileType.toLowerCase();
-                            if (_selectedFolder == 'All Files') return true;
-                            if (_selectedFolder == 'PDFs') return t == 'pdf';
-                            if (_selectedFolder == 'Notes') return t == 'note';
-                            if (_selectedFolder == 'Scans') return t == 'scan';
-                            if (_selectedFolder == 'Documents') return ['doc', 'docx', 'txt', 'ppt', 'pptx', 'csv', 'xls', 'rtf'].contains(t);
-                            return true;
-                          })
-                          .toList();
+                      final items = tempLibrary.items.where((item) {
+                        final matchesSearch = item.fileName
+                            .toLowerCase()
+                            .contains(_searchQuery);
+                        if (!matchesSearch) return false;
+
+                        final t = item.fileType.toLowerCase();
+                        if (_selectedFolder == 'All Files') return true;
+                        if (_selectedFolder == 'PDFs') return t == 'pdf';
+                        if (_selectedFolder == 'Notes') return t == 'note';
+                        if (_selectedFolder == 'Scans') return t == 'scan';
+                        if (_selectedFolder == 'Documents')
+                          return [
+                            'doc',
+                            'docx',
+                            'txt',
+                            'ppt',
+                            'pptx',
+                            'csv',
+                            'xls',
+                            'rtf',
+                          ].contains(t);
+                        return true;
+                      }).toList();
 
                       if (items.isEmpty) {
                         _visibleIds = [];
@@ -963,7 +1106,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                 _enterSelectionMode(item.id);
                               }
                             },
-                            child: _buildFileCard(item.fileName, item.fileType, isSelected: _isSelectionMode && isSelected),
+                            child: _buildFileCard(
+                              item.fileName,
+                              item.fileType,
+                              isSelected: _isSelectionMode && isSelected,
+                            ),
                           );
                         },
                       );
@@ -1022,18 +1169,30 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
                         // Filter by search query AND folder
                         final docs = snapshot.data!.docs.where((doc) {
-                          final data = doc.data() as Map<String, dynamic>? ?? {};
-                          final name = (data['fileName'] as String? ?? '').toLowerCase();
-                          final type = (data['fileType'] as String? ?? '').toLowerCase();
-                          
+                          final data =
+                              doc.data() as Map<String, dynamic>? ?? {};
+                          final name = (data['fileName'] as String? ?? '')
+                              .toLowerCase();
+                          final type = (data['fileType'] as String? ?? '')
+                              .toLowerCase();
+
                           if (!name.contains(_searchQuery)) return false;
-                          
+
                           if (_selectedFolder == 'All Files') return true;
                           if (_selectedFolder == 'PDFs') return type == 'pdf';
                           if (_selectedFolder == 'Notes') return type == 'note';
                           if (_selectedFolder == 'Scans') return type == 'scan';
                           if (_selectedFolder == 'Documents') {
-                            return ['doc', 'docx', 'txt', 'ppt', 'pptx', 'csv', 'xls', 'rtf'].contains(type);
+                            return [
+                              'doc',
+                              'docx',
+                              'txt',
+                              'ppt',
+                              'pptx',
+                              'csv',
+                              'xls',
+                              'rtf',
+                            ].contains(type);
                           }
                           return true;
                         }).toList();
@@ -1060,16 +1219,31 @@ class _VoxHomePageState extends State<VoxHomePage> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Container(
-                                  width: 70, height: 70,
+                                  width: 70,
+                                  height: 70,
                                   decoration: BoxDecoration(
-                                    color: const Color(0xFF4B9EFF).withValues(alpha: 0.06),
+                                    color: const Color(
+                                      0xFF4B9EFF,
+                                    ).withValues(alpha: 0.06),
                                     shape: BoxShape.circle,
                                   ),
-                                  child: Icon(Icons.folder_off_outlined, size: 36, color: Colors.white.withValues(alpha: 0.2)),
+                                  child: Icon(
+                                    Icons.folder_off_outlined,
+                                    size: 36,
+                                    color: VoxColors.primary(
+                                      context,
+                                    ).withValues(alpha: 0.65),
+                                  ),
                                 ),
                                 const SizedBox(height: 16),
-                                Text(lang.t('no_files'),
-                                    style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontWeight: FontWeight.w700, fontSize: 15)),
+                                Text(
+                                  lang.t('no_files'),
+                                  style: TextStyle(
+                                    color: VoxColors.textSecondary(context),
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                  ),
+                                ),
                               ],
                             ),
                           );
@@ -1110,7 +1284,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                   _enterSelectionMode(docId);
                                 }
                               },
-                              child: _buildFileCard(name, type, isSelected: _isSelectionMode && isSelected),
+                              child: _buildFileCard(
+                                name,
+                                type,
+                                isSelected: _isSelectionMode && isSelected,
+                              ),
                             );
                           },
                         );
@@ -1181,7 +1359,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
           ),
           title: const Text(
             'How many questions?',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white),
+            style: TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 17,
+              color: Colors.white,
+            ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1206,8 +1388,20 @@ class _VoxHomePageState extends State<VoxHomePage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('5', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12)),
-                  Text('20', style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 12)),
+                  Text(
+                    '5',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontSize: 12,
+                    ),
+                  ),
+                  Text(
+                    '20',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.4),
+                      fontSize: 12,
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -1215,7 +1409,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: Text('Cancel', style: TextStyle(color: Colors.white.withValues(alpha: 0.5))),
+              child: Text(
+                'Cancel',
+                style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
+              ),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, selected),
@@ -1226,7 +1423,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Generate', style: TextStyle(fontWeight: FontWeight.bold)),
+              child: const Text(
+                'Generate',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
             ),
           ],
         ),
@@ -1235,6 +1435,19 @@ class _VoxHomePageState extends State<VoxHomePage> {
   }
 
   Widget _buildFileCard(String title, String type, {bool isSelected = false}) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final baseFill = isDark
+        ? Colors.white.withValues(alpha: 0.04)
+        : VoxColors.surface(context);
+    final baseBorder = isDark
+        ? Colors.white.withValues(alpha: 0.08)
+        : VoxColors.border(context);
+    final titleColor = isDark
+        ? Colors.white.withValues(alpha: isSelected ? 1.0 : 0.7)
+        : VoxColors.onSurface(
+            context,
+          ).withValues(alpha: isSelected ? 1.0 : 0.9);
+
     IconData iconData;
     Color iconColor;
     switch (type.toLowerCase()) {
@@ -1265,19 +1478,23 @@ class _VoxHomePageState extends State<VoxHomePage> {
         AnimatedContainer(
           duration: const Duration(milliseconds: 200),
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF4B9EFF).withValues(alpha: 0.12) : Colors.white.withValues(alpha: 0.04),
+            color: isSelected
+                ? const Color(0xFF4B9EFF).withValues(alpha: 0.12)
+                : baseFill,
             borderRadius: BorderRadius.circular(14),
             border: Border.all(
-              color: isSelected ? const Color(0xFF4B9EFF) : Colors.white.withValues(alpha: 0.08),
+              color: isSelected ? const Color(0xFF4B9EFF) : baseBorder,
               width: isSelected ? 2.0 : 1.0,
             ),
-            boxShadow: isSelected ? [
-              BoxShadow(
-                color: const Color(0xFF4B9EFF).withValues(alpha: 0.1),
-                blurRadius: 12,
-                spreadRadius: 2,
-              ),
-            ] : [],
+            boxShadow: isSelected
+                ? [
+                    BoxShadow(
+                      color: const Color(0xFF4B9EFF).withValues(alpha: 0.1),
+                      blurRadius: 12,
+                      spreadRadius: 2,
+                    ),
+                  ]
+                : [],
           ),
           padding: const EdgeInsets.fromLTRB(10, 10, 10, 8),
           child: Column(
@@ -1287,7 +1504,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
               Text(
                 title,
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: isSelected ? 1.0 : 0.7),
+                  color: titleColor,
                   fontSize: 10,
                   fontWeight: isSelected ? FontWeight.w900 : FontWeight.w600,
                   height: 1.2,
@@ -1297,7 +1514,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
               ),
               Align(
                 alignment: Alignment.bottomRight,
-                child: Icon(iconData, size: 24, color: iconColor.withValues(alpha: 0.9)),
+                child: Icon(
+                  iconData,
+                  size: 24,
+                  color: iconColor.withValues(alpha: 0.9),
+                ),
               ),
             ],
           ),
@@ -1313,7 +1534,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 color: const Color(0xFF4B9EFF),
                 shape: BoxShape.circle,
                 boxShadow: [
-                  BoxShadow(color: const Color(0xFF4B9EFF).withValues(alpha: 0.4), blurRadius: 6, spreadRadius: 1),
+                  BoxShadow(
+                    color: const Color(0xFF4B9EFF).withValues(alpha: 0.4),
+                    blurRadius: 6,
+                    spreadRadius: 1,
+                  ),
                 ],
               ),
               child: Icon(Icons.check, color: Colors.white, size: 16),
@@ -1334,7 +1559,11 @@ class _VoxHomePageState extends State<VoxHomePage> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, color: color == const Color(0xFF0A0E1A) ? Colors.white54 : color, size: 24),
+          Icon(
+            icon,
+            color: color == const Color(0xFF0A0E1A) ? Colors.white54 : color,
+            size: 24,
+          ),
           Text(
             label,
             style: TextStyle(
@@ -1349,4 +1578,3 @@ class _VoxHomePageState extends State<VoxHomePage> {
     );
   }
 }
-

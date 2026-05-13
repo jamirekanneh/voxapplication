@@ -14,6 +14,14 @@
       },
       "oauth_client": [
         {
+          "client_id": "1033671503358-iq6ft328nra2ark8tvd09o7tphencqu0.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.example.voxapplication",
+            "certificate_hash": "ce4e3c9a8c7654257a758bb314c18d22037f0873"
+          }
+        },
+        {
           "client_id": "1033671503358-c8dhmiu6henkq7ig0cg8ata4mq24a9af.apps.googleusercontent.com",
           "client_type": 3
         }

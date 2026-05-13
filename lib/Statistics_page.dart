@@ -211,7 +211,7 @@ class _StatisticsPageState extends State<StatisticsPage> {
         'icon': Icons.cloud_off_rounded,
         'title': 'API Instability Detected',
         'desc':
-            '$apiErrors total Groq/Firebase failures recorded. Check network timeout settings or implement exponential backoff retry.',
+            '$apiErrors total OpenRouter/Firebase failures recorded. Check network timeout settings or implement exponential backoff retry.',
         'color': Colors.redAccent,
       });
     }
