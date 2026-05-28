@@ -8,10 +8,12 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'theme_provider.dart';
+import 'services/app_session.dart';
+import 'services/auth_session.dart';
 
 // ——————————————————————————————————————————————————
 //  ProfilePage
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ——————————————————————————————————————————————————
 class ProfilePage extends StatefulWidget {
   final bool isAnonymous;
   final String username;
@@ -36,22 +38,25 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage>
     with SingleTickerProviderStateMixin {
-  static const int _linkResendCooldownSeconds = 60;
-  static const int _tooManyRequestsCooldownSeconds = 15 * 60;
   bool _isEditing = false;
   bool _isSaving = false;
 
   late TextEditingController _nameController;
   late TextEditingController _emailController;
+  late TextEditingController _passwordController;
+  bool _passwordVisible = false;
   String? _base64Image;
 
-  // Anonymous flow stages
-  String _anonStage = 'join'; // 'join' | 'returning' | 'awaiting_link'
+  // Anonymous flow stages: 'join' | 'returning' | 'verify'
+  String _anonStage = 'join';
   bool _anonLoading = false;
   int _resendCooldownSeconds = 0;
-  Timer? _resendTimer;
 
-  // Spinning ring for awaiting_link
+  // Existing user email change tracking variables
+  bool _isSwitchingEmail = false;
+  bool _canSwitchEmail = false;
+
+  // Spinning ring (kept for visual polish on loading states)
   late AnimationController _rotateController;
 
   @override
@@ -59,23 +64,67 @@ class _ProfilePageState extends State<ProfilePage>
     super.initState();
     _nameController = TextEditingController(text: widget.username);
     _emailController = TextEditingController(text: widget.email);
+    _passwordController = TextEditingController();
     _base64Image = widget.base64Image;
     _rotateController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 3),
     )..repeat();
+    _evaluateSwitchableEmail();
+    _loadProfileFromFirestore();
+  }
+
+  Future<void> _loadProfileFromFirestore() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) return;
+
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (!mounted) return;
+
+      if (doc.exists) {
+        final data = doc.data() ?? {};
+        setState(() {
+          _nameController.text =
+              (data['username'] as String? ?? user.displayName ?? '').trim();
+          _emailController.text =
+              (data['email'] as String? ?? user.email ?? '').trim();
+          final raw = data['photoBase64'] as String?;
+          if (raw != null && raw.isNotEmpty) {
+            _base64Image = raw;
+          }
+        });
+      } else {
+        setState(() {
+          _nameController.text = user.displayName ?? _nameController.text;
+          _emailController.text = user.email ?? _emailController.text;
+        });
+      }
+    } catch (e) {
+      debugPrint('Profile load error: $e');
+    }
   }
 
   @override
   void dispose() {
-    _resendTimer?.cancel();
     _nameController.dispose();
     _emailController.dispose();
+    _passwordController.dispose();
     _rotateController.dispose();
     super.dispose();
   }
 
-  // â”€â”€ Pick image â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  void _evaluateSwitchableEmail() {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && !user.isAnonymous && (user.email?.isNotEmpty ?? false)) {
+      setState(() => _canSwitchEmail = true);
+    }
+  }
+
+  // —— Pick image ——————————————————————————————————
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(
@@ -90,25 +139,67 @@ class _ProfilePageState extends State<ProfilePage>
     }
   }
 
-  // â”€â”€ Save edits (existing user) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // —— Save edits (existing user) ——————————————————
   Future<void> _saveEdits() async {
     final name = _nameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text;
+    final user = FirebaseAuth.instance.currentUser;
+
     if (name.isEmpty) {
       _showSnack("Name can't be empty");
       return;
     }
+
     setState(() => _isSaving = true);
     try {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
+      if (user == null) throw Exception("No user authenticated.");
+
+      // Handling Email Changes Explicitly
+      if (_isSwitchingEmail) {
+        if (email.isEmpty || !email.contains('@') || !email.contains('.')) {
+          _showSnack("Please enter a valid email address");
+          setState(() => _isSaving = false);
+          return;
+        }
+        await user.verifyBeforeUpdateEmail(email);
+        _showSnack("Verification email sent to $email. Confirm to apply.");
+      }
+
+      // Handling Password Updates if Filled
+      if (password.isNotEmpty) {
+        if (password.length < 6) {
+          _showSnack("Password must be at least 6 characters");
+          setState(() => _isSaving = false);
+          return;
+        }
+        await user.updatePassword(password);
+      }
+
+      // Update Firestore Record Specifications
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(uid)
+          .doc(user.uid)
           .update({
         'username': name,
+        if (!_isSwitchingEmail) 'email': email,
         'photoBase64': _base64Image ?? '',
+        'userId': user.uid,
       });
+
+      // Synchronize Local Session Metadata Cache
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString('userName', name);
+      if (!_isSwitchingEmail) await prefs.setString('userEmail', email);
+
       widget.onProfileUpdated?.call();
-      if (mounted) setState(() => _isEditing = false);
+      if (mounted) {
+        setState(() {
+          _isEditing = false;
+          _isSwitchingEmail = false;
+          _passwordController.clear();
+        });
+      }
       _showSnack("Profile updated");
     } catch (e) {
       String errorMessage = "Error saving: $e";
@@ -121,10 +212,42 @@ class _ProfilePageState extends State<ProfilePage>
     }
   }
 
-  // â”€â”€ Anonymous: check email â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Future<void> _requestEmailSwitch() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Switch Email Address'),
+        content: const Text(
+          'Changing your email will update your profile. '
+          'You will need to verify the new email address.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Continue'),
+          ),
+        ],
+      ),
+    );
+    if (confirm == true) {
+      setState(() {
+        _isSwitchingEmail = true;
+        _emailController.clear();
+      });
+      _showSnack('Enter your new email address and tap Save to apply.');
+    }
+  }
+
+  // —— Anonymous: validate and proceed ──────────────
   Future<void> _onAnonSaveTapped() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
+    final password = _passwordController.text;
 
     if (name.isEmpty || email.isEmpty) {
       _showSnack("Please fill in your name and email");
@@ -132,6 +255,10 @@ class _ProfilePageState extends State<ProfilePage>
     }
     if (!email.contains('@') || !email.contains('.')) {
       _showSnack("Please enter a valid email address");
+      return;
+    }
+    if (password.length < 6) {
+      _showSnack("Password must be at least 6 characters");
       return;
     }
 
@@ -147,163 +274,159 @@ class _ProfilePageState extends State<ProfilePage>
     setState(() => _anonLoading = false);
 
     if (snapshot.docs.isNotEmpty) {
+      // Email already registered — show password sign-in
       setState(() => _anonStage = 'returning');
     } else {
-      await _saveNewAnonProfile();
+      await _createNewAccount(name, email, password);
     }
   }
 
-  // â”€â”€ Anonymous: save brand new profile â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<void> _saveNewAnonProfile() async {
+  // —— Anonymous: create a brand new email/password account ——
+  Future<void> _createNewAccount(String name, String email, String password) async {
     setState(() => _anonLoading = true);
     try {
       User? user = FirebaseAuth.instance.currentUser;
-      if (user == null) {
-        final cred = await FirebaseAuth.instance.signInAnonymously();
-        user = cred.user;
+      UserCredential cred;
+
+      if (user != null && user.isAnonymous) {
+        // Upgrade anonymous account to email/password
+        final credential = EmailAuthProvider.credential(
+          email: email,
+          password: password,
+        );
+        cred = await user.linkWithCredential(credential);
+      } else {
+        cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
       }
 
+      final newUser = cred.user!;
       await FirebaseFirestore.instance
           .collection('users')
-          .doc(user!.uid)
+          .doc(newUser.uid)
           .set({
-        'username': _nameController.text.trim(),
-        'email': _emailController.text.trim(),
+        'username': name,
+        'email': email,
         'photoBase64': _base64Image ?? '',
         'createdAt': FieldValue.serverTimestamp(),
-        'userId': user.uid,
+        'userId': newUser.uid,
       });
 
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('hasProfile', true);
-      await prefs.setString('userEmail', _emailController.text.trim());
-      
+      await AuthSession.markSignedIn(newUser);
+      await prefs.setString('userName', name);
+      await AppSession.markSetupComplete(userId: newUser.uid);
+
       widget.onProfileUpdated?.call();
       if (mounted) {
         _showSnack("Account created! Your data is now being saved.");
         Navigator.pop(context);
       }
-    } catch (e) {
-      String errorMessage = "Error: $e";
-      if (e is FirebaseAuthException) {
-        errorMessage = "Auth Error (${e.code}): ${e.message}";
-      }
-      _showSnack(errorMessage);
-    } finally {
-      if (mounted) setState(() => _anonLoading = false);
-    }
-  }
-
-  // â”€â”€ Anonymous: send magic link â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<void> _sendMagicLink() async {
-    setState(() => _anonLoading = true);
-    try {
-      final email = _emailController.text.trim().toLowerCase();
-      final cooldown = await _remainingMagicLinkCooldown(email);
-      if (cooldown > 0) {
-        _showSnack('Please wait ${cooldown}s before resending the link.');
-        return;
-      }
-      final acs = ActionCodeSettings(
-        url:
-            'https://my-vox-app.firebaseapp.com/verify?email=${Uri.encodeComponent(email)}',
-        handleCodeInApp: true,
-        androidPackageName: 'com.example.voxapplication',
-        androidInstallApp: true,
-        androidMinimumVersion: '21',
-      );
-      await FirebaseAuth.instance.sendSignInLinkToEmail(
-        email: email,
-        actionCodeSettings: acs,
-      );
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('pendingEmailLink', email);
-      await _setMagicLinkCooldown(email, _linkResendCooldownSeconds);
-      _syncResendCooldown();
-      if (!mounted) return;
-      setState(() => _anonStage = 'awaiting_link');
     } on FirebaseAuthException catch (e) {
-      if (e.code == 'too-many-requests') {
-        final email = _emailController.text.trim().toLowerCase();
-        if (email.isNotEmpty) {
-          await _setMagicLinkCooldown(
-            email,
-            _tooManyRequestsCooldownSeconds,
-          );
-          _syncResendCooldown();
-        }
-        _showSnack(
-          'Too many verification attempts from this device. Please wait 15 minutes and try again.',
-        );
-      } else {
-        _showSnack('Magic Link Error (${e.code}): ${e.message}');
-      }
+      _showSnack(_authErrorMessage(e));
     } catch (e) {
-      String errorMessage = "Error sending link: $e";
-      if (e is FirebaseAuthException) {
-        errorMessage = "Magic Link Error (${e.code}): ${e.message}";
-      }
-      _showSnack(errorMessage);
+      _showSnack("Error: $e");
     } finally {
       if (mounted) setState(() => _anonLoading = false);
     }
   }
 
-  String _magicLinkCooldownKey(String email) =>
-      'magicLinkCooldownUntil:${email.toLowerCase()}';
+  // —— Returning user: sign in with password ─────────
+  Future<void> _signInReturningUser(String password) async {
+    if (_anonLoading) return;
+    setState(() => _anonLoading = true);
+    final email = _emailController.text.trim();
+    try {
+      final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final user = cred.user!;
 
-  Future<int> _remainingMagicLinkCooldown(String email) async {
-    final prefs = await SharedPreferences.getInstance();
-    final until = prefs.getInt(_magicLinkCooldownKey(email)) ?? 0;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final remainingMs = until - now;
-    if (remainingMs <= 0) return 0;
-    return (remainingMs / 1000).ceil();
+      final prefs = await SharedPreferences.getInstance();
+      await AuthSession.markSignedIn(user);
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (doc.exists) {
+        final name = (doc.data()?['username'] as String?) ?? '';
+        await prefs.setString('userName', name);
+      }
+      await AppSession.markSetupComplete(userId: user.uid);
+
+      widget.onProfileUpdated?.call();
+      if (mounted) {
+        _showSnack("Welcome back!");
+        Navigator.pop(context);
+      }
+    } on FirebaseAuthException catch (e) {
+      _showSnack(_authErrorMessage(e));
+    } catch (e) {
+      _showSnack("Sign-in error: $e");
+    } finally {
+      if (mounted) setState(() => _anonLoading = false);
+    }
   }
 
-  Future<void> _setMagicLinkCooldown(String email, int seconds) async {
-    final prefs = await SharedPreferences.getInstance();
-    final until = DateTime.now().millisecondsSinceEpoch + (seconds * 1000);
-    await prefs.setInt(_magicLinkCooldownKey(email), until);
+  Future<void> _sendPasswordReset() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      _showSnack('Enter a valid email first.');
+      return;
+    }
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      _showSnack('Password reset email sent to $email.');
+    } on FirebaseAuthException catch (e) {
+      _showSnack(_authErrorMessage(e));
+    } catch (e) {
+      _showSnack('Error: $e');
+    }
   }
 
-  Future<void> _syncResendCooldown() async {
-    final email = _emailController.text.trim().toLowerCase();
-    if (email.isEmpty) return;
-    final remaining = await _remainingMagicLinkCooldown(email);
-    if (!mounted) return;
-
-    _resendTimer?.cancel();
-    setState(() => _resendCooldownSeconds = remaining);
-
-    if (remaining <= 0) return;
-    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_resendCooldownSeconds <= 1) {
-        timer.cancel();
-        setState(() => _resendCooldownSeconds = 0);
-      } else {
-        setState(() => _resendCooldownSeconds -= 1);
-      }
-    });
+  String _authErrorMessage(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'email-already-in-use':
+        return 'An account with this email already exists. Try signing in.';
+      case 'invalid-email':
+        return 'The email address is not valid.';
+      case 'weak-password':
+        return 'Password is too weak. Use at least 6 characters.';
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'Incorrect password. Try again or use Forgot Password.';
+      case 'user-not-found':
+        return 'No account found for this email.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please wait a moment and try again.';
+      case 'network-request-failed':
+        return 'No internet connection. Check your network and try again.';
+      default:
+        final msg = (e.message ?? '').trim();
+        return msg.isNotEmpty ? msg : e.code;
+    }
   }
 
   void _showSnack(String msg) {
     if (!mounted) return;
-    ScaffoldMessenger.of(context)
-        .showSnackBar(SnackBar(
-          content: Text(msg),
-          backgroundColor: VoxColors.surface(context),
-          behavior: SnackBarBehavior.floating,
-        ));
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: VoxColors.surface(context),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————
   //  AVATAR WIDGET
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————
   Widget _buildAvatar({double radius = 52}) {
     if (_base64Image != null && _base64Image!.isNotEmpty) {
       return CircleAvatar(
@@ -321,9 +444,7 @@ class _ProfilePageState extends State<ProfilePage>
       radius: radius,
       backgroundColor: VoxColors.primary(context),
       child: Text(
-        widget.username.isNotEmpty
-            ? widget.username[0].toUpperCase()
-            : '?',
+        widget.username.isNotEmpty ? widget.username[0].toUpperCase() : '?',
         style: TextStyle(
           fontSize: radius * 0.85,
           fontWeight: FontWeight.w900,
@@ -333,26 +454,23 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————
   //  BUILD
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: VoxColors.bg(context),
-      body: widget.isAnonymous
-          ? _buildAnonView()
-          : _buildProfileView(),
+      body: widget.isAnonymous ? _buildAnonView() : _buildProfileView(),
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————
   //  EXISTING USER PROFILE VIEW
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————
   Widget _buildProfileView() {
     return Stack(
       children: [
-        // Background glow top right
         Positioned(
           top: -60,
           right: -60,
@@ -365,7 +483,6 @@ class _ProfilePageState extends State<ProfilePage>
             ),
           ),
         ),
-        // Background glow bottom left
         Positioned(
           bottom: -80,
           left: -60,
@@ -378,14 +495,11 @@ class _ProfilePageState extends State<ProfilePage>
             ),
           ),
         ),
-
         SafeArea(
           child: Column(
             children: [
-              // Top bar
               Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 child: Row(
                   children: [
                     GestureDetector(
@@ -417,8 +531,7 @@ class _ProfilePageState extends State<ProfilePage>
                       GestureDetector(
                         onTap: () => setState(() => _isEditing = true),
                         child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 16, vertical: 10),
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                           decoration: BoxDecoration(
                             color: VoxColors.surface(context),
                             borderRadius: BorderRadius.circular(12),
@@ -447,12 +560,14 @@ class _ProfilePageState extends State<ProfilePage>
                           GestureDetector(
                             onTap: () => setState(() {
                               _isEditing = false;
+                              _isSwitchingEmail = false;
                               _nameController.text = widget.username;
+                              _emailController.text = widget.email;
+                              _passwordController.clear();
                               _base64Image = widget.base64Image;
                             }),
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 10),
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                               decoration: BoxDecoration(
                                 color: VoxColors.border(context),
                                 borderRadius: BorderRadius.circular(12),
@@ -472,8 +587,7 @@ class _ProfilePageState extends State<ProfilePage>
                           GestureDetector(
                             onTap: _isSaving ? null : _saveEdits,
                             child: Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 10),
+                              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                               decoration: BoxDecoration(
                                 color: VoxColors.primary(context),
                                 borderRadius: BorderRadius.circular(12),
@@ -502,15 +616,12 @@ class _ProfilePageState extends State<ProfilePage>
                   ],
                 ),
               ),
-
               Expanded(
                 child: SingleChildScrollView(
                   padding: const EdgeInsets.symmetric(horizontal: 24),
                   child: Column(
                     children: [
                       const SizedBox(height: 24),
-
-                      // Avatar
                       GestureDetector(
                         onTap: _isEditing ? _pickImage : null,
                         child: Stack(
@@ -524,8 +635,7 @@ class _ProfilePageState extends State<ProfilePage>
                                     width: 2.5),
                                 boxShadow: [
                                   BoxShadow(
-                                    color: VoxColors.primary(context)
-                                        .withValues(alpha: 0.25),
+                                    color: VoxColors.primary(context).withValues(alpha: 0.25),
                                     blurRadius: 20,
                                     offset: const Offset(0, 6),
                                   ),
@@ -550,10 +660,9 @@ class _ProfilePageState extends State<ProfilePage>
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 32),
-
-                      // Name field / display
+                      
+                      // Full Name
                       _isEditing
                           ? _profileTextField(
                               controller: _nameController,
@@ -562,27 +671,65 @@ class _ProfilePageState extends State<ProfilePage>
                             )
                           : _profileInfoTile(
                               label: "NAME",
-                              value: widget.username.isNotEmpty
-                                  ? widget.username
-                                  : "Not set",
+                              value: widget.username.isNotEmpty ? widget.username : "Not set",
                               icon: Icons.person_outline_rounded,
                             ),
-
+                      const SizedBox(height: 12),
+                      
+                      // Email Address
+                      _isEditing
+                          ? Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _profileTextField(
+                                  controller: _emailController,
+                                  label: "Email Address",
+                                  icon: Icons.alternate_email_rounded,
+                                  enabled: _isSwitchingEmail,
+                                ),
+                                if (_canSwitchEmail && !_isSwitchingEmail)
+                                  Padding(
+                                    padding: const EdgeInsets.only(left: 4, top: 4),
+                                    child: TextButton(
+                                      onPressed: _requestEmailSwitch,
+                                      child: Text(
+                                        'Switch Email Address',
+                                        style: TextStyle(
+                                            color: VoxColors.primary(context),
+                                            fontWeight: FontWeight.w700),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            )
+                          : _profileInfoTile(
+                              label: "EMAIL",
+                              value: widget.email.isNotEmpty ? widget.email : "Not set",
+                              icon: Icons.alternate_email_rounded,
+                              locked: true,
+                            ),
                       const SizedBox(height: 12),
 
-                      // Email â€” always read only
-                      _profileInfoTile(
-                        label: "EMAIL",
-                        value: widget.email.isNotEmpty
-                            ? widget.email
-                            : "Not set",
-                        icon: Icons.alternate_email_rounded,
-                        locked: true,
-                      ),
+                      // Password field (Optional during editing setup)
+                      if (_isEditing) ...[
+                        _profileTextField(
+                          controller: _passwordController,
+                          label: "New Password (Optional)",
+                          icon: Icons.lock_outline_rounded,
+                          obscureText: !_passwordVisible,
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              _passwordVisible
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                              color: VoxColors.textHint(context),
+                            ),
+                            onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
 
-                      const SizedBox(height: 12),
-
-                      // Account type badge
                       Container(
                         width: double.infinity,
                         padding: const EdgeInsets.all(18),
@@ -596,13 +743,12 @@ class _ProfilePageState extends State<ProfilePage>
                             Container(
                               padding: const EdgeInsets.all(8),
                               decoration: BoxDecoration(
-                                color: VoxColors.primary(context)
-                                    .withValues(alpha: 0.15),
+                                color: VoxColors.primary(context).withValues(alpha: 0.15),
                                 borderRadius: BorderRadius.circular(10),
                               ),
                               child: Icon(
                                 Icons.verified_outlined,
-                                color: VoxColors.onPrimary(context),
+                                color: VoxColors.primary(context),
                                 size: 20,
                               ),
                             ),
@@ -619,9 +765,9 @@ class _ProfilePageState extends State<ProfilePage>
                                     letterSpacing: 1.5,
                                   ),
                                 ),
-                                SizedBox(height: 3),
+                                const SizedBox(height: 3),
                                 Text(
-                                  "Active â€” data is being saved",
+                                  "Active — data is being saved",
                                   style: TextStyle(
                                     color: VoxColors.onBg(context),
                                     fontWeight: FontWeight.w700,
@@ -633,7 +779,6 @@ class _ProfilePageState extends State<ProfilePage>
                           ],
                         ),
                       ),
-
                       const SizedBox(height: 40),
                     ],
                   ),
@@ -687,8 +832,7 @@ class _ProfilePageState extends State<ProfilePage>
           ),
           if (locked)
             Container(
-              padding:
-                  const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
               decoration: BoxDecoration(
                 color: VoxColors.onBg(context).withValues(alpha: 0.06),
                 borderRadius: BorderRadius.circular(6),
@@ -711,33 +855,44 @@ class _ProfilePageState extends State<ProfilePage>
     required TextEditingController controller,
     required String label,
     required IconData icon,
+    bool enabled = true,
+    bool obscureText = false,
+    Widget? suffixIcon,
   }) {
-    return TextField(
-      controller: controller,
-      style: TextStyle(
-          fontWeight: FontWeight.w600, fontSize: 15, color: VoxColors.onBg(context)),
-      decoration: InputDecoration(
-        prefixIcon: Icon(icon, color: VoxColors.primary(context).withValues(alpha: 0.7), size: 20),
-        labelText: label,
-        labelStyle: TextStyle(
-            color: VoxColors.textHint(context), fontSize: 14, fontWeight: FontWeight.w500),
-        filled: true,
-        fillColor: VoxColors.cardFill(context),
-        enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: VoxColors.border(context), width: 1.5),
-        ),
-        focusedBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide(color: VoxColors.primary(context), width: 2),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: TextField(
+        controller: controller,
+        enabled: enabled,
+        obscureText: obscureText,
+        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: VoxColors.onBg(context)),
+        decoration: InputDecoration(
+          prefixIcon: Icon(icon, color: VoxColors.primary(context).withValues(alpha: 0.7), size: 20),
+          labelText: label,
+          labelStyle: TextStyle(color: VoxColors.textHint(context), fontSize: 14, fontWeight: FontWeight.w500),
+          filled: true,
+          fillColor: VoxColors.cardFill(context),
+          suffixIcon: suffixIcon,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: VoxColors.border(context), width: 1.5),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: VoxColors.primary(context), width: 2),
+          ),
+          disabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: VoxColors.border(context).withValues(alpha: 0.4), width: 1.5),
+          ),
         ),
       ),
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  ANONYMOUS VIEW â€” 3 stages
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ——————————————————————————————————————————————————
+  //  ANONYMOUS VIEW
+  // ——————————————————————————————————————————————————
   Widget _buildAnonView() {
     return Stack(
       children: [
@@ -768,10 +923,8 @@ class _ProfilePageState extends State<ProfilePage>
         SafeArea(
           child: Column(
             children: [
-              // Back button
               Padding(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 20, vertical: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                 child: Row(
                   children: [
                     GestureDetector(
@@ -790,19 +943,17 @@ class _ProfilePageState extends State<ProfilePage>
                   ],
                 ),
               ),
-
               Expanded(
                 child: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 350),
                   transitionBuilder: (child, anim) => FadeTransition(
-                    opacity: CurvedAnimation(
-                        parent: anim, curve: Curves.easeOut),
+                    opacity: CurvedAnimation(parent: anim, curve: Curves.easeOut),
                     child: child,
                   ),
                   child: switch (_anonStage) {
                     'join' => _anonJoinView(),
                     'returning' => _anonReturningView(),
-                    'awaiting_link' => _anonAwaitingView(),
+                    'verify' => _anonVerifyView(),
                     _ => const SizedBox.shrink(),
                   },
                 ),
@@ -814,7 +965,7 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // Stage 1 â€” Join form
+  // Stage 1 — Join form
   Widget _anonJoinView() {
     return SingleChildScrollView(
       key: const ValueKey('join'),
@@ -825,12 +976,9 @@ class _ProfilePageState extends State<ProfilePage>
           _anonHeader(
             tag: "CREATE ACCOUNT",
             title: "START\nSAVING.",
-            subtitle:
-                "Add your details and your Vox data will be saved from this point forward.",
+            subtitle: "Add your details and your Vox data will be saved from this point forward.",
           ),
           const SizedBox(height: 36),
-
-          // Avatar picker
           Center(
             child: GestureDetector(
               onTap: _pickImage,
@@ -840,8 +988,7 @@ class _ProfilePageState extends State<ProfilePage>
                     padding: const EdgeInsets.all(4),
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
-                      border: Border.all(
-                          color: VoxColors.primary(context), width: 2.5),
+                      border: Border.all(color: VoxColors.primary(context), width: 2.5),
                       boxShadow: [
                         BoxShadow(
                           color: VoxColors.primary(context).withValues(alpha: 0.25),
@@ -852,11 +999,8 @@ class _ProfilePageState extends State<ProfilePage>
                     ),
                     child: CircleAvatar(
                       radius: 52,
-                      backgroundColor:
-                          VoxColors.primary(context).withValues(alpha: 0.08),
-                      backgroundImage: _base64Image != null
-                          ? MemoryImage(base64Decode(_base64Image!))
-                          : null,
+                      backgroundColor: VoxColors.primary(context).withValues(alpha: 0.08),
+                      backgroundImage: _base64Image != null ? MemoryImage(base64Decode(_base64Image!)) : null,
                       child: _base64Image == null
                           ? Icon(Icons.camera_alt_outlined,
                               color: VoxColors.primary(context).withValues(alpha: 0.5), size: 28)
@@ -868,10 +1012,8 @@ class _ProfilePageState extends State<ProfilePage>
                     right: 4,
                     child: Container(
                       padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                          color: VoxColors.primary(context), shape: BoxShape.circle),
-                      child: Icon(Icons.edit,
-                          color: VoxColors.bg(context), size: 13),
+                      decoration: BoxDecoration(color: VoxColors.primary(context), shape: BoxShape.circle),
+                      child: Icon(Icons.edit, color: VoxColors.bg(context), size: 13),
                     ),
                   ),
                 ],
@@ -879,7 +1021,6 @@ class _ProfilePageState extends State<ProfilePage>
             ),
           ),
           const SizedBox(height: 32),
-
           _anonTextField(
             controller: _nameController,
             label: "Full Name",
@@ -891,8 +1032,8 @@ class _ProfilePageState extends State<ProfilePage>
             icon: Icons.alternate_email_rounded,
             keyboardType: TextInputType.emailAddress,
           ),
-          const SizedBox(height: 24),
-
+          _anonPasswordField(),
+          const SizedBox(height: 8),
           _anonButton(
             label: "SAVE & START",
             isLoading: _anonLoading,
@@ -904,205 +1045,192 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // Stage 2 â€” Returning user
+  // Stage 2 — Returning user (password sign-in)
   Widget _anonReturningView() {
-    return SingleChildScrollView(
+    final passwordCtrl = TextEditingController();
+    bool pwVisible = false;
+
+    return StatefulBuilder(
       key: const ValueKey('returning'),
-      padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _anonHeader(
-            tag: "HOLD ON",
-            title: "WE KNOW\nTHIS EMAIL.",
-            subtitle: "Looks like you've used Vox before. Want your history back?",
-          ),
-          const SizedBox(height: 40),
-
-          // Email chip
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
-            decoration: BoxDecoration(
-              color: VoxColors.cardFill(context),
-              borderRadius: BorderRadius.circular(18),
-              border: Border.all(
-                  color: VoxColors.border(context), width: 1.5),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                      color: VoxColors.primary(context).withValues(alpha: 0.12), shape: BoxShape.circle),
-                  child: Icon(Icons.mail_outline_rounded,
-                      color: VoxColors.primary(context), size: 18),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text("YOUR EMAIL",
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1.5,
-                              color: VoxColors.textHint(context))),
-                      const SizedBox(height: 3),
-                      Text(_emailController.text.trim(),
-                          style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 14,
-                              color: VoxColors.onBg(context)),
-                          overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-          Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: VoxColors.border(context),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.touch_app_rounded,
-                    size: 15, color: VoxColors.textHint(context)),
-                SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    "We'll send a link to your email. Tap it and all your data comes back.",
-                    style: TextStyle(
-                        fontSize: 12,
-                        color: VoxColors.textSecondary(context),
-                        fontWeight: FontWeight.w500),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 36),
-
-          _anonButton(
-            label: "YES, RESTORE MY DATA",
-            isLoading: _anonLoading,
-            onTap: _sendMagicLink,
-          ),
-          const SizedBox(height: 14),
-
-          SizedBox(
-            width: double.infinity,
-            height: 56,
-            child: OutlinedButton(
-              onPressed: _anonLoading ? null : _saveNewAnonProfile,
-              style: OutlinedButton.styleFrom(
-                foregroundColor: VoxColors.onBg(context),
-                side: BorderSide(color: VoxColors.border(context)),
-                shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(18)),
+      builder: (context, setSubState) {
+        return SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _anonHeader(
+                tag: "WELCOME BACK",
+                title: "YOU'RE\nALREADY HERE.",
+                subtitle: "This email is registered. Type your password to sync your local logs.",
               ),
-              child: const Text("NO, START FRESH",
-                  style: TextStyle(
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.2,
-                      fontSize: 14)),
-            ),
+              const SizedBox(height: 36),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: VoxColors.cardFill(context),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: VoxColors.border(context)),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.alternate_email_rounded, color: VoxColors.primary(context), size: 18),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        _emailController.text,
+                        style: TextStyle(
+                          color: VoxColors.onBg(context),
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: passwordCtrl,
+                obscureText: !pwVisible,
+                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: VoxColors.onBg(context)),
+                decoration: InputDecoration(
+                  prefixIcon: Icon(Icons.lock_outline_rounded,
+                      color: VoxColors.primary(context).withValues(alpha: 0.7), size: 20),
+                  labelText: "Password",
+                  labelStyle: TextStyle(
+                      color: VoxColors.textHint(context), fontSize: 14, fontWeight: FontWeight.w500),
+                  filled: true,
+                  fillColor: VoxColors.cardFill(context),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(color: VoxColors.border(context)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide(color: VoxColors.primary(context), width: 2),
+                  ),
+                  suffixIcon: IconButton(
+                    icon: Icon(pwVisible ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                        color: VoxColors.textHint(context), size: 20),
+                    onPressed: () => setSubState(() => pwVisible = !pwVisible),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 24),
+              _anonButton(
+                label: "SYNC ACCOUNT",
+                isLoading: _anonLoading,
+                onTap: () => _signInReturningUser(passwordCtrl.text),
+              ),
+              const SizedBox(height: 16),
+              Center(
+                child: TextButton(
+                  onPressed: _sendPasswordReset,
+                  child: Text(
+                    "Forgot Password?",
+                    style: TextStyle(
+                        color: VoxColors.primary(context), fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ),
+              ),
+              Center(
+                child: TextButton(
+                  onPressed: () => setState(() => _anonStage = 'join'),
+                  child: Text(
+                    "Use a different email",
+                    style: TextStyle(
+                        color: VoxColors.textSecondary(context), fontSize: 13, fontWeight: FontWeight.w500),
+                  ),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 32),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  // Stage 3 â€” Awaiting link
-  Widget _anonAwaitingView() {
+  // Stage 3 — Email verification workflow panel placeholder
+  Widget _anonVerifyView() {
     return SingleChildScrollView(
-      key: const ValueKey('awaiting'),
+      key: const ValueKey('verify'),
       padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _anonHeader(
-            tag: "CHECK YOUR EMAIL",
-            title: "LINK\nSENT.",
-            subtitle:
-                "Tap the link in your email and all your Vox data will come back.",
-          ),
-          const SizedBox(height: 64),
-
-          // Spinning ring
-          Center(
-            child: SizedBox(
-              width: 100,
-              height: 100,
-              child: Stack(
-                alignment: Alignment.center,
-                children: [
-                  AnimatedBuilder(
-                    animation: _rotateController,
-                    builder: (_, _) => Transform.rotate(
-                      angle: _rotateController.value * 2 * pi,
-                      child: CustomPaint(
-                        size: const Size(100, 100),
-                        painter: _SweepRingPainter(VoxColors.primary(context)),
-                      ),
-                    ),
-                  ),
-                  Container(
-                    width: 62,
-                    height: 62,
-                    decoration: BoxDecoration(
-                      color: VoxColors.primary(context).withValues(alpha: 0.15),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(Icons.mail_rounded,
-                        color: VoxColors.primary(context), size: 28),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 24),
-          Center(
-            child: Text(
-              "Waiting for you to tap the linkâ€¦",
-              style: TextStyle(
-                  color: VoxColors.textHint(context),
-                  fontWeight: FontWeight.w600,
-                  fontSize: 13),
-            ),
+            tag: "VERIFICATION SENT",
+            title: "CHECK YOUR\nINBOX.",
+            subtitle: "We sent a link to ${_emailController.text}. Open it to finalize setup.",
           ),
           const SizedBox(height: 48),
           Center(
+            child: AnimatedBuilder(
+              animation: _rotateController,
+              builder: (context, child) {
+                return Transform.rotate(
+                  angle: _rotateController.value * 2.0 * pi,
+                  child: child,
+                );
+              },
+              child: CustomPaint(
+                size: const Size(80, 80),
+                painter: _SweepRingPainter(VoxColors.primary(context)),
+              ),
+            ),
+          ),
+          const SizedBox(height: 48),
+          _anonButton(
+            label: "I CONFIRMED THE LINK",
+            onTap: () async {
+              setState(() => _anonLoading = true);
+              await FirebaseAuth.instance.currentUser?.reload();
+              final isVerified = FirebaseAuth.instance.currentUser?.emailVerified ?? false;
+              setState(() => _anonLoading = false);
+
+              if (isVerified) {
+                _showSnack("Verified! Opening logs...");
+                widget.onProfileUpdated?.call();
+                if (mounted) Navigator.pop(context);
+              } else {
+                _showSnack("Email not verified yet. Check spam folder.");
+              }
+            },
+          ),
+          const SizedBox(height: 16),
+          Center(
             child: TextButton(
-              onPressed: (_anonLoading || _resendCooldownSeconds > 0)
+              onPressed: _resendCooldownSeconds > 0
                   ? null
-                  : _sendMagicLink,
+                  : () async {
+                      await FirebaseAuth.instance.currentUser?.sendEmailVerification();
+                      _showSnack("Verification resent.");
+                      setState(() => _resendCooldownSeconds = 60);
+                      Timer.periodic(const Duration(seconds: 1), (timer) {
+                        if (!mounted) {
+                          timer.cancel();
+                          return;
+                        }
+                        setState(() {
+                          if (_resendCooldownSeconds > 0) {
+                            _resendCooldownSeconds--;
+                          } else {
+                            timer.cancel();
+                          }
+                        });
+                      });
+                    },
               child: Text(
-                _resendCooldownSeconds > 0
-                    ? 'Resend in ${_resendCooldownSeconds}s'
-                    : 'Resend link',
+                _resendCooldownSeconds > 0 ? "Resend in ${_resendCooldownSeconds}s" : "Resend Link",
                 style: TextStyle(
-                  color: _resendCooldownSeconds > 0
-                      ? VoxColors.textHint(context)
-                      : VoxColors.primary(context),
+                  color: _resendCooldownSeconds > 0 ? VoxColors.textHint(context) : VoxColors.primary(context),
                   fontWeight: FontWeight.w600,
-                  decoration: _resendCooldownSeconds > 0
-                      ? TextDecoration.none
-                      : TextDecoration.underline,
+                  decoration: _resendCooldownSeconds > 0 ? TextDecoration.none : TextDecoration.underline,
                   decorationColor: VoxColors.primary(context),
                 ),
               ),
             ),
           ),
-
-          // Debug skip
           if (kDebugMode) ...[
             const SizedBox(height: 12),
             Center(
@@ -1112,11 +1240,8 @@ class _ProfilePageState extends State<ProfilePage>
                   await prefs.setBool('hasProfile', true);
                   if (mounted) Navigator.pop(context);
                 },
-                child: const Text("âš  Skip (debug only)",
-                    style: TextStyle(
-                        color: Colors.red,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600)),
+                child: const Text("⚠️ Skip (debug only)",
+                    style: TextStyle(color: Colors.red, fontSize: 12, fontWeight: FontWeight.w600)),
               ),
             ),
           ],
@@ -1126,7 +1251,7 @@ class _ProfilePageState extends State<ProfilePage>
     );
   }
 
-  // â”€â”€ Shared anon widgets â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // —— Shared anon widgets ————————————————————————
   Widget _anonHeader({
     required String tag,
     required String title,
@@ -1179,15 +1304,11 @@ class _ProfilePageState extends State<ProfilePage>
       child: TextField(
         controller: controller,
         keyboardType: keyboardType,
-        style: TextStyle(
-            fontWeight: FontWeight.w600, fontSize: 15, color: VoxColors.onBg(context)),
+        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: VoxColors.onBg(context)),
         decoration: InputDecoration(
           prefixIcon: Icon(icon, color: VoxColors.primary(context).withValues(alpha: 0.7), size: 20),
           labelText: label,
-          labelStyle: TextStyle(
-              color: VoxColors.textHint(context),
-              fontSize: 14,
-              fontWeight: FontWeight.w500),
+          labelStyle: TextStyle(color: VoxColors.textHint(context), fontSize: 14, fontWeight: FontWeight.w500),
           filled: true,
           fillColor: VoxColors.cardFill(context),
           enabledBorder: OutlineInputBorder(
@@ -1196,8 +1317,39 @@ class _ProfilePageState extends State<ProfilePage>
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(16),
-            borderSide:
-                BorderSide(color: VoxColors.primary(context), width: 2),
+            borderSide: BorderSide(color: VoxColors.primary(context), width: 2),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _anonPasswordField() {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: TextField(
+        controller: _passwordController,
+        obscureText: !_passwordVisible,
+        style: TextStyle(fontWeight: FontWeight.w600, fontSize: 15, color: VoxColors.onBg(context)),
+        decoration: InputDecoration(
+          prefixIcon: Icon(Icons.lock_outline_rounded,
+              color: VoxColors.primary(context).withValues(alpha: 0.7), size: 20),
+          labelText: "Password",
+          labelStyle: TextStyle(color: VoxColors.textHint(context), fontSize: 14, fontWeight: FontWeight.w500),
+          filled: true,
+          fillColor: VoxColors.cardFill(context),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: VoxColors.border(context)),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(16),
+            borderSide: BorderSide(color: VoxColors.primary(context), width: 2),
+          ),
+          suffixIcon: IconButton(
+            icon: Icon(_passwordVisible ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                color: VoxColors.textHint(context), size: 20),
+            onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
           ),
         ),
       ),
@@ -1218,36 +1370,26 @@ class _ProfilePageState extends State<ProfilePage>
           backgroundColor: VoxColors.primary(context),
           foregroundColor: Colors.white,
           disabledBackgroundColor: VoxColors.primary(context).withValues(alpha: 0.4),
-          shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
           elevation: 0,
         ),
         child: isLoading
             ? const SizedBox(
-                width: 22,
-                height: 22,
-                child: CircularProgressIndicator(
-                    color: Colors.white, strokeWidth: 2.5))
-            : Text(label,
-                style: TextStyle(
-                    fontWeight: FontWeight.w900,
-                    letterSpacing: 1.5,
-                    fontSize: 14)),
+                width: 22, height: 22, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5))
+            : Text(label, style: const TextStyle(fontWeight: FontWeight.w900, letterSpacing: 1.5, fontSize: 14)),
       ),
     );
   }
 }
 
-// â”€â”€ Sweep ring painter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// —— Sweep ring painter ————————————————————————
 class _SweepRingPainter extends CustomPainter {
   final Color primaryColor;
   _SweepRingPainter(this.primaryColor);
 
   @override
   void paint(Canvas canvas, Size size) {
-    final rect = Rect.fromCircle(
-        center: Offset(size.width / 2, size.height / 2),
-        radius: size.width / 2 - 4);
+    final rect = Rect.fromCircle(center: Offset(size.width / 2, size.height / 2), radius: size.width / 2 - 4);
     final paint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 3

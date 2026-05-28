@@ -1,0 +1,3340 @@
+import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import 'package:speech_to_text/speech_to_text.dart' as stt;
+import 'package:permission_handler/permission_handler.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:record/record.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
+import 'dart:io';
+import 'dart:async';
+import 'language_provider.dart';
+import 'temp_notes_provider.dart';
+import 'tts_service.dart';
+import 'ai_result_page.dart';
+import 'theme_provider.dart';
+import 'config/secrets.dart';
+
+const int _kMaxTitleLength = 100;
+const Duration _kMaxRecordingDuration = Duration(hours: 1);
+
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+//  RECORDING STATE ENUM
+// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+enum RecordingState { idle, recording, processing, done }
+
+class NotesPage extends StatefulWidget {
+  const NotesPage({super.key});
+
+  @override
+  State<NotesPage> createState() => _NotesPageState();
+}
+
+class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
+  final stt.SpeechToText _speech = stt.SpeechToText();
+  bool _isSaving = false;
+  bool _isEditing = false;
+  String? _editingId;
+
+  final TextEditingController _titleController = TextEditingController();
+  final TextEditingController _transcriptController = TextEditingController();
+
+  // Audio recording
+  final AudioRecorder _audioRecorder = AudioRecorder();
+  final AudioPlayer _audioPlayer = AudioPlayer();
+  RecordingState _recordingState = RecordingState.idle;
+  bool _isPlaying = false;
+  String? _audioPath;
+  String? _audioUrl;
+  Duration _audioDuration = Duration.zero;
+  Duration _currentPosition = Duration.zero;
+  Duration _recordingDuration = Duration.zero;
+  Timer? _recordingTimer;
+  Timer? _maxDurationTimer;
+  bool _isTitleDictating = false;
+  bool _isTranscriptDictating = false;
+
+  // Animation controllers
+  late AnimationController _pulseController;
+  late AnimationController _waveController;
+  late Animation<double> _pulseAnimation;
+
+  String? _resolvedUid;
+  bool _isAnonymousUser = true;
+  final ScrollController _scrollController = ScrollController();
+
+  // Multi-select mode
+  bool _isNoteSelectionMode = false;
+  final Set<String> _selectedNoteIds = {};
+  List<String> _visibleNoteIds = [];
+  final Set<String> _transcribingNoteIds = {};
+
+  // Tab for note detail view
+
+  @override
+  void initState() {
+    super.initState();
+    _resolveUser();
+
+    _pulseController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 900),
+    )..repeat(reverse: true);
+
+    _waveController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat();
+
+    _pulseAnimation = Tween<double>(begin: 0.9, end: 1.1).animate(
+      CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
+    );
+  }
+
+  @override
+  void dispose() {
+    _speech.stop();
+    _audioRecorder.dispose();
+    _audioPlayer.dispose();
+    _titleController.dispose();
+    _transcriptController.dispose();
+    _pulseController.dispose();
+    _waveController.dispose();
+    _recordingTimer?.cancel();
+    _maxDurationTimer?.cancel();
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  RESOLVE USER
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Future<void> _resolveUser() async {
+    try {
+      final user = FirebaseAuth.instance.currentUser;
+      if (user == null) {
+        if (mounted) {
+          setState(() {
+            _isAnonymousUser = true;
+            _resolvedUid = null;
+          });
+        }
+        return;
+      }
+      if (!user.isAnonymous) {
+        if (mounted) {
+          setState(() {
+            _isAnonymousUser = false;
+            _resolvedUid = user.uid;
+          });
+        }
+        return;
+      }
+      final prefs = await SharedPreferences.getInstance();
+      final hasProfile = prefs.getBool('hasProfile') ?? false;
+      if (!hasProfile) {
+        if (mounted) {
+          setState(() {
+            _isAnonymousUser = true;
+            _resolvedUid = null;
+          });
+        }
+        return;
+      }
+      final uidDoc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .get();
+      if (uidDoc.exists) {
+        if (mounted) {
+          setState(() {
+            _isAnonymousUser = false;
+            _resolvedUid = user.uid;
+          });
+        }
+        return;
+      }
+      final savedEmail = prefs.getString('userEmail') ?? '';
+      if (savedEmail.isNotEmpty) {
+        final query = await FirebaseFirestore.instance
+            .collection('users')
+            .where('email', isEqualTo: savedEmail)
+            .limit(1)
+            .get();
+        if (query.docs.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              _isAnonymousUser = false;
+              _resolvedUid = query.docs.first.id;
+            });
+          }
+          return;
+        }
+      }
+      if (mounted) {
+        setState(() {
+          _isAnonymousUser = true;
+          _resolvedUid = null;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isAnonymousUser = true;
+          _resolvedUid = null;
+        });
+      }
+    }
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  MIC PERMISSION
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Future<bool> _requestMicPermission() async {
+    final status = await Permission.microphone.request();
+    if (status.isGranted) return true;
+    if (status.isPermanentlyDenied && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(
+            'Microphone permission denied. Enable it in Settings.',
+          ),
+          backgroundColor: VoxColors.surface(context),
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Settings',
+            textColor: VoxColors.primary(context),
+            onPressed: openAppSettings,
+          ),
+        ),
+      );
+    } else if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Microphone permission is required to record.'),
+          backgroundColor: VoxColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+    return false;
+  }
+
+  Future<void> _toggleDictation(bool isTitle) async {
+    if (!mounted) return;
+    final langProvider = context.read<LanguageProvider>();
+    final granted = await _requestMicPermission();
+    if (!granted) return;
+
+    if (isTitle ? _isTitleDictating : _isTranscriptDictating) {
+      await _speech.stop();
+      setState(() {
+        if (isTitle) {
+          _isTitleDictating = false;
+        } else {
+          _isTranscriptDictating = false;
+        }
+      });
+      return;
+    }
+
+    if (_speech.isListening) {
+      await _speech.stop();
+      setState(() {
+        _isTitleDictating = false;
+        _isTranscriptDictating = false;
+      });
+    }
+
+    setState(() {
+      if (isTitle) {
+        _isTitleDictating = true;
+      } else {
+        _isTranscriptDictating = true;
+      }
+    });
+
+    bool available = await _speech.initialize(
+      onError: (e) {
+        if (mounted) {
+          setState(() {
+            _isTitleDictating = false;
+            _isTranscriptDictating = false;
+          });
+        }
+      },
+      onStatus: (s) {
+        if (s == 'done' || s == 'notListening') {
+          if (mounted) {
+            setState(() {
+              _isTitleDictating = false;
+              _isTranscriptDictating = false;
+            });
+          }
+        }
+      },
+    );
+
+    if (!available) {
+      if (mounted) {
+        setState(() {
+          _isTitleDictating = false;
+          _isTranscriptDictating = false;
+        });
+      }
+      return;
+    }
+
+    if (!mounted) return;
+
+    final String existingText = isTitle
+        ? _titleController.text
+        : _transcriptController.text;
+    final prefix = existingText.isNotEmpty ? '$existingText ' : '';
+
+    _speech.listen(
+      localeId: langProvider.sttLocale,
+      listenOptions: stt.SpeechListenOptions(
+        partialResults: true,
+        cancelOnError: true,
+        listenMode: stt.ListenMode.dictation,
+      ),
+      onResult: (val) {
+        String newText = val.recognizedWords;
+        // With partialResults: false, we just get the final chunk or we can use partial and just update.
+        // It's better to update on the fly so it feels responsive.
+        if (newText.isNotEmpty) {
+          if (mounted) {
+            setState(() {
+              if (isTitle) {
+                _titleController.text = '$prefix$newText';
+                _titleController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: _titleController.text.length),
+                );
+              } else {
+                _transcriptController.text = '$prefix$newText';
+                _transcriptController.selection = TextSelection.fromPosition(
+                  TextPosition(offset: _transcriptController.text.length),
+                );
+              }
+            });
+          }
+        }
+      },
+      listenFor: const Duration(minutes: 1),
+      pauseFor: const Duration(seconds: 3),
+    );
+  }
+
+  Future<void> _startRecording() async {
+    final rawTitle = _titleController.text.trim();
+    if (rawTitle.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please add a title before recording.'),
+          backgroundColor: VoxColors.danger,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+        ),
+      );
+      return;
+    }
+
+    final granted = await _requestMicPermission();
+    if (!granted) return;
+
+    try {
+      FocusScope.of(context).unfocus();
+      await _speech.stop();
+      final dir = await getTemporaryDirectory();
+      final fileName = 'voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final path = '${dir.path}/$fileName';
+
+      await _audioRecorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          numChannels: 1,
+        ),
+        path: path,
+      );
+
+      if (!mounted) return;
+      setState(() {
+        _audioPath = path;
+        _audioUrl = null;
+        _recordingDuration = Duration.zero;
+        _audioDuration = Duration.zero;
+        _currentPosition = Duration.zero;
+        _isPlaying = false;
+        _recordingState = RecordingState.recording;
+      });
+
+      _recordingTimer?.cancel();
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (!mounted) return;
+        setState(() {
+          final next = _recordingDuration + const Duration(seconds: 1);
+          _recordingDuration =
+              next > _kMaxRecordingDuration ? _kMaxRecordingDuration : next;
+        });
+      });
+
+      _maxDurationTimer?.cancel();
+      _maxDurationTimer = Timer(_kMaxRecordingDuration, () {
+        if (mounted && _recordingState == RecordingState.recording) {
+          _stopRecording();
+        }
+      });
+
+      _transcriptController.clear();
+    } catch (e) {
+      debugPrint('Error starting recording: $e');
+      _recordingTimer?.cancel();
+      _maxDurationTimer?.cancel();
+      await _audioRecorder.stop().catchError((_) => null);
+      if (mounted) {
+        setState(() => _recordingState = RecordingState.idle);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not start recording: $e'),
+            backgroundColor: VoxColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    _recordingTimer?.cancel();
+    _maxDurationTimer?.cancel();
+    await _speech.stop();
+
+    setState(() => _recordingState = RecordingState.processing);
+
+    try {
+      final title = _titleController.text.trim();
+      final duration = _recordingDuration;
+      final path = await _audioRecorder.stop();
+      final actualPath = path ?? _audioPath;
+      _audioPath = actualPath;
+      if (actualPath == null) {
+        throw Exception('Recorder did not return an audio file.');
+      }
+
+      await _saveRecordedAudioNote(
+        localPath: actualPath,
+        title: title,
+        duration: duration,
+      );
+    } catch (e) {
+      debugPrint('Error stopping recording: $e');
+      if (mounted) {
+        setState(() => _recordingState = RecordingState.idle);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Recording was not saved: $e'),
+            backgroundColor: VoxColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<String> _uploadAudioToFirebase(String localPath) async {
+    final uid = _resolvedUid ?? FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      throw Exception('Please sign in before saving recordings.');
+    }
+    try {
+      String cleanPath = localPath;
+      if (cleanPath.startsWith('file://')) {
+        cleanPath = cleanPath.replaceFirst('file://', '');
+      }
+
+      final file = File(cleanPath);
+      if (!await file.exists()) {
+        throw Exception('Audio file not found at $cleanPath');
+      }
+
+      final bytes = await file.readAsBytes();
+      if (bytes.isEmpty) {
+        throw Exception('Audio file is completely empty (0 bytes).');
+      }
+
+      final fileName = '${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final ref = FirebaseStorage.instance
+          .ref()
+          .child('user_notes')
+          .child(uid)
+          .child(fileName);
+
+      final uploadTask = ref.putData(
+        bytes,
+        SettableMetadata(contentType: 'audio/m4a'),
+      );
+
+      final snapshot = await uploadTask.whenComplete(() => null);
+
+      if (snapshot.state != TaskState.success) {
+        throw Exception('Upload did not succeed. State: ${snapshot.state}');
+      }
+
+      final downloadUrl = await ref.getDownloadURL();
+
+      if (await file.exists()) await file.delete();
+      return downloadUrl;
+    } catch (e) {
+      debugPrint('Error uploading audio: $e');
+      throw Exception('Audio upload failed: $e');
+    }
+  }
+
+  Future<void> _saveRecordedAudioNote({
+    required String localPath,
+    required String title,
+    required Duration duration,
+  }) async {
+    final uid = _resolvedUid ?? FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null || _isAnonymousUser) {
+      throw Exception('Please sign in before saving recordings.');
+    }
+
+    final audioUrl = await _uploadAudioToFirebase(localPath);
+    if (audioUrl.trim().isEmpty) {
+      throw Exception('Audio upload returned no download URL.');
+    }
+
+    await FirebaseFirestore.instance.collection('notes').add({
+      'userId': uid,
+      'title': title,
+      'content': '',
+      'audioUrl': audioUrl,
+      'transcriptStatus': 'ready',
+      'recordingDurationSeconds': duration.inSeconds,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    if (!mounted) return;
+    setState(() {
+      _titleController.clear();
+      _transcriptController.clear();
+      _recordingState = RecordingState.idle;
+      _audioPath = null;
+      _audioUrl = null;
+      _recordingDuration = Duration.zero;
+      _audioDuration = Duration.zero;
+      _currentPosition = Duration.zero;
+      _isPlaying = false;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Recording saved.'),
+        backgroundColor: VoxColors.surface(context),
+        behavior: SnackBarBehavior.floating,
+        margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+      ),
+    );
+  }
+
+  Future<String> _transcribeAudioUrl(String audioUrl, String title) async {
+    if (kGroqApiKey.isEmpty) {
+      throw Exception('Missing GROQ_API_KEY in assets/project.env.');
+    }
+
+    final response = await http.get(Uri.parse(audioUrl)).timeout(
+          const Duration(minutes: 2),
+        );
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Could not download recording for transcription.');
+    }
+
+    final dir = await getTemporaryDirectory();
+    final file = File(
+      '${dir.path}/transcribe_${DateTime.now().millisecondsSinceEpoch}.m4a',
+    );
+    await file.writeAsBytes(response.bodyBytes);
+
+    try {
+      final request = http.MultipartRequest(
+        'POST',
+        Uri.parse('https://api.groq.com/openai/v1/audio/transcriptions'),
+      )
+        ..headers['Authorization'] = 'Bearer $kGroqApiKey'
+        ..fields['model'] = 'whisper-large-v3'
+        ..fields['response_format'] = 'json'
+        ..fields['prompt'] = title
+        ..files.add(await http.MultipartFile.fromPath('file', file.path));
+
+      final streamed = await request.send().timeout(const Duration(minutes: 5));
+      final body = await streamed.stream.bytesToString();
+
+      if (streamed.statusCode < 200 || streamed.statusCode >= 300) {
+        throw Exception('Transcription API error ${streamed.statusCode}: $body');
+      }
+
+      final decoded = jsonDecode(body);
+      if (decoded is Map<String, dynamic>) {
+        final text = (decoded['text'] ?? '').toString().trim();
+        if (text.isNotEmpty) return text;
+      }
+      throw Exception('Transcription API returned no text.');
+    } finally {
+      if (await file.exists()) {
+        await file.delete();
+      }
+    }
+  }
+
+  void _discardRecording() {
+    _recordingTimer?.cancel();
+    _maxDurationTimer?.cancel();
+    _speech.stop();
+    _audioRecorder.stop();
+    setState(() {
+      _recordingState = RecordingState.idle;
+      _audioPath = null;
+      _audioUrl = null;
+      _recordingDuration = Duration.zero;
+      _audioDuration = Duration.zero;
+      _currentPosition = Duration.zero;
+      _isPlaying = false;
+      _transcriptController.clear();
+    });
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  PLAYBACK
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Future<void> _playAudio({String? url}) async {
+    final targetUrl = url ?? _audioUrl;
+    if (targetUrl == null) return;
+    try {
+      if (_isPlaying) {
+        await _audioPlayer.pause();
+        setState(() => _isPlaying = false);
+      } else {
+        await _audioPlayer.setUrl(targetUrl);
+        _audioPlayer.positionStream.listen((p) {
+          if (mounted) setState(() => _currentPosition = p);
+        });
+        _audioPlayer.durationStream.listen((d) {
+          if (d != null && mounted) setState(() => _audioDuration = d);
+        });
+        _audioPlayer.playerStateStream.listen((s) {
+          if (s.processingState == ProcessingState.completed) {
+            if (mounted) {
+              setState(() {
+                _isPlaying = false;
+                _currentPosition = Duration.zero;
+              });
+            }
+          }
+        });
+        await _audioPlayer.play();
+        setState(() => _isPlaying = true);
+      }
+    } catch (e) {
+      debugPrint('Error playing audio: $e');
+    }
+  }
+
+  String _formatDuration(Duration d) {
+    final h = d.inHours;
+    final m = d.inMinutes % 60;
+    final s = d.inSeconds % 60;
+    if (h > 0) {
+      return '${h.toString().padLeft(2, '0')}:${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+    }
+    return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  SAVE NOTE
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Future<void> _saveNote(LanguageProvider lang) async {
+    final transcript = _transcriptController.text.trim();
+    final rawTitle = _titleController.text.trim();
+    final title = rawTitle.isNotEmpty ? rawTitle : 'Note';
+    final hasSavedAudio = _audioUrl != null;
+    final isNewRecordedNote = !_isEditing && hasSavedAudio && !_isAnonymousUser;
+    final savedContent = isNewRecordedNote ? '' : transcript;
+    final transcriptStatus = hasSavedAudio
+        ? (transcript.isNotEmpty ? 'pending' : 'unavailable')
+        : 'done';
+
+    if (rawTitle.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text('Please add a title before saving.'),
+          backgroundColor: VoxColors.danger,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+        ),
+      );
+      return;
+    }
+    if (transcript.isEmpty && (!hasSavedAudio || _isAnonymousUser)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            _isAnonymousUser
+                ? 'Guest notes need typed or dictated text before saving.'
+                : 'Please record audio or type note content before saving.',
+          ),
+          backgroundColor: VoxColors.danger,
+          behavior: SnackBarBehavior.floating,
+          margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      if (_isEditing && _editingId != null) {
+        if (_isAnonymousUser) {
+          context.read<TempNotesProvider>().update(
+            _editingId!,
+            title,
+            savedContent,
+          );
+        } else {
+          await FirebaseFirestore.instance
+              .collection('notes')
+              .doc(_editingId)
+              .update({
+                'title': title,
+                'content': savedContent,
+                'audioUrl': _audioUrl,
+                if (hasSavedAudio) 'pendingTranscript': transcript,
+                if (hasSavedAudio) 'transcriptStatus': transcriptStatus,
+                'recordingDurationSeconds': _recordingDuration.inSeconds,
+                'lastUpdated': FieldValue.serverTimestamp(),
+              });
+        }
+      } else {
+        if (_isAnonymousUser) {
+          context.read<TempNotesProvider>().add(title, savedContent);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: const Text(
+                  'Note saved temporarily. Create an account to keep it.',
+                ),
+                backgroundColor: VoxColors.surface(context),
+                behavior: SnackBarBehavior.floating,
+                margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+              ),
+            );
+          }
+        } else {
+          final authUid =
+              FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid!;
+          await FirebaseFirestore.instance.collection('notes').add({
+            'userId': authUid,
+            'title': title,
+            'content': savedContent,
+            'audioUrl': _audioUrl,
+            if (hasSavedAudio) 'pendingTranscript': transcript,
+            'transcriptStatus': transcriptStatus,
+            'recordingDurationSeconds': _recordingDuration.inSeconds,
+            'timestamp': FieldValue.serverTimestamp(),
+          });
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(lang.t('note_saved')),
+                behavior: SnackBarBehavior.floating,
+                backgroundColor: VoxColors.surface(context),
+                margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+              ),
+            );
+          }
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _titleController.clear();
+          _transcriptController.clear();
+          _isEditing = false;
+          _editingId = null;
+          _audioPath = null;
+          _audioUrl = null;
+          _recordingState = RecordingState.idle;
+          _recordingDuration = Duration.zero;
+          _audioDuration = Duration.zero;
+          _currentPosition = Duration.zero;
+          _isPlaying = false;
+        });
+      }
+    } on FirebaseException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.code == 'unavailable'
+                  ? 'No internet. Note will sync when back online.'
+                  : '${lang.t('error_saving')} ${e.message}',
+            ),
+            backgroundColor: const Color(0xFF333333),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${lang.t('error_saving')} $e'),
+            backgroundColor: const Color(0xFF333333),
+            behavior: SnackBarBehavior.floating,
+            margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isSaving = false);
+    }
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  DELETE
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Future<void> _deleteNote(String docId) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: VoxColors.surface(context),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: VoxColors.border(context)),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.delete_outline, color: VoxColors.danger),
+            const SizedBox(width: 8),
+            Text('Delete Note?', style: TextStyle(color: VoxColors.onSurface(context))),
+          ],
+        ),
+        content: Text(
+          'This item will be stored in the Recycle Bin and permanently deleted after 30 days.',
+          style: TextStyle(color: VoxColors.textSecondary(context)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Color(0x8A0A0E1A)),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: VoxColors.danger,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      final docRef = FirebaseFirestore.instance.collection('notes').doc(docId);
+      final snapshot = await docRef.get();
+      String? noteTitle;
+      if (snapshot.exists) {
+        final data = snapshot.data()!;
+        noteTitle = data['title']?.toString();
+        final targetUid =
+            data['userId']?.toString() ??
+            FirebaseAuth.instance.currentUser?.uid ??
+            _resolvedUid;
+        if (targetUid != null) {
+          await FirebaseFirestore.instance
+              .collection('users')
+              .doc(targetUid)
+              .collection('deleted_library')
+              .add({
+                'fileName': data['title'] ?? 'Note',
+                'content': data['content'],
+                'audioUrl': data['audioUrl'],
+                'recordingDurationSeconds': data['recordingDurationSeconds'],
+                'fileType': 'note',
+                'sourceCollection': 'notes',
+                'deletedAt': FieldValue.serverTimestamp(),
+                'originalTimestamp':
+                    data['timestamp'] ?? FieldValue.serverTimestamp(),
+                'userId': data['userId'] ?? targetUid,
+              });
+        }
+      }
+      await docRef.delete();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(
+                  Icons.delete_sweep_outlined,
+                  color: Colors.white,
+                  size: 18,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    '${noteTitle != null ? '"$noteTitle" moved' : 'Note moved'} to Recycle Bin. Kept for 30 days.',
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: VoxColors.surface(context),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+          ),
+        );
+      }
+    } on FirebaseException catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.code == 'unavailable'
+                  ? 'Cannot delete while offline.'
+                  : 'Delete failed: ${e.message}',
+            ),
+            backgroundColor: VoxColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
+  void _deleteTempNote(String id, TempNotesProvider tempNotes) {
+    tempNotes.remove(id);
+    if (_isEditing && _editingId == id) _cancelEdit();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: const Text('Note deleted.'),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: VoxColors.surface(context),
+        margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
+      ),
+    );
+  }
+
+  Future<void> _transcribeSavedNote(String docId) async {
+    if (_transcribingNoteIds.contains(docId)) return;
+
+    setState(() => _transcribingNoteIds.add(docId));
+    try {
+      final docRef = FirebaseFirestore.instance.collection('notes').doc(docId);
+      final snapshot = await docRef.get();
+      if (!snapshot.exists) throw Exception('Note not found.');
+
+      final data = snapshot.data() ?? {};
+      final existingContent = (data['content'] ?? '').toString().trim();
+      final audioUrl = (data['audioUrl'] ?? '').toString().trim();
+      final title = (data['title'] ?? 'Note').toString();
+      final durationSeconds =
+          (data['recordingDurationSeconds'] as num?)?.toInt();
+
+      if (existingContent.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('This note is already transcribed.'),
+            backgroundColor: VoxColors.surface(context),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        return;
+      }
+
+      if (audioUrl.isEmpty) {
+        throw Exception('This note has no saved audio URL.');
+      }
+
+      await docRef.update({
+        'transcriptStatus': 'transcribing',
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+
+      final transcript = await _transcribeAudioUrl(audioUrl, title);
+
+      await docRef.update({
+        'content': transcript,
+        'pendingTranscript': transcript,
+        'transcriptStatus': 'done',
+        'transcribedAt': FieldValue.serverTimestamp(),
+        'lastUpdated': FieldValue.serverTimestamp(),
+      });
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Transcription saved.'),
+            backgroundColor: VoxColors.surface(context),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+        _showNoteDetails(
+          docId,
+          title,
+          transcript,
+          audioUrl: audioUrl,
+          durationSeconds: durationSeconds,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        await FirebaseFirestore.instance
+            .collection('notes')
+            .doc(docId)
+            .update({
+          'transcriptStatus': 'failed',
+          'lastUpdated': FieldValue.serverTimestamp(),
+        }).catchError((_) {});
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Transcription failed: $e'),
+            backgroundColor: VoxColors.danger,
+            behavior: SnackBarBehavior.floating,
+      _isEditing = false;
+      _editingId = null;
+      _titleController.clear();
+      _transcriptController.clear();
+      _recordingState = RecordingState.idle;
+      _audioPath = null;
+      _audioUrl = null;
+      _recordingDuration = Duration.zero;
+    });
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  SELECTION MODE HELPERS
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  void _enterNoteSelectionMode(String id) {
+    setState(() {
+      _isNoteSelectionMode = true;
+      _selectedNoteIds.clear();
+      _selectedNoteIds.add(id);
+    });
+  }
+
+  void _exitNoteSelectionMode() {
+    setState(() {
+      _isNoteSelectionMode = false;
+      _selectedNoteIds.clear();
+    });
+  }
+
+  void _toggleNoteSelection(String id) {
+    setState(() {
+      if (_selectedNoteIds.contains(id)) {
+        _selectedNoteIds.remove(id);
+        if (_selectedNoteIds.isEmpty) _isNoteSelectionMode = false;
+      } else {
+        _selectedNoteIds.add(id);
+      }
+    });
+  }
+
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  //  DELETE SELECTED NOTES
+  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Future<void> _deleteSelectedNotes() async {
+    if (_selectedNoteIds.isEmpty) return;
+    final count = _selectedNoteIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: VoxColors.surface(context),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: VoxColors.border(context)),
+        ),
+      _exitNoteSelectionMode();
+  }————————————————————————————————————————————————————————————————————
+  Future<void> _deleteSelectedNotes() async {
+    if (_selectedNoteIds.isEmpty) return;
+    final count = _selectedNoteIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: VoxColors.surface(context),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: VoxColors.border(context)),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.delete_outline, color: VoxColors.danger),
+            const SizedBox(width: 8),
+            Text('Delete Selected?', style: TextStyle(color: VoxColors.onSurface(context))),
+          ],
+        ),
+        content: Text(
+          '$count note${count == 1 ? '' : 's'} will be moved to the Recycle Bin and permanently deleted after 30 days.',
+          style: TextStyle(color: VoxColors.textSecondary(context)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text(
+              'Cancel',
+              style: TextStyle(color: Color(0x8A0A0E1A)),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: VoxColors.danger,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: Text('Delete $count'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    if (!mounted) return;
+
+    try {
+      if (_isAnonymousUser) {
+        final provider = context.read<TempNotesProvider>();
+        for (var id in _selectedNoteIds.toList()) {
+          provider.remove(id);
+        }
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('$count note${count == 1 ? '' : 's'} deleted.'),
+              backgroundColor: const Color(0xFF333333),
+            ),
+          );
+        }
+      } else {
+        final uid = FirebaseAuth.instance.currentUser?.uid ?? _resolvedUid;
+        if (uid == null) return;
+
+        final batch = FirebaseFirestore.instance.batch();
+        final userDoc = FirebaseFirestore.instance.collection('users').doc(uid);
+
+        for (var docId in _selectedNoteIds) {
+          final docRef = FirebaseFirestore.instance
+              .collection('notes')
+              .doc(docId);
+          final snapshot = await docRef.get();
+          if (snapshot.exists) {
+            final data = snapshot.data()!;
+            final newDocRef = userDoc.collection('deleted_library').doc();
+            batch.set(newDocRef, {
+              'fileName': data['title'] ?? 'Note',
+              'content': data['content'],
+              'audioUrl': data['audioUrl'],
+              'recordingDurationSeconds': data['recordingDurationSeconds'],
+              'fileType': 'note',
+              'sourceCollection': 'notes',
+              'deletedAt': FieldValue.serverTimestamp(),
+              'originalTimestamp':
+                  data['timestamp'] ?? FieldValue.serverTimestamp(),
+              'userId': uid,
+            });
+            batch.delete(docRef);
+          }
+        }
+        await batch.commit();
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '$count note${count == 1 ? '' : 's'} moved to Recycle Bin.',
+              ),
+              backgroundColor: const Color(0xFF333333),
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Failed to delete: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
+      }
+    }
+
+    _exitNoteSelectionMode();
+  }
+
+  // ——————————————————————————————————————————————————————————————————————————
+  //  NOTE DETAIL BOTTOM SHEET
+  // ——————————————————————————————————————————————————————————————————————————
+  void _showNoteDetails(
+    String id,
+    String title,
+    String content, {
+    String? audioUrl,
+    int? durationSeconds,
+    int? initialTab,
+  }) {
+    final lang = context.read<LanguageProvider>();
+    final tts = context.read<TtsService>();
+    final sheetTranscriptController = TextEditingController(text: content);
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        bool isSpeaking = false;
+        String sheetContent = content;
+        bool isEditingTranscript = false;
+        bool isUpdatingTranscript = false;
+        int activeTab = initialTab ?? (sheetContent.trim().isEmpty && audioUrl != null ? 1 : 0);
+        AudioPlayer localPlayer = AudioPlayer();
+        bool isPlayingLocal = false;
+        Duration localPos = Duration.zero;
+        Duration localDur = Duration.zero;
+
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (sheetContent.trim().isNotEmpty && activeTab == 0) {
+            tts.play(title, sheetContent, lang.ttsLocale);
+            isSpeaking = true;
+          }
+        });
+
+        return StatefulBuilder(
+          builder: (ctx, setSheetState) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Color(0xFFF0F4FF),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+              ),
+              child: Padding(
+                padding: EdgeInsets.only(
+                  bottom: MediaQuery.of(ctx).viewInsets.bottom,
+                ),
+                child: DraggableScrollableSheet(
+                  initialChildSize: 0.88,
+                  minChildSize: 0.5,
+                  maxChildSize: 0.97,
+                  expand: false,
+                  builder: (_, scrollController) => Column(
+                    children: [
+                      // Handle
+                      const SizedBox(height: 12),
+                      Center(
+                        child: Container(
+                          width: 36,
+                          height: 4,
+                          decoration: BoxDecoration(
+                            color: Color(0x420A0E1A),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Header
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 20),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Expanded(
+                              child: Text(
+                                title,
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: -0.5,
+                                ),
+                              ),
+                            ),
+                            _sheetIconBtn(
+                              icon: isSpeaking
+                                  ? Icons.stop_circle_outlined
+                                  : Icons.volume_up_rounded,
+                              color: isSpeaking
+                                  ? const Color(0xFF4B9EFF)
+                                  : Color(0x8A0A0E1A),
+                              onTap: () {
+                                if (sheetContent.trim().isEmpty) return;
+                                if (isSpeaking) {
+                                  tts.stop();
+                                  setSheetState(() => isSpeaking = false);
+                                } else {
+                                  tts.play(title, sheetContent, lang.ttsLocale);
+                                  setSheetState(() => isSpeaking = true);
+                                }
+                              },
+                            ),
+                            _sheetIconBtn(
+                              icon: Icons.edit_note_rounded,
+                              color: Color(0x8A0A0E1A),
+                              onTap: () {
+                                tts.stop();
+                                Navigator.pop(ctx);
+                                setState(() {
+                                  _titleController.text = title;
+                                  _transcriptController.text = sheetContent;
+                                  _isEditing = true;
+                                  _editingId = id;
+                                  _audioUrl = audioUrl;
+                                  if (durationSeconds != null) {
+                                    _recordingDuration = Duration(
+                                      seconds: durationSeconds,
+                                    );
+                                  }
+                                });
+                                _scrollController.animateTo(
+                                  0,
+                                  duration: const Duration(milliseconds: 300),
+                                  curve: Curves.easeOut,
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 4),
+                      if (durationSeconds != null && durationSeconds > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 20, bottom: 4),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.access_time,
+                                size: 12,
+                                color: Colors.grey[600],
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _formatDuration(
+                                  Duration(seconds: durationSeconds),
+                                ),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.grey[600],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                      // ————————————————— AI Tools bar —————————————————
+                      if (sheetContent.trim().isNotEmpty) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Color(0xFF0A0E1A),
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.auto_awesome,
+                                size: 13,
+                                color: Color(0xFF4B9EFF),
+                              ),
+                              const SizedBox(width: 6),
+                              const Text(
+                                'AI Tools',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                  color: Color(0xFF4B9EFF),
+                                ),
+                              ),
+                              const Spacer(),
+                              _aiChip(
+                                label: 'Summarize',
+                                icon: Icons.summarize_outlined,
+                                dark: true,
+                                onTap: () {
+                                  tts.stop();
+                                  Navigator.pop(ctx);
+                                  Navigator.push(
+                                    context,
+                                    MaterialPageRoute(
+                                      builder: (_) => AiResultPage(
+                                        documentTitle: title,
+                                        documentContent: sheetContent,
+                                        mode: 'summary',
+                                        source: 'Notes',
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              _aiChip(
+                                label: 'Q&A Generator',
+                                icon: Icons.style_outlined,
+                                dark: false,
+                                onTap: () async {
+                                  tts.stop();
+                                  final nav = Navigator.of(context);
+                                  final count = await _pickCardCount(context);
+                                  if (count == null) return;
+                                  if (!ctx.mounted) return;
+                                  Navigator.pop(ctx);
+                                  if (!context.mounted) return;
+                                  nav.push(
+                                    MaterialPageRoute(
+                                      builder: (_) => AiResultPage(
+                                        documentTitle: title,
+                                        documentContent: sheetContent,
+                                        mode: 'flashcards',
+                                        cardCount: count,
+                                        source: 'Notes',
+                                      ),
+                                    ),
+                                  );
+                                },
+                              ),
+                              const SizedBox(width: 8),
+                              _aiChip(
+                                label: 'Download',
+                                icon: Icons.file_download_outlined,
+                                dark: true,
+                                onTap: () async {
+                                  await _downloadTranscriptPdf(
+                                    context,
+                                    title,
+                                    sheetContent,
+                                  );
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+
+                      // ————————————————— Tabs —————————————————
+                      if (audioUrl != null) ...[
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Row(
+                            children: [
+                              _tabChip(
+                                label: 'Transcript',
+                                selected: activeTab == 0,
+                                onTap: () => setSheetState(() => activeTab = 0),
+                              ),
+                              const SizedBox(width: 8),
+                              _tabChip(
+                                label: 'Audio',
+                                selected: activeTab == 1,
+                                onTap: () => setSheetState(() => activeTab = 1),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                      ],
+
+                      const Divider(
+                        height: 1,
+                        thickness: 1,
+                        indent: 20,
+                        endIndent: 20,
+                      ),
+
+                      // ————————————————— Body —————————————————
+                      Expanded(
+                        child: activeTab == 0
+                            ? ListView(
+                                controller: scrollController,
+                                padding: const EdgeInsets.fromLTRB(
+                                  20,
+                                  16,
+                                  20,
+                                  40,
+                                ),
+                                children: [
+                                  if (sheetContent.trim().isNotEmpty) ...[
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        _transcriptActionChip(
+                                          label: isEditingTranscript
+                                              ? 'Cancel'
+                                              : 'Edit',
+                                          icon: isEditingTranscript
+                                              ? Icons.close
+                                              : Icons.edit_note,
+                                          onTap: () {
+                                            setSheetState(() {
+                                              isEditingTranscript =
+                                                  !isEditingTranscript;
+                                              sheetTranscriptController.text =
+                                                  sheetContent;
+                                            });
+                                          },
+                                        ),
+                                        if (isEditingTranscript)
+                                          _transcriptActionChip(
+                                            label: isUpdatingTranscript
+                                                ? 'Updating...'
+                                                : 'Update',
+                                            icon: Icons.check,
+                                            onTap: isUpdatingTranscript
+                                                ? null
+                                                : () async {
+                                                    final next =
+                                                        sheetTranscriptController
+                                                            .text
+                                                            .trim();
+                                                    if (next.isEmpty) {
+                                                      ScaffoldMessenger.of(
+                                                        context,
+                                                      ).showSnackBar(
+                                                        SnackBar(
+                                                          content: const Text(
+                                                            'Transcript cannot be empty.',
+                                                          ),
+                                                          backgroundColor:
+                                                              VoxColors.danger,
+                                                          behavior:
+                                                              SnackBarBehavior
+                                                                  .floating,
+                                                        ),
+                                                      );
+                                                      return;
+                                                    }
+                                                    setSheetState(() {
+                                                      isUpdatingTranscript =
+                                                          true;
+                                                    });
+                                                    try {
+                                                      await _updateNoteTranscript(
+                                                        id,
+                                                        next,
+                                                      );
+                                                      setSheetState(() {
+                                                        sheetContent = next;
+                                                        isEditingTranscript =
+                                                            false;
+                                                        isUpdatingTranscript =
+                                                            false;
+                                                      });
+                                                      if (context.mounted) {
+                                                        ScaffoldMessenger.of(
+                                                          context,
+                                                        ).showSnackBar(
+                                                          SnackBar(
+                                                            content: const Text(
+                                                              'Transcript updated.',
+                                                            ),
+                                                            backgroundColor:
+                                                                VoxColors
+                                                                    .surface(
+                                                              context,
+                                                            ),
+                                                            behavior:
+                                                                SnackBarBehavior
+                                                                    .floating,
+                                                          ),
+                                                        );
+                                                      }
+                                                    } catch (e) {
+                                                      setSheetState(() {
+                                                        isUpdatingTranscript =
+                                                            false;
+                                                      });
+                                                      if (context.mounted) {
+                                                        ScaffoldMessenger.of(
+                                                          context,
+                                                        ).showSnackBar(
+                                                          SnackBar(
+                                                            content: Text(
+                                                              'Update failed: $e',
+                                                            ),
+                                                            backgroundColor:
+                                                                VoxColors
+                                                                    .danger,
+                                                            behavior:
+                                                                SnackBarBehavior
+                                                                    .floating,
+                                                          ),
+                                                        );
+                                                      }
+                                                    }
+                                                  },
+                                          ),
+                                        _transcriptActionChip(
+                                          label: 'Summarize',
+                                          icon: Icons.summarize_outlined,
+                                          onTap: () {
+                                            tts.stop();
+                                            Navigator.pop(ctx);
+                                            Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (_) => AiResultPage(
+                                                  documentTitle: title,
+                                                  documentContent:
+                                                      sheetContent,
+                                                  mode: 'summary',
+                                                  source: 'Notes',
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                        _transcriptActionChip(
+                                          label: 'Q&A',
+                                          icon: Icons.style_outlined,
+                                          onTap: () async {
+                                            tts.stop();
+                                            final nav = Navigator.of(context);
+                                            final count =
+                                                await _pickCardCount(context);
+                                            if (count == null) return;
+                                            if (!ctx.mounted) return;
+                                            Navigator.pop(ctx);
+                                            if (!context.mounted) return;
+                                            nav.push(
+                                              MaterialPageRoute(
+                                                builder: (_) => AiResultPage(
+                                                  documentTitle: title,
+                                                  documentContent:
+                                                      sheetContent,
+                                                  mode: 'flashcards',
+                                                  cardCount: count,
+                                                  source: 'Notes',
+                                                ),
+                                              ),
+                                            );
+                                          },
+                                        ),
+                                        _transcriptActionChip(
+                                          label: 'Download',
+                                          icon: Icons.file_download_outlined,
+                                          onTap: () => _downloadTranscriptPdf(
+                                            context,
+                                            title,
+                                            sheetContent,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 14),
+                                  ],
+                                  if (isEditingTranscript)
+                                    TextField(
+                                      controller: sheetTranscriptController,
+                                      maxLines: null,
+                                      minLines: 8,
+                                      textCapitalization:
+                                          TextCapitalization.sentences,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        height: 1.65,
+                                        color: Color(0xDD0A0E1A),
+                                      ),
+                                      decoration: InputDecoration(
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        hintText: 'Edit transcript...',
+                                        border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                          borderSide: BorderSide(
+                                            color: Colors.grey.shade300,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Text(
+                                      sheetContent.trim().isEmpty
+                                          ? 'No transcript yet. Use Transcribe from the notes list after saving a recording.'
+                                          : sheetContent,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        height: 1.75,
+                                        color: sheetContent.trim().isEmpty
+                                            ? Color(0x8A0A0E1A)
+                                            : Color(0xDD0A0E1A),
+                                      ),
+                                    ),
+                                ],
+                              )
+                            : _audioPlayerPanel(
+                                audioUrl: audioUrl!,
+                                isPlayingLocal: isPlayingLocal,
+                                localPos: localPos,
+                                localDur: localDur,
+                                localPlayer: localPlayer,
+                                onStateChanged: (playing, pos, dur) {
+                                  setSheetState(() {
+                                    isPlayingLocal = playing;
+                                    localPos = pos;
+                                    localDur = dur;
+                                  });
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    ).whenComplete(() {
+      tts.stop();
+      sheetTranscriptController.dispose();
+    });
+  }
+
+  Widget _audioPlayerPanel({
+    required String audioUrl,
+    required bool isPlayingLocal,
+    required Duration localPos,
+    required Duration localDur,
+    required AudioPlayer localPlayer,
+    required void Function(bool playing, Duration pos, Duration dur)
+    onStateChanged,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: Color(0xFF0A0E1A),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.mic, color: const Color(0xFF4B9EFF), size: 18),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Voice Recording',
+                      style: TextStyle(
+                        color: Color(0xFF4B9EFF),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                GestureDetector(
+                  onTap: () async {
+                    try {
+                      if (isPlayingLocal) {
+                        await localPlayer.pause();
+                        onStateChanged(false, localPos, localDur);
+                      } else {
+                        await localPlayer.setUrl(audioUrl);
+                        localPlayer.positionStream.listen(
+                          (p) => onStateChanged(true, p, localDur),
+                        );
+                        localPlayer.durationStream.listen((d) {
+                          if (d != null) onStateChanged(true, localPos, d);
+                        });
+                        localPlayer.playerStateStream.listen((s) {
+                          if (s.processingState == ProcessingState.completed) {
+                            onStateChanged(false, Duration.zero, localDur);
+                          }
+                        });
+                        await localPlayer.play();
+                        onStateChanged(true, localPos, localDur);
+                      }
+                    } catch (e) {
+                      debugPrint('Error: $e');
+                    }
+                  },
+                  child: Container(
+                    width: 72,
+                    height: 72,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF4B9EFF),
+                      borderRadius: BorderRadius.circular(36),
+                    ),
+                    child: Icon(
+                      isPlayingLocal
+                          ? Icons.pause_rounded
+                          : Icons.play_arrow_rounded,
+                      color: Color(0xFF0A0E1A),
+                      size: 36,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                if (localDur > Duration.zero) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        _formatDuration(localPos),
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                      Text(
+                        _formatDuration(localDur),
+                        style: TextStyle(
+                          color: Colors.white54,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  SliderTheme(
+                    data: SliderTheme.of(context).copyWith(
+                      activeTrackColor: const Color(0xFF4B9EFF),
+                      inactiveTrackColor: Colors.white12,
+                      thumbColor: const Color(0xFF4B9EFF),
+                      trackHeight: 3,
+                    ),
+                    child: Slider(
+                      value: localPos.inSeconds.toDouble().clamp(
+                        0,
+                        localDur.inSeconds.toDouble(),
+                      ),
+                      max: localDur.inSeconds.toDouble(),
+                      onChanged: (v) =>
+                          localPlayer.seek(Duration(seconds: v.toInt())),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _sheetIconBtn({
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsets.all(8),
+        child: Icon(icon, color: color, size: 22),
+      ),
+    );
+  }
+
+  Widget _aiChip({
+    required String label,
+    required IconData icon,
+    required bool dark,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: dark
+              ? Colors.white.withValues(alpha: 0.12)
+              : const Color(0xFF4B9EFF),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              color: dark ? const Color(0xFF4B9EFF) : Color(0xFF0A0E1A),
+              size: 12,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: dark ? const Color(0xFF4B9EFF) : Color(0xFF0A0E1A),
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _transcriptActionChip({
+    required String label,
+    required IconData icon,
+    required VoidCallback? onTap,
+  }) {
+    return ActionChip(
+      avatar: Icon(icon, size: 15, color: const Color(0xFF4B9EFF)),
+      label: Text(label),
+      onPressed: onTap,
+      backgroundColor: Colors.white,
+      disabledColor: Colors.white.withValues(alpha: 0.65),
+      labelStyle: const TextStyle(
+        color: Color(0xFF0A0E1A),
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+      ),
+      side: BorderSide(color: Colors.grey.shade300),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+    );
+  }
+
+  /// Generate a PDF from the transcript and open the system save/share sheet.
+  Future<void> _downloadTranscriptPdf(
+    BuildContext context,
+    String title,
+    String content,
+  ) async {
+    if (content.trim().isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No transcript to download')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          build: (pw.Context pdfCtx) => [
+            pw.Header(
+              level: 0,
+              child: pw.Text(
+                title,
+                style: pw.TextStyle(
+                  fontSize: 22,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 12),
+            pw.Text(
+              content,
+              style: const pw.TextStyle(fontSize: 13, lineSpacing: 5),
+            ),
+          ],
+        ),
+      );
+
+      final bytes = await pdf.save();
+
+      // Save to temp directory
+      final dir = await getTemporaryDirectory();
+      final safeName = title
+          .replaceAll(RegExp(r'[^\w\s-]'), '')
+          .replaceAll(RegExp(r'\s+'), '_');
+      final file = File('${dir.path}/${safeName}_transcript.pdf');
+      await file.writeAsBytes(bytes);
+
+      await Share.shareXFiles(
+        [XFile(file.path, mimeType: 'application/pdf')],
+        text: '$title transcript',
+      );
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PDF ready to save.')),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF error: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _tabChip({
+    required String label,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        decoration: BoxDecoration(
+          color: selected
+              ? Color(0xFF0A0E1A)
+              : Color(0xFF0A0E1A).withValues(alpha: 0.07),
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            color: selected ? const Color(0xFF4B9EFF) : Color(0x8A0A0E1A),
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<int?> _pickCardCount(BuildContext context) async {
+    int selected = 10;
+    return showDialog<int>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: const Color(0xFFF0F4FF),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          title: const Text(
+            'How many questions?',
+            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                '$selected cards',
+                style: TextStyle(
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  color: Color(0xFF4B9EFF),
+                ),
+              ),
+              Slider(
+                value: selected.toDouble(),
+                min: 5,
+                max: 20,
+                divisions: 15,
+                activeColor: Color(0xFF0A0E1A),
+                inactiveColor: Colors.grey[300],
+                onChanged: (v) => setDialogState(() => selected = v.round()),
+              ),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '5',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                  Text(
+                    '20',
+                    style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                  ),
+                ],
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text(
+                'Cancel',
+                style: TextStyle(color: Color(0x8A0A0E1A)),
+              ),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, selected),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Color(0xFF0A0E1A),
+                foregroundColor: const Color(0xFF4B9EFF),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+              child: const Text('Generate'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ——————————————————————————————————————————————————————————————————————————
+  //  RECORDING AREA WIDGET
+  // ——————————————————————————————————————————————————————————————————————————
+  Widget _buildRecordingArea(LanguageProvider lang) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // ————————————————— IDLE: Show typable text area + record button —————————————————
+        if (_recordingState == RecordingState.idle) ...[
+          Container(
+            decoration: BoxDecoration(
+              color: VoxColors.surface(context),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: VoxColors.border(context)),
+            ),
+            child: Column(
+              children: [
+                TextField(
+                  controller: _transcriptController,
+                  maxLines: 8,
+                  minLines: 4,
+                  textCapitalization: TextCapitalization.sentences,
+                  onChanged: (_) => setState(() {}),
+                  style: TextStyle(
+                    fontSize: 15,
+                    height: 1.6,
+                    color: VoxColors.onSurface(context),
+                  ),
+                  decoration: InputDecoration(
+                    hintText: 'Type your note here...',
+                    hintStyle: TextStyle(color: VoxColors.textHint(context), fontSize: 15),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.all(16),
+                    suffixIcon: Column(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        IconButton(
+                          icon: Icon(
+                            _isTranscriptDictating ? Icons.mic : Icons.mic_none,
+                            color: _isTranscriptDictating
+                                ? VoxColors.primary(context)
+                                : VoxColors.textHint(context),
+                          ),
+                          onPressed: () => _toggleDictation(false),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  child: SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: _startRecording,
+                      icon: const Icon(Icons.fiber_manual_record, size: 18),
+                      label: const Text(
+                        'Record',
+                        style: TextStyle(fontWeight: FontWeight.w800),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: VoxColors.primary(context),
+                        foregroundColor: VoxColors.onPrimary(context),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(30),
+                        ),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        // ————————————————— RECORDING: Show live pulse + live transcript —————————————————
+        if (_recordingState == RecordingState.recording) ...[
+          Container(
+            width: double.infinity,
+            decoration: BoxDecoration(
+              color: const Color(0xFF161B2E),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                // Animated mic
+                AnimatedBuilder(
+                  animation: _pulseAnimation,
+                  builder: (_, _) => Transform.scale(
+                    scale: _pulseAnimation.value,
+                    child: Container(
+                      width: 68,
+                      height: 68,
+                      decoration: BoxDecoration(
+                        color: Colors.red,
+                        borderRadius: BorderRadius.circular(34),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.red.withValues(alpha: 0.5),
+                            blurRadius: 24,
+                            spreadRadius: 6,
+                          ),
+                        ],
+                      ),
+                      child: Icon(
+                        Icons.mic,
+                        color: Colors.white,
+                        size: 34,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                // Timer
+                Text(
+                  _formatDuration(_recordingDuration),
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 28,
+                    fontWeight: FontWeight.w800,
+                    fontFamily: 'monospace',
+                    letterSpacing: 2,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Recording · ${_formatDuration(_kMaxRecordingDuration - _recordingDuration)} left',
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.4),
+                    fontSize: 11,
+                  ),
+                ),
+
+                // Live transcript preview
+                if (_transcriptController.text.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 16),
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    constraints: const BoxConstraints(maxHeight: 80),
+                    child: SingleChildScrollView(
+                      reverse: true,
+                      child: Text(
+                        _transcriptController.text,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.7),
+                          fontSize: 12,
+                          height: 1.5,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 16),
+                // Stop button
+                GestureDetector(
+                  onTap: _stopRecording,
+                  child: Container(
+                    margin: const EdgeInsets.symmetric(horizontal: 20),
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    decoration: BoxDecoration(
+                      color: Colors.red.withValues(alpha: 0.15),
+                      border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: const Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          Icons.stop_circle_outlined,
+                          color: Colors.redAccent,
+                          size: 20,
+                        ),
+                        SizedBox(width: 8),
+                        Text(
+                          'Stop Recording',
+                          style: TextStyle(
+                            color: Colors.redAccent,
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 20),
+              ],
+            ),
+          ),
+        ],
+
+        // ————————————————— PROCESSING —————————————————
+        if (_recordingState == RecordingState.processing) ...[
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 36),
+            decoration: BoxDecoration(
+              color: const Color(0xFF161B2E),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+            ),
+            child: Column(
+              children: [
+                CircularProgressIndicator(
+                  color: Color(0xFF4B9EFF),
+                  strokeWidth: 2,
+                ),
+                SizedBox(height: 16),
+                Text(
+                  'Processing audio...',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                SizedBox(height: 4),
+                Text(
+                  'Uploading recording',
+                  style: TextStyle(color: Colors.white38, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+        ],
+
+        // ————————————————— DONE: Show playback + transcript —————————————————
+        if (_recordingState == RecordingState.done) ...[
+          // Playback card
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              color: Color(0xFF0A0E1A),
+              borderRadius: BorderRadius.circular(24),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      color: Color(0xFF4B9EFF),
+                      size: 18,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Recording complete',
+                      style: TextStyle(
+                        color: Color(0xFF4B9EFF),
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                    const Spacer(),
+                    Text(
+                      _formatDuration(_recordingDuration),
+                      style: TextStyle(
+                        color: Colors.white38,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Audio player
+                if (_audioUrl != null) ...[
+                  Row(
+                    children: [
+                      GestureDetector(
+                        onTap: _playAudio,
+                        child: Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF4B9EFF),
+                            borderRadius: BorderRadius.circular(24),
+                          ),
+                          child: Icon(
+                            _isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded,
+                            color: Color(0xFF0A0E1A),
+                            size: 26,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            if (_audioDuration > Duration.zero)
+                              Text(
+                                '${_formatDuration(_currentPosition)} / ${_formatDuration(_audioDuration)}',
+                                style: TextStyle(
+                                  color: Colors.white54,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            const SizedBox(height: 4),
+                            if (_audioDuration > Duration.zero)
+                              SliderTheme(
+                                data: SliderTheme.of(context).copyWith(
+                                  activeTrackColor: const Color(0xFF4B9EFF),
+                                  inactiveTrackColor: Colors.white12,
+                                  thumbColor: const Color(0xFF4B9EFF),
+                                  trackHeight: 2.5,
+                                ),
+                                child: Slider(
+                                  value: _currentPosition.inSeconds
+                                      .toDouble()
+                                      .clamp(
+                                        0,
+                                        _audioDuration.inSeconds.toDouble(),
+                                      ),
+                                  max: _audioDuration.inSeconds.toDouble(),
+                                  onChanged: (v) => _audioPlayer.seek(
+                                    Duration(seconds: v.toInt()),
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ] else ...[
+                  const Text(
+                    'Audio saved locally',
+                    style: TextStyle(color: Colors.white38, fontSize: 12),
+                  ),
+                ],
+                const SizedBox(height: 12),
+                // Discard button
+                GestureDetector(
+                  onTap: () => showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: const Color(0xFFF0F4FF),
+                      title: const Text(
+                        'Discard recording?',
+                        style: TextStyle(fontWeight: FontWeight.bold),
+                      ),
+                      content: const Text(
+                        'This will delete the audio and transcript.',
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(ctx),
+                          child: const Text(
+                            'Keep',
+                            style: TextStyle(color: Color(0x8A0A0E1A)),
+                          ),
+                        ),
+                        ElevatedButton(
+                          onPressed: () {
+                            Navigator.pop(ctx);
+                            _discardRecording();
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red,
+                            foregroundColor: Colors.white,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                          ),
+                          child: const Text('Discard'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.delete_outline,
+                        color: Colors.white.withValues(alpha: 0.3),
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Discard recording',
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.3),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          // Transcript edit box
+          const SizedBox(height: 12),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: 0.7),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: Colors.grey[300]!),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 14, 16, 0),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.article_outlined,
+                        size: 14,
+                        color: Color(0x730A0E1A),
+                      ),
+                      const SizedBox(width: 6),
+                      const Text(
+                        'Transcript',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                          color: Color(0x730A0E1A),
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        '${_transcriptController.text.length} chars',
+                        style: TextStyle(fontSize: 10, color: Colors.grey[400]),
+                      ),
+                    ],
+                  ),
+                ),
+                TextField(
+                  controller: _transcriptController,
+                  maxLines: 6,
+                  minLines: 3,
+                  textCapitalization: TextCapitalization.sentences,
+                  onChanged: (_) => setState(() {}),
+                  style: TextStyle(fontSize: 14, height: 1.6),
+                  decoration: const InputDecoration(
+                    hintText: 'Transcript appears here. Edit if needed...',
+                    counterText: '',
+                    border: InputBorder.none,
+                    contentPadding: EdgeInsets.fromLTRB(16, 8, 16, 14),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  // ——————————————————————————————————————————————————————————————————————————
+  //  BUILD
+  // ——————————————————————————————————————————————————————————————————————————
+  @override
+  Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>();
+
+    return Scaffold(
+      backgroundColor: VoxColors.bg(context),
+      appBar: AppBar(
+        title: _isNoteSelectionMode
+            ? Row(
+                children: [
+                  IconButton(
+                    icon: Icon(
+                      Icons.close,
+                      color: VoxColors.onPrimary(context),
+                      size: 22,
+                    ),
+                    onPressed: _exitNoteSelectionMode,
+                  ),
+                  Text(
+                    '${_selectedNoteIds.length} selected',
+                    style: TextStyle(
+                      color: VoxColors.onPrimary(context),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 16,
+                    ),
+                  ),
+                ],
+              )
+            : Text(
+                'Voice Notes',
+                style: TextStyle(
+                  color: VoxColors.onBg(context),
+                  fontWeight: FontWeight.w900,
+                  fontSize: 22,
+                  letterSpacing: -0.5,
+                ),
+              ),
+        backgroundColor: _isNoteSelectionMode
+            ? VoxColors.primary(context)
+            : Colors.transparent,
+        elevation: 0,
+        automaticallyImplyLeading: false,
+        actions: _isNoteSelectionMode
+            ? [
+                TextButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      if (_selectedNoteIds.length == _visibleNoteIds.length &&
+                          _visibleNoteIds.isNotEmpty) {
+                        _selectedNoteIds.clear();
+                      } else {
+                        _selectedNoteIds.addAll(_visibleNoteIds);
+                      }
+                    });
+                  },
+                  icon: Icon(
+                    _selectedNoteIds.length == _visibleNoteIds.length &&
+                            _visibleNoteIds.isNotEmpty
+                        ? Icons.deselect
+                        : Icons.select_all,
+                    color: VoxColors.onPrimary(context),
+                    size: 18,
+                  ),
+                  label: Text(
+                    _selectedNoteIds.length == _visibleNoteIds.length &&
+                            _visibleNoteIds.isNotEmpty
+                        ? 'Deselect'
+                        : 'Select All',
+                    style: TextStyle(
+                      color: VoxColors.onPrimary(context),
+                      fontWeight: FontWeight.w700,
+                      fontSize: 12,
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.only(right: 12),
+                  child: ElevatedButton.icon(
+                    onPressed: _selectedNoteIds.isNotEmpty
+                        ? _deleteSelectedNotes
+                        : null,
+                    icon: Icon(Icons.delete_outline, size: 18),
+                    label: const Text(
+                      'Delete',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 12,
+                      ),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: VoxColors.danger,
+                      foregroundColor: Colors.white,
+                      disabledBackgroundColor: VoxColors.textHint(context),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                    ),
+                  ),
+                ),
+              ]
+            : [
+                Padding(
+                  padding: const EdgeInsets.only(right: 16),
+                  child: Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: VoxColors.onBg(context).withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: _isAnonymousUser
+                                  ? Colors.orange
+                                  : Colors.green,
+                              borderRadius: BorderRadius.circular(3),
+                            ),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            lang.selectedLanguage,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: VoxColors.textSecondary(context),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+      ),
+      body: SingleChildScrollView(
+        controller: _scrollController,
+        physics: const ClampingScrollPhysics(),
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 4, 20, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // ————————————————— Guest banner —————————————————
+                  if (_isAnonymousUser) ...[
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 14),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        color: VoxColors.onBg(context).withValues(alpha: 0.05),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                          color: VoxColors.border(context),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.info_outline,
+                            color: VoxColors.primary(context),
+                            size: 14,
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              'Guest mode — notes are temporary. Sign up to keep them.',
+                              style: TextStyle(
+                                color: VoxColors.textSecondary(context),
+                                fontSize: 11,
+                                height: 1.4,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+
+                  // ————————————————— Title field —————————————————
+                  Container(
+                    decoration: BoxDecoration(
+                      color: VoxColors.cardFill(context),
+                      borderRadius: BorderRadius.circular(18),
+                      border: Border.all(color: VoxColors.border(context)),
+                    ),
+                    child: TextField(
+                      controller: _titleController,
+                      maxLength: _kMaxTitleLength,
+                      textCapitalization: TextCapitalization.sentences,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 17,
+                        color: VoxColors.onBg(context),
+                        letterSpacing: -0.3,
+                      ),
+                      decoration: InputDecoration(
+                        hintText: 'Note title...',
+                        hintStyle: TextStyle(
+                          color: VoxColors.textHint(context),
+                          fontWeight: FontWeight.w500,
+                          fontSize: 17,
+                        ),
+                        counterText: '',
+                        border: InputBorder.none,
+                        prefixIcon: Icon(
+                          Icons.bookmark_border,
+                          color: VoxColors.textSecondary(context),
+                          size: 20,
+                        ),
+                        suffixIcon: IconButton(
+                          icon: Icon(
+                            _isTitleDictating ? Icons.mic : Icons.mic_none,
+                            color: _isTitleDictating
+                                ? VoxColors.primary(context)
+                                : VoxColors.textSecondary(context),
+                          ),
+                          onPressed: () => _toggleDictation(true),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 16,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+
+                  // ————————————————— Recording area —————————————————
+                  _buildRecordingArea(lang),
+
+                  const SizedBox(height: 16),
+
+                  // ————————————————— Save + Cancel/Clear buttons —————————————————
+                  if (_recordingState == RecordingState.done ||
+                      (_recordingState == RecordingState.idle &&
+                          _transcriptController.text.trim().isNotEmpty)) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () {
+                              if (_recordingState == RecordingState.done) {
+                                _discardRecording();
+                              } else {
+                                _transcriptController.clear();
+                                _titleController.clear();
+                                setState(() {});
+                              }
+                            },
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: VoxColors.onBg(context),
+                              side: BorderSide(
+                                color: VoxColors.border(context),
+                              ),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: const Text(
+                              'Discard',
+                              style: TextStyle(fontWeight: FontWeight.w600),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 2,
+                          child: ElevatedButton.icon(
+                            onPressed:
+                                (!_isSaving &&
+                                    (_transcriptController.text
+                                            .trim()
+                                            .isNotEmpty ||
+                                        _audioUrl != null))
+                                ? () => _saveNote(lang)
+                                : null,
+                            icon: _isSaving
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : Icon(Icons.save_alt, size: 18),
+                            label: Text(
+                              _isEditing
+                                  ? 'Update Note'
+                                  : _audioUrl != null
+                                      ? 'Save Recording'
+                                      : 'Save Note',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: VoxColors.primary(context),
+                              foregroundColor: VoxColors.onPrimary(context),
+                              disabledBackgroundColor: VoxColors.cardFill(context),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(30),
+                              ),
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_isEditing) ...[
+                      const SizedBox(height: 8),
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton.icon(
+                          onPressed: _cancelEdit,
+                          icon: Icon(
+                            Icons.close,
+                            size: 16,
+                            color: VoxColors.danger,
+                          ),
+                          label: const Text(
+                            'Cancel Edit',
+                            style: TextStyle(
+                              color: VoxColors.danger,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ],
+              ),
+            ),
+
+            // ————————————————— Saved notes section —————————————————
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Row(
+                children: [
+                  Expanded(child: Divider(color: VoxColors.border(context))),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          lang.t('saved_notes'),
+                          style: TextStyle(
+                            color: VoxColors.textSecondary(context),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 6,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: _isAnonymousUser
+                                ? Colors.orange.withValues(alpha: 0.2)
+                                : VoxColors.primary(context).withValues(alpha: 0.2),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Text(
+                            _isAnonymousUser ? 'GUEST' : 'SAVED',
+                            style: TextStyle(
+                              color: _isAnonymousUser
+                                  ? Colors.orange
+                                  : VoxColors.primary(context),
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Expanded(child: Divider(color: Colors.grey[400])),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 8),
+
+            // ————————————————— Notes list —————————————————
+            Consumer<TempNotesProvider>(
+              builder: (context, tempNotes, _) {
+                if (_isAnonymousUser) {
+                  if (tempNotes.notes.isEmpty) {
+                    _visibleNoteIds = [];
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40),
+                      child: Column(
+                        children: [
+                          Icon(
+                            Icons.mic_none_rounded,
+                            color: Colors.grey[300],
+                            size: 52,
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            lang.t('no_notes'),
+                            style: TextStyle(
+                              color: VoxColors.textHint(context),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Record a note above to get started',
+                            style: TextStyle(
+                              color: VoxColors.textHint(context),
+                              fontSize: 11,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                  _visibleNoteIds = tempNotes.notes.map((e) => e.id).toList();
+                  return ListView.builder(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 20,
+                      vertical: 8,
+                    ),
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    itemCount: tempNotes.notes.length,
+                    itemBuilder: (ctx, i) {
+                      final note = tempNotes.notes[i];
+                      final isSelected = _selectedNoteIds.contains(note.id);
+                      return _noteCard(
+                        title: note.title,
+                        content: note.content,
+                        hasAudio: false,
+                        isTemp: true,
+                        isSelected: _isNoteSelectionMode && isSelected,
+                        onTap: () {
+                          if (_isNoteSelectionMode) {
+                            _toggleNoteSelection(note.id);
+                          } else {
+                            _showNoteDetails(note.id, note.title, note.content);
+                          }
+                        },
+                        onLongPress: () {
+                          if (!_isNoteSelectionMode) {
+                            _enterNoteSelectionMode(note.id);
+                          }
+                        },
+                        onDelete: () => _deleteTempNote(note.id, tempNotes),
+                        canTranscribe: false,
+                        onPlay: null,
+                      );
+                    },
+                  );
+                }
+
+                if (_resolvedUid == null) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(40),
+                      child: CircularProgressIndicator(),
+                    ),
+                  );
+                }
+
+                return StreamBuilder<QuerySnapshot>(
+                  stream: FirebaseFirestore.instance
+                      .collection('notes')
+                      .where(
+                        'userId',
+                        isEqualTo:
+                            FirebaseAuth.instance.currentUser?.uid ??
+                            _resolvedUid,
+                      )
+                      .snapshots(),
+                  builder: (context, snapshot) {
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(40),
+                          child: Text(
+                            'Could not load notes',
+                            style: TextStyle(color: VoxColors.textHint(context)),
+                          ),
+                        ),
+                      );
+                    }
+                    if (!snapshot.hasData) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(40),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                    }
+
+                    final docs = List.of(snapshot.data!.docs)
+                      ..sort((a, b) {
+                        final aTs =
+                            (a.data() as Map<String, dynamic>?)?['timestamp'];
+                        final bTs =
+                            (b.data() as Map<String, dynamic>?)?['timestamp'];
+                        if (aTs == null && bTs == null) return 0;
+                        if (aTs == null) return 1;
+                        if (bTs == null) return -1;
+                        return (bTs as Timestamp).compareTo(aTs as Timestamp);
+                      });
+
+                    if (docs.isEmpty) {
+                      _visibleNoteIds = [];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 40),
+                        child: Column(
+                          children: [
+                            Icon(
+                              Icons.mic_none_rounded,
+                              color: Colors.grey[300],
+                              size: 52,
+                            ),
+                            const SizedBox(height: 10),
+                            Text(
+                              lang.t('no_notes'),
+                              style: TextStyle(
+                                color: VoxColors.textHint(context),
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }
+
+                    _visibleNoteIds = docs.map((d) => d.id).toList();
+                    return ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(20, 8, 20, 100),
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: docs.length,
+                      itemBuilder: (ctx, i) {
+                        final data =
+                            docs[i].data() as Map<String, dynamic>? ?? {};
+                        final title = (data['title'] as String? ?? 'Note')
+                            .trim();
+                        final content = (data['content'] as String? ?? '')
+                            .trim();
+                        final audioUrl = data['audioUrl'] as String?;
+                        final durationSecs =
+                            data['recordingDurationSeconds'] as int?;
+                        final transcriptStatus =
+                            (data['transcriptStatus'] as String?) ?? 'ready';
+                        final docId = docs[i].id;
+                        final isSelected = _selectedNoteIds.contains(docId);
+                        final canTranscribe = audioUrl != null &&
+                            content.isEmpty &&
+                            transcriptStatus != 'transcribing';
+                        return _noteCard(
+                          title: title,
+                          content: content,
+                          hasAudio: audioUrl != null,
+                          durationSeconds: durationSecs,
+                          isTemp: false,
+                          isSelected: _isNoteSelectionMode && isSelected,
+                          onTap: () {
+                            if (_isNoteSelectionMode) {
+                              _toggleNoteSelection(docId);
+                            } else {
+                              _showNoteDetails(
+                                docId,
+                                title,
+                                content,
+                                audioUrl: audioUrl,
+                                durationSeconds: durationSecs,
+                              );
+                            }
+                          },
+                          onLongPress: () {
+                            if (!_isNoteSelectionMode) {
+                              _enterNoteSelectionMode(docId);
+                            }
+                          },
+                          onDelete: () => _deleteNote(docId),
+                          canTranscribe: canTranscribe,
+                          isTranscribing:
+                              _transcribingNoteIds.contains(docId) ||
+                                  transcriptStatus == 'transcribing',
+                  hasAudio ? Icons.mic : Icons.article_outlined,
+                  color: hasAudio ? VoxColors.primary(context) : VoxColors.textSecondary(context),
+                  size: 20,
+                ),
+              ),
+            const SizedBox(width: 12),
+
+            // Content
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                            color: VoxColors.onBg(context),
+                            letterSpacing: -0.2,
+                          ),
+                        ),
+                      ),
+                      if (isTemp)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 2,
+                          ),
+                          decoration: BoxDecoration(
+                            color: VoxColors.primary(context).withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
+                          child: const Text(
+                            'TEMP',
+                            style: TextStyle(
+                              fontSize: 8,
+                              color: Color(0xFF4B9EFF),
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  if (hasAudio && durationSeconds != null) ...[
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Icon(
+                          Icons.graphic_eq,
+                          size: 11,
+                          color: VoxColors.textSecondary(context),
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          _formatDuration(Duration(seconds: durationSeconds)),
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.white.withValues(alpha: 0.3),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                  const SizedBox(height: 6),
+                  Text(
+                    content.trim().isEmpty && hasAudio
+                        ? 'Recording saved. Transcribe when ready.'
+                        : content,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      height: 1.35,
+                      color: VoxColors.textSecondary(context),
+                      fontWeight: content.trim().isEmpty && hasAudio
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (!isSelected) ...[
+              const SizedBox(width: 8),
+              Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (canTranscribe || isTranscribing)
+                    TextButton.icon(
+                      onPressed: isTranscribing ? null : onTranscribe,
+                      icon: isTranscribing
+                          ? SizedBox(
+                              width: 12,
+                              height: 12,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: VoxColors.primary(context),
+                              ),
+                            )
+                          : const Icon(Icons.auto_fix_high, size: 14),
+                      label: const Text(
+                        'Transcribe',
+                        style: TextStyle(fontSize: 11),
+                      ),
+                      style: TextButton.styleFrom(
+                        foregroundColor: VoxColors.primary(context),
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  IconButton(
+                    onPressed: onDelete,
+                    icon: Icon(
+                      Icons.delete_outline,
+                      color: VoxColors.danger,
+                      size: 20,
+                    ),
+                    tooltip: 'Delete',
+                    constraints: const BoxConstraints(
+                      minWidth: 36,
+                      minHeight: 36,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _navItem(
+    IconData icon,
+    String label,
+    Color color, {
+    VoidCallback? onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: color, size: 24),
+          Text(
+            label,
+            style: TextStyle(
+              color: color,
+              fontSize: 9,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+

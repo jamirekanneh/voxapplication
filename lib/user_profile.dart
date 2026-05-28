@@ -1,4 +1,3 @@
-import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -8,12 +7,24 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:app_links/app_links.dart';
 import 'theme_provider.dart';
+import 'services/app_session.dart';
+import 'services/auth_session.dart';
 
 enum _SnackTone { neutral, success, error }
 
 String _googleSignInUserMessage(Object e) {
+  if (e is GoogleSignInException) {
+    switch (e.code) {
+      case GoogleSignInExceptionCode.canceled:
+      case GoogleSignInExceptionCode.interrupted:
+      case GoogleSignInExceptionCode.uiUnavailable:
+        return '';
+      default:
+        final m = (e.description ?? '').trim();
+        return m.length > 160 ? '${m.substring(0, 157)}…' : (m.isNotEmpty ? m : e.code.name);
+    }
+  }
   if (e is FirebaseAuthException) {
     switch (e.code) {
       case 'invalid-credential':
@@ -23,8 +34,7 @@ String _googleSignInUserMessage(Object e) {
         return 'This account has been disabled.';
       case 'account-exists-with-different-credential':
       case 'credential-already-in-use':
-        return 'This Google account is already linked elsewhere. Try '
-            'signing in the other way, or reset in Firebase.';
+        return 'This Google account is already linked elsewhere. Logging into existing profile...';
       case 'operation-not-allowed':
         return 'Google sign-in is disabled for this app. Contact support.';
       default:
@@ -60,10 +70,9 @@ String _googleSignInUserMessage(Object e) {
   return raw;
 }
 
-
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────
 //  ENTRY POINT
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────
 class UserProfilePage extends StatefulWidget {
   final bool isEditingMode;
 
@@ -73,116 +82,42 @@ class UserProfilePage extends StatefulWidget {
   State<UserProfilePage> createState() => _UserProfilePageState();
 }
 
-class _UserProfilePageState extends State<UserProfilePage>
-    with WidgetsBindingObserver {
-  static const int _linkResendCooldownSeconds = 60;
-  static const int _tooManyRequestsCooldownSeconds = 15 * 60;
-  // 'form' | 'returning' | 'awaiting_link' | 'verifying'
+class _UserProfilePageState extends State<UserProfilePage> {
   String _stage = 'form';
   bool _isEditingMode = false;
 
-  late final AppLinks _appLinks;
-  StreamSubscription<Uri>? _linkSubscription;
-
   final _nameController = TextEditingController();
   final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+  bool _passwordVisible = false;
+
   String? _base64Image;
   bool _isLoading = false;
   bool _googleLoading = false;
   bool _isSwitchingEmail = false;
   bool _canSwitchEmail = false;
-  int _resendCooldownSeconds = 0;
-  Timer? _resendTimer;
   String? _currentEmail;
   String? _currentName;
   String? _currentPhotoBase64;
 
-  // Google Sign-In â€” mobile only
-  late final GoogleSignIn _googleSignIn = GoogleSignIn(
-    scopes: ['email'],
-  );
-
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  LIFECYCLE
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   void initState() {
     super.initState();
     _isEditingMode = widget.isEditingMode;
     _ensureAuth();
+    GoogleSignIn.instance.initialize();
     _loadCurrentUserData();
     _evaluateSwitchableEmail();
-    _initDeepLinks();
-    WidgetsBinding.instance.addObserver(this);
   }
 
   @override
   void dispose() {
-    _resendTimer?.cancel();
-    _linkSubscription?.cancel();
     _nameController.dispose();
     _emailController.dispose();
-    WidgetsBinding.instance.removeObserver(this);
+    _passwordController.dispose();
     super.dispose();
   }
 
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed && _stage == 'awaiting_link') {
-      _syncResendCooldown();
-      _checkVerificationStatus();
-    }
-  }
-
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  DEEP LINKS
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<void> _initDeepLinks() async {
-    _appLinks = AppLinks();
-
-    _linkSubscription = _appLinks.uriLinkStream.listen((uri) {
-      if (mounted) _handleIncomingLink(uri);
-    });
-
-    final initialUri = await _appLinks.getInitialLink();
-    if (initialUri != null && mounted) {
-      _handleIncomingLink(initialUri);
-    }
-  }
-
-  Future<void> _handleIncomingLink(Uri uri) async {
-    final link = uri.toString();
-    if (!FirebaseAuth.instance.isSignInWithEmailLink(link)) return;
-
-    final prefs = await SharedPreferences.getInstance();
-    final email = prefs.getString('pendingEmailLink') ?? '';
-    if (email.isEmpty) return;
-
-    if (mounted) setState(() => _stage = 'verifying');
-    try {
-      await FirebaseAuth.instance.signInWithEmailLink(
-        email: email,
-        emailLink: link,
-      );
-      await _onMagicLinkVerified();
-    } catch (e) {
-      _showSnack('Verification failed: $e');
-      if (mounted) setState(() => _stage = 'awaiting_link');
-    }
-  }
-
-  Future<void> _checkVerificationStatus() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-    await user.reload();
-    if (FirebaseAuth.instance.currentUser?.emailVerified == true) {
-      await _onMagicLinkVerified();
-    }
-  }
-
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  LOAD / INIT
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _loadCurrentUserData() async {
     if (!_isEditingMode) return;
     if (mounted) setState(() => _isLoading = true);
@@ -220,18 +155,89 @@ class _UserProfilePageState extends State<UserProfilePage>
   }
 
   Future<void> _ensureAuth() async {
-    if (FirebaseAuth.instance.currentUser == null) {
-      try {
-        await FirebaseAuth.instance.signInAnonymously();
-      } catch (e) {
-        debugPrint('Silent anon sign-in error: $e');
-      }
+    if (FirebaseAuth.instance.currentUser != null) return;
+    final savedUid = await AuthSession.savedUserId();
+    final guest = await AuthSession.isExplicitGuestMode();
+    if (savedUid != null && !guest) {
+      // Wait for Firebase to restore a signed-in session; do not create anon.
+      await AuthSession.waitForSignedInUser();
+      return;
+    }
+    try {
+      await FirebaseAuth.instance.signInAnonymously();
+    } catch (e) {
+      debugPrint('Silent anon sign-in error: $e');
     }
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  EMAIL SWITCH
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Future<void> _reassignCollectionOwner({
+    required String collection,
+    required String fromUserId,
+    required String toUserId,
+  }) async {
+    if (fromUserId == toUserId) return;
+    final snapshot = await FirebaseFirestore.instance
+        .collection(collection)
+        .where('userId', isEqualTo: fromUserId)
+        .get();
+    if (snapshot.docs.isEmpty) return;
+    final batch = FirebaseFirestore.instance.batch();
+    for (final doc in snapshot.docs) {
+      batch.update(doc.reference, {'userId': toUserId});
+    }
+    await batch.commit();
+  }
+
+  Future<void> _mergeLegacyDataToCurrentUid(User user) async {
+    final email = (user.email ?? '').trim();
+    if (email.isEmpty) return;
+
+    final usersRef = FirebaseFirestore.instance.collection('users');
+    final sameEmail = await usersRef.where('email', isEqualTo: email).get();
+    final currentRef = usersRef.doc(user.uid);
+
+    final merged = <String, dynamic>{
+      'email': email,
+      'userId': user.uid,
+      'lastLoginAt': FieldValue.serverTimestamp(),
+    };
+    for (final doc in sameEmail.docs) {
+      final data = doc.data();
+      if ((data['username'] as String?)?.isNotEmpty == true) {
+        merged['username'] = data['username'];
+      }
+      if ((data['photoBase64'] as String?)?.isNotEmpty == true) {
+        merged['photoBase64'] = data['photoBase64'];
+      }
+      if ((data['photoUrl'] as String?)?.isNotEmpty == true) {
+        merged['photoUrl'] = data['photoUrl'];
+      }
+    }
+    await currentRef.set(merged, SetOptions(merge: true));
+
+    final legacyOwnerIds = <String>{email};
+    for (final doc in sameEmail.docs) {
+      if (doc.id != user.uid) legacyOwnerIds.add(doc.id);
+    }
+    for (final legacyId in legacyOwnerIds) {
+      await _reassignCollectionOwner(
+        collection: 'notes',
+        fromUserId: legacyId,
+        toUserId: user.uid,
+      );
+      await _reassignCollectionOwner(
+        collection: 'library',
+        fromUserId: legacyId,
+        toUserId: user.uid,
+      );
+      await _reassignCollectionOwner(
+        collection: 'custom_commands',
+        fromUserId: legacyId,
+        toUserId: user.uid,
+      );
+    }
+  }
+
   Future<void> _requestEmailSwitch() async {
     final confirm = await showDialog<bool>(
       context: context,
@@ -264,9 +270,6 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  SAVE / SUBMIT
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _onSaveTapped() async {
     if (_isLoading) return;
 
@@ -279,16 +282,8 @@ class _UserProfilePageState extends State<UserProfilePage>
       return;
     }
 
-    // â”€â”€ Switching email flow â”€â”€
-    if (_isEditingMode &&
-        _isSwitchingEmail &&
-        currentUser != null &&
-        !currentUser.isAnonymous) {
-      if (email.isEmpty) {
-        _showSnack('Please enter the new email address.');
-        return;
-      }
-      if (!_isValidEmail(email)) {
+    if (_isEditingMode && _isSwitchingEmail && currentUser != null && !currentUser.isAnonymous) {
+      if (email.isEmpty || !_isValidEmail(email)) {
         _showSnack('Please enter a valid email address.');
         return;
       }
@@ -296,33 +291,40 @@ class _UserProfilePageState extends State<UserProfilePage>
       return;
     }
 
-    // â”€â”€ Edit existing profile (no email change) â”€â”€
     if (_isEditingMode) {
-      await _updateExistingProfile();
+      // The update method below handles the email-as-ID logic
+      await _updateExistingProfile(); 
       return;
     }
 
-    // â”€â”€ New user onboarding â”€â”€
     if (!_isValidEmail(email)) {
       _showSnack('Please enter a valid email address.');
       return;
     }
 
+    final password = _passwordController.text;
+    if (password.length < 6) {
+      _showSnack('Password must be at least 6 characters.');
+      return;
+    }
+
+    if (mounted) setState(() => _isLoading = true);
     final exists = await _checkEmailExists(email);
     if (!mounted) return;
 
     if (exists) {
-      setState(() => _stage = 'returning');
+      setState(() {
+        _isLoading = false;
+        _stage = 'returning';
+      });
     } else {
-      await _sendMagicLink();
+      // The creation method below handles the email-as-ID logic
+      await _createNewAccount(name, email, password);
     }
   }
-
   bool _isValidEmail(String email) =>
       RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(email);
 
-  /// Returns true if the email already has a Firestore user document.
-  /// Avoids the deprecated [fetchSignInMethodsForEmail].
   Future<bool> _checkEmailExists(String email) async {
     try {
       final snap = await FirebaseFirestore.instance
@@ -337,32 +339,170 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  Future<void> _updateExistingProfile() async {
-    if (mounted) setState(() => _isLoading = true);
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
+ Future<void> _createNewAccount(String name, String email, String password) async {
+  try {
+    UserCredential cred;
+    final currentUser = FirebaseAuth.instance.currentUser;
 
-      await FirebaseFirestore.instance
+    // 1. Authentication Logic: Handles linking anonymous accounts or creating new ones
+    if (currentUser != null && currentUser.isAnonymous) {
+      final credential = EmailAuthProvider.credential(
+        email: email,
+        password: password,
+      );
+      cred = await currentUser.linkWithCredential(credential);
+    } else {
+      cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+    }
+
+    final user = cred.user!;
+    await _mergeLegacyDataToCurrentUid(user);
+    final photo = _base64Image ?? '';
+
+    // 2. Firestore Storage:
+    // Keep UID as canonical owner key across providers.
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      'username': name,
+      'email': email,
+      'photoBase64': photo,
+      'photoUrl': user.photoURL ?? '',
+      'createdAt': FieldValue.serverTimestamp(),
+      'userId': user.uid,
+    });
+
+    // 3. Local Storage:
+    // Persist UID as canonical identifier.
+    await AuthSession.markSignedIn(user);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('userName', name);
+    await AppSession.markSetupComplete(userId: user.uid);
+
+    // 4. Success Navigation
+    if (mounted) {
+      _showSnack('Account created! Welcome to Vox.', tone: _SnackTone.success);
+      await Future<void>.delayed(const Duration(milliseconds: 600));
+      // Ensure the navigation matches your defined routes
+      Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
+    }
+  } on FirebaseAuthException catch (e) {
+    _showSnack(_authErrorMessage(e), tone: _SnackTone.error);
+  } catch (e) {
+    _showSnack('Error creating account: $e', tone: _SnackTone.error);
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
+  }
+}
+  Future<void> _signInReturningUser(String password) async {
+    if (_isLoading) return;
+    if (mounted) setState(() => _isLoading = true);
+    final email = _emailController.text.trim();
+    try {
+      final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: password,
+      );
+      final user = cred.user!;
+      await _mergeLegacyDataToCurrentUid(user);
+
+      await AuthSession.markSignedIn(user);
+      final doc = await FirebaseFirestore.instance
           .collection('users')
           .doc(user.uid)
-          .update({
-        'username': _nameController.text.trim(),
-        'photoBase64': _base64Image ?? '',
-      });
+          .get();
+      if (doc.exists) {
+        final name = (doc.data()?['username'] as String?) ?? '';
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('userName', name);
+      }
+      await AppSession.markSetupComplete(userId: user.uid);
 
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('userName', _nameController.text.trim());
-
-      _showSnack('Profile updated successfully!');
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) {
+        _showSnack('Welcome back!', tone: _SnackTone.success);
+        await Future<void>.delayed(const Duration(milliseconds: 600));
+        Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
+      }
+    } on FirebaseAuthException catch (e) {
+      _showSnack(_authErrorMessage(e), tone: _SnackTone.error);
     } catch (e) {
-      _showSnack('Error updating profile: $e');
+      _showSnack('Sign-in error: $e', tone: _SnackTone.error);
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
+  Future<void> _sendPasswordReset() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !_isValidEmail(email)) {
+      _showSnack('Enter a valid email first.', tone: _SnackTone.error);
+      return;
+    }
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      _showSnack('Password reset email sent to $email.', tone: _SnackTone.success);
+    } on FirebaseAuthException catch (e) {
+      _showSnack(_authErrorMessage(e), tone: _SnackTone.error);
+    } catch (e) {
+      _showSnack('Error: $e', tone: _SnackTone.error);
+    }
+  }
+
+  String _authErrorMessage(FirebaseAuthException e) {
+    switch (e.code) {
+      case 'email-already-in-use':
+        return 'An account with this email already exists. Try signing in.';
+      case 'invalid-email':
+        return 'The email address is not valid.';
+      case 'weak-password':
+        return 'Password is too weak. Use at least 6 characters.';
+      case 'wrong-password':
+      case 'invalid-credential':
+        return 'Incorrect password. Try again or use Forgot Password.';
+      case 'user-not-found':
+        return 'No account found for this email. Please sign up.';
+      case 'user-disabled':
+        return 'This account has been disabled.';
+      case 'too-many-requests':
+        return 'Too many attempts. Please wait a moment and try again.';
+      case 'network-request-failed':
+        return 'No internet connection. Check your network and try again.';
+      default:
+        final msg = (e.message ?? '').trim();
+        return msg.isNotEmpty ? msg : e.code;
+    }
+  }
+
+  Future<void> _updateExistingProfile() async {
+  if (mounted) setState(() => _isLoading = true);
+  try {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null) return;
+
+    // Updating Firestore with UID as canonical key.
+    await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .update({
+      'username': _nameController.text.trim(),
+      'photoBase64': _base64Image ?? '',
+      'userId': user.uid,
+    });
+
+    // Keep local prefs aligned with UID identity.
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString('userName', _nameController.text.trim());
+    await prefs.setString('userId', user.uid);
+
+    _showSnack('Profile updated successfully!');
+    if (mounted) Navigator.of(context).pop();
+  } catch (e) {
+    _showSnack('Error updating profile: $e');
+  } finally {
+    if (mounted) setState(() => _isLoading = false);
+  }
+}
   Future<void> _initiateEmailSwitch(String uid, String newEmail) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -391,22 +531,12 @@ class _UserProfilePageState extends State<UserProfilePage>
       final user = FirebaseAuth.instance.currentUser;
       if (user == null) throw Exception('No user found');
 
-      await FirebaseFirestore.instance.collection('users').doc(uid).update({
-        'pendingEmail': newEmail,
-        'emailChangeRequestedAt': FieldValue.serverTimestamp(),
-      });
-
       await user.verifyBeforeUpdateEmail(newEmail);
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('pendingEmailChange', newEmail);
-      await prefs.setString('pendingEmailLink', newEmail);
 
       _showSnack(
           'Verification email sent to $newEmail. Verify to complete the switch.');
       if (mounted) {
         setState(() {
-          _stage = 'awaiting_link';
           _isSwitchingEmail = false;
           _isLoading = false;
         });
@@ -417,394 +547,77 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  MAGIC LINK
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<void> _sendMagicLink({bool isFreshStart = false}) async {
-    if (_isLoading) return;
-    if (mounted) setState(() => _isLoading = true);
+  Future<void> _handleGoogleSignIn() async {
+    if (_googleLoading) return;
+    if (mounted) setState(() => _googleLoading = true);
+    
+    AuthCredential? credential;
+    final existingUser = FirebaseAuth.instance.currentUser;
+
     try {
-      final email = _emailController.text.trim();
-      final name = _nameController.text.trim();
-      final photo = _base64Image ?? '';
-      final normalizedEmail = email.toLowerCase();
-
-      final cooldown = await _remainingMagicLinkCooldown(normalizedEmail);
-      if (cooldown > 0) {
-        _showSnack(
-          'Please wait ${cooldown}s before requesting another link.',
-        );
-        return;
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('pendingEmailLink', normalizedEmail);
-      await prefs.setString('pendingName', name);
-      await prefs.setString('pendingPhoto', photo);
-      await prefs.setBool('pendingIsFreshStart', isFreshStart);
-
-      final actionCodeSettings = ActionCodeSettings(
-        url:
-            'https://my-vox-app.firebaseapp.com/verify?email=${Uri.encodeComponent(normalizedEmail)}',
-        handleCodeInApp: true,
-        androidPackageName: 'com.example.voxapplication',
-        androidInstallApp: true,
-        androidMinimumVersion: '21',
-      );
-
-      await FirebaseAuth.instance.sendSignInLinkToEmail(
-        email: normalizedEmail,
-        actionCodeSettings: actionCodeSettings,
-      );
-
-      await _setMagicLinkCooldown(
-        normalizedEmail,
-        _linkResendCooldownSeconds,
-      );
-      _syncResendCooldown();
-
-      if (mounted) setState(() => _stage = 'awaiting_link');
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'too-many-requests') {
-        final email = _emailController.text.trim().toLowerCase();
-        if (email.isNotEmpty) {
-          await _setMagicLinkCooldown(
-            email,
-            _tooManyRequestsCooldownSeconds,
-          );
-          _syncResendCooldown();
+      if (kIsWeb) {
+        final googleProvider = GoogleAuthProvider()
+          ..setCustomParameters({'prompt': 'select_account'});
+        
+        if (existingUser != null && existingUser.isAnonymous) {
+          try {
+            final result = await existingUser.linkWithPopup(googleProvider);
+            await _syncGoogleUserDataAndRedirect(result.user);
+            return;
+          } on FirebaseAuthException catch (linkError) {
+            if (linkError.code == 'credential-already-in-use' ||
+                linkError.code == 'account-exists-with-different-credential') {
+              credential = linkError.credential;
+            } else {
+              rethrow;
+            }
+          }
+        } else {
+          final result = await FirebaseAuth.instance.signInWithPopup(googleProvider);
+          await _syncGoogleUserDataAndRedirect(result.user);
+          return;
         }
-        _showSnack(
-          'Too many verification attempts from this device. Please wait 15 minutes, then try again.',
-        );
       } else {
-        _showSnack('Error sending link: ${e.message ?? e.code}');
-      }
-    } catch (e) {
-      debugPrint('Magic Link Error: $e');
-      _showSnack('Error sending link: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  String _magicLinkCooldownKey(String email) =>
-      'magicLinkCooldownUntil:${email.toLowerCase()}';
-
-  Future<int> _remainingMagicLinkCooldown(String email) async {
-    final prefs = await SharedPreferences.getInstance();
-    final until = prefs.getInt(_magicLinkCooldownKey(email)) ?? 0;
-    final now = DateTime.now().millisecondsSinceEpoch;
-    final remainingMs = until - now;
-    if (remainingMs <= 0) return 0;
-    return (remainingMs / 1000).ceil();
-  }
-
-  Future<void> _setMagicLinkCooldown(String email, int seconds) async {
-    final prefs = await SharedPreferences.getInstance();
-    final until =
-        DateTime.now().millisecondsSinceEpoch + (seconds * 1000);
-    await prefs.setInt(_magicLinkCooldownKey(email), until);
-  }
-
-  Future<void> _syncResendCooldown() async {
-    final email = _emailController.text.trim().toLowerCase();
-    if (email.isEmpty) return;
-    final remaining = await _remainingMagicLinkCooldown(email);
-    if (!mounted) return;
-
-    _resendTimer?.cancel();
-    setState(() => _resendCooldownSeconds = remaining);
-
-    if (remaining <= 0) return;
-    _resendTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      if (_resendCooldownSeconds <= 1) {
-        timer.cancel();
-        setState(() => _resendCooldownSeconds = 0);
-      } else {
-        setState(() => _resendCooldownSeconds -= 1);
-      }
-    });
-  }
-
-  Future<void> _onStartFreshTapped() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      barrierColor: VoxColors.bg(context).withValues(alpha: 0.8),
-      builder: (ctx) => AlertDialog(
-        title: const Text('Start Fresh?'),
-        content: const Text(
-          'This will delete all existing data linked to this email. '
-          'This action cannot be undone.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: VoxColors.danger),
-            child: const Text('Delete & Start Fresh'),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) await _sendMagicLink(isFreshStart: true);
-  }
-
-  Future<void> _onMagicLinkVerified() async {
-    if (_isLoading) return;
-    if (mounted) setState(() => _isLoading = true);
-    try {
-      final user = FirebaseAuth.instance.currentUser;
-      if (user == null) return;
-
-      final prefs = await SharedPreferences.getInstance();
-      final isFreshStart = prefs.getBool('pendingIsFreshStart') ?? false;
-      final email =
-          user.email ?? prefs.getString('pendingEmailLink') ?? '';
-      final name = prefs.getString('pendingName') ?? '';
-      final photo = prefs.getString('pendingPhoto') ?? '';
-
-      // Check for pending email switch
-      final DocumentSnapshot<Map<String, dynamic>> userDoc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      final data = userDoc.data();
-      final pendingEmail = (userDoc.exists == true && data != null)
-          ? data['pendingEmail'] as String?
-          : null;
-
-      if (pendingEmail != null && !isFreshStart) {
-        await _completeEmailSwitch(user.uid, pendingEmail);
-        return;
-      }
-
-      final batch = FirebaseFirestore.instance.batch();
-
-      if (isFreshStart) {
-        // Delete old data then create fresh
-      final oldUsers = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: email)
-          .get();
-      for (final doc in oldUsers.docs) {
-        final oldUid = doc.id;
-        final notes = await FirebaseFirestore.instance
-            .collection('notes')
-            .where('userId', isEqualTo: oldUid)
-            .get();
-        for (final n in notes.docs) {
-          batch.delete(n.reference);
-        }
-        final library = await FirebaseFirestore.instance
-            .collection('library')
-            .where('userId', isEqualTo: oldUid)
-            .get();
-        for (final f in library.docs) {
-          batch.delete(f.reference);
-        }
-        batch.delete(doc.reference);
-      }
-        batch.set(
-          FirebaseFirestore.instance.collection('users').doc(user.uid),
-          {
-            'username': name.isNotEmpty ? name : user.displayName ?? '',
-            'email': email,
-            'photoBase64': photo,
-            'photoUrl': user.photoURL ?? '',
-            'createdAt': FieldValue.serverTimestamp(),
-            'userId': user.uid,
-          },
+        final googleUser = await GoogleSignIn.instance.authenticate();
+        final googleAuth = googleUser.authentication;
+        final authResult = await googleUser.authorizationClient.authorizeScopes(
+          const ['email'],
         );
-      } else {
-        // Returning user â€” migrate old doc to new UID
-        final oldUsers = await FirebaseFirestore.instance
-            .collection('users')
-            .where('email', isEqualTo: email)
-            .get();
-        String? oldUid;
-        Map<String, dynamic>? oldData;
-        if (oldUsers.docs.isNotEmpty) {
-          oldUid = oldUsers.docs.first.id;
-          oldData = oldUsers.docs.first.data();
-          batch.delete(oldUsers.docs.first.reference);
-        }
-        batch.set(
-          FirebaseFirestore.instance.collection('users').doc(user.uid),
-          {
-            'username': oldData?['username'] ?? name,
-            'email': email,
-            'photoBase64': oldData?['photoBase64'] ?? photo,
-            'photoUrl': oldData?['photoUrl'] ?? user.photoURL ?? '',
-            'createdAt': oldData?['createdAt'] ?? FieldValue.serverTimestamp(),
-            'userId': user.uid,
-          },
+        credential = GoogleAuthProvider.credential(
+          accessToken: authResult.accessToken,
+          idToken: googleAuth.idToken,
         );
-        if (oldUid != null && oldUid != user.uid) {
-          final notes = await FirebaseFirestore.instance
-              .collection('notes')
-              .where('userId', isEqualTo: oldUid)
-              .get();
-          for (final n in notes.docs) {
-            batch.update(n.reference, {'userId': user.uid});
+
+        if (existingUser != null && existingUser.isAnonymous) {
+          try {
+            final result = await existingUser.linkWithCredential(credential);
+            await _syncGoogleUserDataAndRedirect(result.user);
+            return;
+          } on FirebaseAuthException catch (linkError) {
+            if (linkError.code == 'credential-already-in-use' ||
+                linkError.code == 'account-exists-with-different-credential') {
+              // Fallthrough
+            } else {
+              rethrow;
+            }
           }
         }
       }
 
-      await batch.commit();
-
-      await prefs.setBool('hasProfile', true);
-      await prefs.setString('userEmail', email);
-      await prefs.setString('userName', name);
-      await prefs.remove('pendingEmailLink');
-      await prefs.remove('pendingName');
-      await prefs.remove('pendingPhoto');
-      await prefs.remove('pendingIsFreshStart');
-
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true)
-            .pushReplacementNamed('/home');
-      }
-    } catch (e) {
-      _showSnack('Error completing sign-in: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _completeEmailSwitch(String uid, String newEmail) async {
-    try {
-      final batch = FirebaseFirestore.instance.batch();
-      batch.update(
-        FirebaseFirestore.instance.collection('users').doc(uid),
-        {
-          'email': newEmail,
-          'pendingEmail': FieldValue.delete(),
-          'emailChangeRequestedAt': FieldValue.delete(),
-          'emailVerified': true,
-        },
-      );
-
-      final notes = await FirebaseFirestore.instance
-          .collection('notes')
-          .where('userId', isEqualTo: uid)
-          .get();
-      for (final n in notes.docs) {
-        batch.update(n.reference, {'userEmail': newEmail});
-      }
-
-      final library = await FirebaseFirestore.instance
-          .collection('library')
-          .where('userId', isEqualTo: uid)
-          .get();
-      for (final f in library.docs) {
-        batch.update(f.reference, {'userEmail': newEmail});
-      }
-
-      await batch.commit();
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setString('userEmail', newEmail);
-      await prefs.remove('pendingEmailChange');
-
-      _showSnack('Email successfully changed to $newEmail!');
-      if (mounted) {
-        Navigator.of(context, rootNavigator: true)
-            .pushReplacementNamed('/home');
-      }
-    } catch (e) {
-      _showSnack('Error completing email switch: $e');
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  GOOGLE SIGN-IN
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<void> _handleGoogleSignIn() async {
-    if (_googleLoading) return;
-    if (mounted) setState(() => _googleLoading = true);
-    try {
-      UserCredential? result;
-      final existingUser = FirebaseAuth.instance.currentUser;
-
-      if (kIsWeb) {
-        final googleProvider = GoogleAuthProvider()
-          ..setCustomParameters({'prompt': 'select_account'});
-        if (existingUser != null && existingUser.isAnonymous) {
-          result = await existingUser.linkWithPopup(googleProvider);
-        } else {
-          result = await FirebaseAuth.instance.signInWithPopup(googleProvider);
+      if (credential != null) {
+        // If already signed in with another provider (non-anonymous), try linking first.
+        if (existingUser != null && !existingUser.isAnonymous) {
+          try {
+            final linked = await existingUser.linkWithCredential(credential);
+            await _syncGoogleUserDataAndRedirect(linked.user);
+            return;
+          } on FirebaseAuthException catch (_) {
+            // Fall back to sign-in flow below.
+          }
         }
-      } else {
-        final googleUser = await _googleSignIn.signIn();
-        if (googleUser == null) return; // user cancelled
-
-        final googleAuth = await googleUser.authentication;
-        final credential = GoogleAuthProvider.credential(
-          accessToken: googleAuth.accessToken,
-          idToken: googleAuth.idToken,
-        );
-        if (existingUser != null && existingUser.isAnonymous) {
-          result = await existingUser.linkWithCredential(credential);
-        } else {
-          result = await FirebaseAuth.instance.signInWithCredential(credential);
-        }
+        final result = await FirebaseAuth.instance.signInWithCredential(credential);
+        await _syncGoogleUserDataAndRedirect(result.user);
       }
-
-      final user = result.user;
-      if (user == null) return;
-
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-
-      if (!doc.exists) {
-        await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .set({
-          'username': user.displayName ?? '',
-          'email': user.email ?? '',
-          'photoBase64': '',
-          'photoUrl': user.photoURL ?? '',
-          'createdAt': FieldValue.serverTimestamp(),
-          'userId': user.uid,
-        });
-      }
-
-      final prefs = await SharedPreferences.getInstance();
-      await prefs.setBool('hasProfile', true);
-      await prefs.setString('userEmail', user.email ?? '');
-      await prefs.setString('userName', user.displayName ?? '');
-
-      if (!mounted) return;
-
-      final dn = user.displayName?.trim();
-      final em = user.email?.trim();
-      final label =
-          ((dn ?? '').isNotEmpty ? dn : null) ??
-          ((em ?? '').isNotEmpty ? em : null);
-      _showSnack(
-        label != null
-            ? 'Sign-in complete. Signed in as $label.'
-            : 'Sign-in complete.',
-        tone: _SnackTone.success,
-        duration: const Duration(seconds: 3),
-      );
-
-      await Future<void>.delayed(const Duration(milliseconds: 650));
-      if (!mounted) return;
-      Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
     } catch (e) {
       final msg = _googleSignInUserMessage(e);
       if (msg.isNotEmpty) _showSnack(msg, tone: _SnackTone.error);
@@ -813,9 +626,56 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  IMAGE PICKER
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Future<void> _syncGoogleUserDataAndRedirect(User? user) async {
+    if (user == null) return;
+
+    final doc = await FirebaseFirestore.instance
+        .collection('users')
+        .doc(user.uid)
+        .get();
+
+    if (!doc.exists) {
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .set({
+        'username': user.displayName ?? '',
+        'email': user.email ?? '',
+        'photoBase64': '',
+        'photoUrl': user.photoURL ?? '',
+        'createdAt': FieldValue.serverTimestamp(),
+        'userId': user.uid,
+      });
+    }
+
+    await AuthSession.markSignedIn(user);
+    final prefs = await SharedPreferences.getInstance();
+    if ((user.displayName ?? '').isNotEmpty) {
+      await prefs.setString('userName', user.displayName!);
+    }
+    await _mergeLegacyDataToCurrentUid(user);
+    await AppSession.markSetupComplete(userId: user.uid);
+
+    if (!mounted) return;
+
+    final dn = user.displayName?.trim();
+    final em = user.email?.trim();
+    final label =
+        ((dn ?? '').isNotEmpty ? dn : null) ??
+        ((em ?? '').isNotEmpty ? em : null);
+    _showSnack(
+      label != null
+          ? 'Welcome back! Signed in as $label.'
+          : 'Sign-in complete.',
+      tone: _SnackTone.success,
+      duration: const Duration(seconds: 3),
+    );
+
+    await Future<void>.delayed(const Duration(milliseconds: 650));
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
+  }
+
   Future<void> _pickImage() async {
     final picker = ImagePicker();
     final image = await picker.pickImage(
@@ -829,9 +689,6 @@ class _UserProfilePageState extends State<UserProfilePage>
     }
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  HELPERS
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _showSnack(
     String message, {
     _SnackTone tone = _SnackTone.neutral,
@@ -855,7 +712,6 @@ class _UserProfilePageState extends State<UserProfilePage>
   }
 
   void _showGuestWarning() {
-    // Capture navigator before opening sheet so context is not stale inside.
     final nav = Navigator.of(context, rootNavigator: true);
     showModalBottomSheet(
       context: context,
@@ -864,7 +720,7 @@ class _UserProfilePageState extends State<UserProfilePage>
         padding: const EdgeInsets.all(28),
         decoration: BoxDecoration(
           color: VoxColors.bg(context),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -907,7 +763,13 @@ class _UserProfilePageState extends State<UserProfilePage>
                     onPressed: () async {
                       Navigator.pop(sheetContext);
                       try {
+                        // Force a clean guest session so previous account data
+                        // cannot leak into guest mode.
+                        await FirebaseAuth.instance.signOut();
+                        await AuthSession.markGuestContinue();
                         await FirebaseAuth.instance.signInAnonymously();
+                        final guest = FirebaseAuth.instance.currentUser;
+                        await AppSession.markSetupComplete(userId: guest?.uid);
                       } catch (e) {
                         debugPrint('Guest sign-in error: $e');
                       }
@@ -931,37 +793,17 @@ class _UserProfilePageState extends State<UserProfilePage>
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  BUILD
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
-    // Non-form stages rendered inside VoxScaffoldWrapper
-    if (_stage != 'form') {
+    if (_stage == 'returning') {
       return VoxScaffoldWrapper(
-        child: AnimatedSwitcher(
-          duration: const Duration(milliseconds: 400),
-          child: switch (_stage) {
-            'returning' => _ReturningUserView(
-                key: const ValueKey('returning'),
-                email: _emailController.text.trim(),
-                onConfirm: () => _sendMagicLink(),
-                onStartFresh: _onStartFreshTapped,
-                isLoading: _isLoading,
-              ),
-            'awaiting_link' => _AwaitingLinkView(
-                key: const ValueKey('awaiting_link'),
-                email: _emailController.text.trim(),
-                onResend: _resendCooldownSeconds > 0
-                    ? null
-                    : () => _sendMagicLink(),
-                onVerified: _onMagicLinkVerified,
-                isLoading: _isLoading,
-                resendCooldownSeconds: _resendCooldownSeconds,
-              ),
-            'verifying' => const _VerifyingView(key: ValueKey('verifying')),
-            _ => const SizedBox.shrink(),
-          },
+        child: _ReturningUserView(
+          key: const ValueKey('returning'),
+          email: _emailController.text.trim(),
+          isLoading: _isLoading,
+          onSignIn: _signInReturningUser,
+          onForgotPassword: _sendPasswordReset,
+          onBack: () => setState(() => _stage = 'form'),
         ),
       );
     }
@@ -980,7 +822,6 @@ class _UserProfilePageState extends State<UserProfilePage>
             const SizedBox(height: 20),
           const SizedBox(height: 36),
 
-          // â”€â”€ Avatar picker â”€â”€
           Center(
             child: GestureDetector(
               onTap: _pickImage,
@@ -1019,7 +860,21 @@ class _UserProfilePageState extends State<UserProfilePage>
             enabled: !_isEditingMode || _isSwitchingEmail,
           ),
 
-          // Switch email button
+          if (!_isEditingMode)
+            _VoxTextField(
+              controller: _passwordController,
+              label: 'Password',
+              icon: Icons.lock_outline,
+              obscureText: !_passwordVisible,
+              suffixIcon: IconButton(
+                icon: Icon(
+                  _passwordVisible ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                  color: VoxColors.textHint(context),
+                ),
+                onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
+              ),
+            ),
+
           if (_canSwitchEmail && _isEditingMode && !_isSwitchingEmail)
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -1040,25 +895,29 @@ class _UserProfilePageState extends State<UserProfilePage>
             onTap: _onSaveTapped,
           ),
 
-          if (!_isEditingMode) ...[
-            const _DividerRow(),
-            _GoogleButton(
-              isLoading: _googleLoading,
-              onTap: _handleGoogleSignIn,
-            ),
-            const SizedBox(height: 24),
-            Center(
-              child: TextButton(
-                onPressed: _showGuestWarning,
-                child: Text(
-                  'Continue without account',
-                  style: TextStyle(color: VoxColors.textHint(context)),
-                ),
+          const _DividerRow(),
+          _GoogleButton(
+            isLoading: _googleLoading,
+            onTap: _handleGoogleSignIn,
+          ),
+          const SizedBox(height: 24),
+          Center(
+            child: TextButton(
+              onPressed: _showGuestWarning,
+              child: Text(
+                'Continue without account',
+                style: TextStyle(color: VoxColors.textHint(context)),
               ),
             ),
-          ],
+          ),
 
           const SizedBox(height: 32),
+
+          
+          
+          
+
+          
         ],
       ),
     );
@@ -1073,22 +932,38 @@ class _UserProfilePageState extends State<UserProfilePage>
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-//  SUB-VIEWS
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-class _ReturningUserView extends StatelessWidget {
+// ─────────────────────────────────────────────────────────────
+//  RETURNING USER VIEW (password sign-in)
+// ─────────────────────────────────────────────────────────────
+class _ReturningUserView extends StatefulWidget {
   final String email;
-  final VoidCallback onConfirm;
-  final VoidCallback onStartFresh;
   final bool isLoading;
+  final Future<void> Function(String password) onSignIn;
+  final VoidCallback onForgotPassword;
+  final VoidCallback onBack;
 
   const _ReturningUserView({
     super.key,
     required this.email,
-    required this.onConfirm,
-    required this.onStartFresh,
     required this.isLoading,
+    required this.onSignIn,
+    required this.onForgotPassword,
+    required this.onBack,
   });
+
+  @override
+  State<_ReturningUserView> createState() => _ReturningUserViewState();
+}
+
+class _ReturningUserViewState extends State<_ReturningUserView> {
+  final _passwordController = TextEditingController();
+  bool _passwordVisible = false;
+
+  @override
+  void dispose() {
+    _passwordController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1098,7 +973,7 @@ class _ReturningUserView extends StatelessWidget {
         const _VoxHeader(
           tag: 'WELCOME BACK',
           title: "YOU'RE\nALREADY HERE.",
-          subtitle: "Looks like you've voxed before.",
+          subtitle: "Sign in with your password to continue.",
         ),
         const SizedBox(height: 48),
         Padding(
@@ -1110,121 +985,97 @@ class _ReturningUserView extends StatelessWidget {
               borderRadius: BorderRadius.circular(24),
             ),
             child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  email,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: VoxColors.onBg(context),
-                  ),
+                Row(
+                  children: [
+                    Icon(Icons.email_outlined,
+                        color: VoxColors.primary(context), size: 18),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        widget.email,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: VoxColors.onBg(context),
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: 24),
+
+                TextField(
+                  controller: _passwordController,
+                  obscureText: !_passwordVisible,
+                  style: TextStyle(color: VoxColors.onBg(context)),
+                  autofocus: true,
+                  decoration: InputDecoration(
+                    prefixIcon: Icon(Icons.lock_outline,
+                        color: VoxColors.primary(context)),
+                    labelText: 'Password',
+                    labelStyle:
+                        TextStyle(color: VoxColors.textHint(context)),
+                    filled: true,
+                    fillColor: VoxColors.surface(context),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide.none,
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide:
+                          BorderSide(color: VoxColors.border(context)),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      borderSide: BorderSide(
+                          color: VoxColors.primary(context), width: 1.5),
+                    ),
+                    suffixIcon: IconButton(
+                      icon: Icon(
+                        _passwordVisible
+                            ? Icons.visibility_off_outlined
+                            : Icons.visibility_outlined,
+                        color: VoxColors.textHint(context),
+                      ),
+                      onPressed: () => setState(
+                          () => _passwordVisible = !_passwordVisible),
+                    ),
+                  ),
+                  onSubmitted: (_) =>
+                      widget.onSignIn(_passwordController.text),
+                ),
+                const SizedBox(height: 24),
+
                 _VoxButton(
-                  label: 'VERIFY & LOG IN',
-                  isLoading: isLoading,
-                  onTap: onConfirm,
+                  label: 'SIGN IN',
+                  isLoading: widget.isLoading,
+                  onTap: () => widget.onSignIn(_passwordController.text),
                 ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: onStartFresh,
-                  child: const Text(
-                    'START FRESH',
-                    style: TextStyle(color: VoxColors.danger),
+                const SizedBox(height: 12),
+
+                Center(
+                  child: TextButton(
+                    onPressed: widget.onForgotPassword,
+                    child: Text(
+                      'Forgot Password?',
+                      style:
+                          TextStyle(color: VoxColors.primary(context)),
+                    ),
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-}
+                const SizedBox(height: 4),
 
-class _VerifyingView extends StatelessWidget {
-  const _VerifyingView({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: CircularProgressIndicator(color: VoxColors.primary(context)),
-    );
-  }
-}
-
-class _AwaitingLinkView extends StatelessWidget {
-  final String email;
-  final VoidCallback? onResend;
-  final VoidCallback onVerified;
-  final bool isLoading;
-  final int resendCooldownSeconds;
-
-  const _AwaitingLinkView({
-    super.key,
-    required this.email,
-    required this.onResend,
-    required this.onVerified,
-    required this.isLoading,
-    required this.resendCooldownSeconds,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const _VoxHeader(
-          tag: 'ONE LAST STEP',
-          title: 'CHECK YOUR\nINBOX.',
-          subtitle: 'Click the magic link we just sent.',
-        ),
-        const SizedBox(height: 48),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Container(
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: VoxColors.cardFill(context),
-              borderRadius: BorderRadius.circular(24),
-            ),
-            child: Column(
-              children: [
-                Icon(Icons.email_outlined,
-                    size: 48, color: VoxColors.primary(context)),
-                const SizedBox(height: 16),
-                Text(
-                  email,
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w600,
-                    color: VoxColors.onBg(context),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  "We've sent a magic sign-in link to your email. Click it to continue.",
-                  textAlign: TextAlign.center,
-                  style:
-                      TextStyle(color: VoxColors.textSecondary(context), fontSize: 13),
-                ),
-                const SizedBox(height: 32),
-                _VoxButton(
-                  label: "I'VE CLICKED THE LINK",
-                  isLoading: isLoading,
-                  onTap: onVerified,
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: onResend,
-                  child: Text(
-                    resendCooldownSeconds > 0
-                        ? 'Resend in ${resendCooldownSeconds}s'
-                        : 'Resend email',
-                    style: TextStyle(
-                      color: onResend == null
-                          ? VoxColors.textHint(context)
-                          : VoxColors.primary(context),
+                Center(
+                  child: TextButton(
+                    onPressed: widget.onBack,
+                    child: Text(
+                      'Use a different account',
+                      style: TextStyle(
+                          color: VoxColors.textHint(context)),
                     ),
                   ),
                 ),
@@ -1237,9 +1088,9 @@ class _AwaitingLinkView extends StatelessWidget {
   }
 }
 
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────
 //  SHARED WIDGETS
-// â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+// ─────────────────────────────────────────────────────────────
 class _VoxHeader extends StatelessWidget {
   final String tag, title, subtitle;
 
@@ -1299,14 +1150,18 @@ class _VoxTextField extends StatelessWidget {
   final String label;
   final IconData icon;
   final bool enabled;
+  final bool obscureText;
   final TextInputType? keyboardType;
+  final Widget? suffixIcon;
 
   const _VoxTextField({
     required this.controller,
     required this.label,
     required this.icon,
     this.enabled = true,
+    this.obscureText = false,
     this.keyboardType,
+    this.suffixIcon,
   });
 
   @override
@@ -1317,6 +1172,7 @@ class _VoxTextField extends StatelessWidget {
         controller: controller,
         enabled: enabled,
         keyboardType: keyboardType,
+        obscureText: obscureText,
         style: TextStyle(color: VoxColors.onBg(context)),
         decoration: InputDecoration(
           prefixIcon: Icon(icon, color: VoxColors.primary(context)),
@@ -1340,6 +1196,7 @@ class _VoxTextField extends StatelessWidget {
             borderRadius: BorderRadius.circular(16),
             borderSide: BorderSide(color: VoxColors.border(context).withValues(alpha: 0.5)),
           ),
+          suffixIcon: suffixIcon,
         ),
       ),
     );

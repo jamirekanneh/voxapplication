@@ -95,8 +95,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
       return;
     }
 
-    final status = await Permission.microphone.request();
-    if (status != PermissionStatus.granted) {
+    final micStatus = await Permission.microphone.request();
+    if (micStatus != PermissionStatus.granted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -153,7 +153,11 @@ class _DictionaryPageState extends State<DictionaryPage> {
       ),
       onResult: (val) {
         final text = val.recognizedWords.trim();
-        if (mounted) setState(() => _searchController.text = text);
+        if (!mounted) return;
+        setState(() => _searchController.text = text);
+        if (val.finalResult && text.isNotEmpty) {
+          _search(langCode);
+        }
       },
       listenFor: const Duration(seconds: 8),
       pauseFor: const Duration(seconds: 2),

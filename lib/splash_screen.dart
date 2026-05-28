@@ -1,8 +1,12 @@
+import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'user_profile.dart';
 import 'home_page.dart';
+import 'services/app_session.dart';
+import 'services/auth_session.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -33,44 +37,70 @@ class _SplashScreenState extends State<SplashScreen>
       end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.bounceInOut));
     _controller.forward();
-    _checkUserStatus();
+    _checkDeviceHistory();
   }
 
-  Future<void> _checkUserStatus() async {
-    await Future.delayed(const Duration(milliseconds: 3500));
+  Future<void> _checkDeviceHistory() async {
+    Widget nextScreen = const UserProfilePage(isEditingMode: false);
+    String? welcomeMessage;
+
+    try {
+      await Future.delayed(const Duration(milliseconds: 1200));
+      if (!mounted) return;
+
+      final destination = await AppSession.resolveLaunchDestination().timeout(
+        const Duration(seconds: 8),
+        onTimeout: () {
+          debugPrint('Splash: launch routing timed out, using local prefs.');
+          return LaunchDestination.profile;
+        },
+      );
+
+      final authUser = FirebaseAuth.instance.currentUser;
+
+      if (destination == LaunchDestination.home) {
+        nextScreen = const VoxHomePage();
+        unawaited(AppSession.markSetupComplete(userId: authUser?.uid));
+        if (authUser != null && !authUser.isAnonymous) {
+          welcomeMessage = 'Welcome back.';
+        } else if (await AuthSession.isExplicitGuestMode()) {
+          welcomeMessage = 'Continuing as guest.';
+        }
+      }
+    } catch (e, st) {
+      debugPrint('Splash routing error: $e\n$st');
+      if (await AuthSession.isSignedIn() ||
+          await AuthSession.isExplicitGuestMode()) {
+        nextScreen = const VoxHomePage();
+      }
+    } finally {
+      FlutterNativeSplash.remove();
+    }
+
     if (!mounted) return;
 
-    final prefs = await SharedPreferences.getInstance();
-    final bool hasProfile = prefs.getBool('hasProfile') ?? false;
-
-    // Also check Firebase auth state — if the magic link sign-in completed
-    // before this timer fired, the user is already authenticated and should
-    // go straight to home rather than the sign-in / profile-setup page.
-    final bool isSignedIn =
-        FirebaseAuth.instance.currentUser != null;
-
-    if (!mounted) return;
-
-    final Widget nextScreen = (hasProfile || isSignedIn)
-        ? const VoxHomePage()
-        : const UserProfilePage();
+    if (welcomeMessage != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            welcomeMessage,
+            style: const TextStyle(fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: const Color(0xFF4B9EFF),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
 
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
-        transitionsBuilder:
-            (context, animation, secondaryAnimation, child) =>
-                FadeTransition(opacity: animation, child: child),
-        transitionDuration: const Duration(milliseconds: 800),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) =>
+            FadeTransition(opacity: animation, child: child),
+        transitionDuration: const Duration(milliseconds: 400),
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
   }
 
   @override
@@ -85,22 +115,16 @@ class _SplashScreenState extends State<SplashScreen>
         child: Stack(
           fit: StackFit.expand,
           children: [
-            // â”€â”€ LAYER 1: Full-screen watermarked logo â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-            // Positioned.fill pins all 4 edges to the Stack's bounds,
-            // guaranteeing full-screen coverage on Flutter Web and mobile.
             Positioned.fill(
               child: Opacity(
                 opacity: 0.07,
                 child: Image.asset(
                   'assets/images/vox_logo.png',
                   fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) =>
-                      const SizedBox.shrink(),
+                  errorBuilder: (context, error, stackTrace) => const SizedBox.shrink(),
                 ),
               ),
             ),
-
-            // â”€â”€ LAYER 2: Radial vignette â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Container(
               width: double.infinity,
               height: double.infinity,
@@ -113,12 +137,9 @@ class _SplashScreenState extends State<SplashScreen>
                     const Color(0xFF0A0E1A).withValues(alpha: 0.55),
                     const Color(0xFF0A0E1A).withValues(alpha: 0.85),
                   ],
-                  stops: const [0.0, 0.55, 1.0],
                 ),
               ),
             ),
-
-            // â”€â”€ LAYER 3: Subtle blue centre-glow â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Container(
               width: double.infinity,
               height: double.infinity,
@@ -133,8 +154,6 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
             ),
-
-            // â”€â”€ LAYER 4: Foreground content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             FadeTransition(
               opacity: _fadeAnimation,
               child: ScaleTransition(
@@ -142,7 +161,6 @@ class _SplashScreenState extends State<SplashScreen>
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    // Centred logo mark with glow
                     Container(
                       width: 160,
                       height: 160,
@@ -150,18 +168,9 @@ class _SplashScreenState extends State<SplashScreen>
                         shape: BoxShape.circle,
                         boxShadow: [
                           BoxShadow(
-                            color: const Color(
-                              0xFF4B9EFF,
-                            ).withValues(alpha: 0.3),
+                            color: const Color(0xFF4B9EFF).withValues(alpha: 0.3),
                             blurRadius: 60,
                             spreadRadius: 2,
-                          ),
-                          BoxShadow(
-                            color: const Color(
-                              0xFF4B9EFF,
-                            ).withValues(alpha: 0.1),
-                            blurRadius: 100,
-                            spreadRadius: -10,
                           ),
                         ],
                       ),
@@ -169,16 +178,10 @@ class _SplashScreenState extends State<SplashScreen>
                         'assets/images/vox_logo.png',
                         fit: BoxFit.contain,
                         errorBuilder: (context, error, stackTrace) =>
-                            const Icon(
-                              Icons.auto_awesome_rounded,
-                              color: Color(0xFF4B9EFF),
-                              size: 90,
-                            ),
+                            const Icon(Icons.auto_awesome_rounded, color: Color(0xFF4B9EFF), size: 90),
                       ),
                     ),
                     const SizedBox(height: 54),
-
-                    // App name
                     const Text(
                       "VOX",
                       style: TextStyle(
@@ -188,29 +191,16 @@ class _SplashScreenState extends State<SplashScreen>
                         letterSpacing: 18.0,
                         height: 1,
                         shadows: [
-                          Shadow(
-                            color: Color(0xFF4B9EFF),
-                            blurRadius: 20,
-                            offset: Offset(0, 0),
-                          ),
+                          Shadow(color: Color(0xFF4B9EFF), blurRadius: 20),
                         ],
                       ),
                     ),
-
                     const SizedBox(height: 24),
-
-                    // Tagline pill
                     Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 20,
-                        vertical: 8,
-                      ),
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
                       decoration: BoxDecoration(
                         color: const Color(0xFF4B9EFF).withValues(alpha: 0.05),
-                        border: Border.all(
-                          color: const Color(0xFF4B9EFF).withValues(alpha: 0.4),
-                          width: 1.5,
-                        ),
+                        border: Border.all(color: const Color(0xFF4B9EFF).withValues(alpha: 0.4), width: 1.5),
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Text(
@@ -227,8 +217,6 @@ class _SplashScreenState extends State<SplashScreen>
                 ),
               ),
             ),
-
-            // â”€â”€ LAYER 5: Loading bar at bottom â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
             Positioned(
               bottom: 80,
               left: 0,
@@ -264,4 +252,3 @@ class _SplashScreenState extends State<SplashScreen>
     );
   }
 }
-

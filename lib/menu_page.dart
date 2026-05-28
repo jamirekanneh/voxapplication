@@ -10,13 +10,14 @@ import 'profile_page.dart';
 import 'contact_us_page.dart';
 import 'about_us_page.dart';
 import 'recycle_bin_page.dart';
-import 'custom_commands_page.dart';
 import 'statistics_page.dart';
 import 'ask_questions_page.dart';
 import 'saved_assessments_page.dart';
 import 'analytics_service.dart';
 import 'floating_chat_bot.dart';
 import 'recommendations_page.dart';
+import 'services/auth_session.dart';
+
 
 class MenuPage extends StatefulWidget {
   const MenuPage({super.key});
@@ -70,9 +71,7 @@ class _MenuPageState extends State<MenuPage> {
       final user = FirebaseAuth.instance.currentUser;
       final prefs = await SharedPreferences.getInstance();
       final savedEmail = prefs.getString('userEmail') ?? '';
-      final hasProfilePref = prefs.getBool('hasProfile') ?? false;
-
-      // â”€â”€ No auth user at all â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // 1. No auth user
       if (user == null) {
         if (mounted) {
           setState(() {
@@ -84,36 +83,19 @@ class _MenuPageState extends State<MenuPage> {
         return;
       }
 
-      _isFirebaseAnonymous = user.isAnonymous;
-
-      // â”€â”€ Real (non-anonymous) Firebase Auth user â”€â”€
-      if (!user.isAnonymous) {
-        final doc = await FirebaseFirestore.instance
-            .collection('users')
-            .doc(user.uid)
-            .get();
-        if (doc.exists && mounted) {
-          final data = doc.data()!;
-          setState(() {
-            _username = (data['username'] as String? ?? '').trim();
-            _email = data['email'] as String? ?? '';
-            final raw = data['photoBase64'] as String?;
-            _base64Image = (raw != null && raw.isNotEmpty) ? raw : null;
-            _photoUrl = data['photoUrl'] as String?;
-            _hasProfile = true;
-          });
-        }
-        if (mounted) setState(() => _loadingProfile = false);
-        return;
+      final guestUi = await AuthSession.shouldShowGuestUi(user);
+      _isFirebaseAnonymous = guestUi;
+      if (!guestUi && !user.isAnonymous) {
+        _hasProfile = true;
       }
 
-      // â”€â”€ Anonymous Firebase Auth user â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-      // Check if they filled in the profile form (saved under anonymous UID)
-      if (hasProfilePref) {
-        // First try by UID (new user who just signed up)
+      // 2. Canonical lookup by UID only (signed-in users).
+      final profileUid =
+          (!user.isAnonymous) ? user.uid : await AuthSession.savedUserId();
+      if (!guestUi && profileUid != null) {
         final uidDoc = await FirebaseFirestore.instance
             .collection('users')
-            .doc(user.uid)
+            .doc(profileUid)
             .get();
 
         if (uidDoc.exists && mounted) {
@@ -129,45 +111,22 @@ class _MenuPageState extends State<MenuPage> {
           if (mounted) setState(() => _loadingProfile = false);
           return;
         }
-
-        // Fallback: look up by email from SharedPrefs
-        if (savedEmail.isNotEmpty) {
-          final emailQuery = await FirebaseFirestore.instance
-              .collection('users')
-              .where('email', isEqualTo: savedEmail)
-              .limit(1)
-              .get();
-
-          if (emailQuery.docs.isNotEmpty && mounted) {
-            final data = emailQuery.docs.first.data();
-            setState(() {
-              _username = (data['username'] as String? ?? '').trim();
-              _email = data['email'] as String? ?? savedEmail;
-              final raw = data['photoBase64'] as String?;
-              _base64Image = (raw != null && raw.isNotEmpty) ? raw : null;
-              _photoUrl = data['photoUrl'] as String?;
-              _hasProfile = true;
-            });
-            if (mounted) setState(() => _loadingProfile = false);
-            return;
-          }
-        }
-
-        // hasProfile pref was set but no Firestore doc found â€” use saved name
-        final savedName = prefs.getString('userName') ?? '';
-        if (savedName.isNotEmpty && mounted) {
-          setState(() {
-            _username = savedName;
-            _email = savedEmail;
-            _hasProfile = true;
-          });
-        }
       }
 
-      // Pure guest â€” no profile
+      // 4. Fallback to SharedPrefs if Firestore doc isn't found
+      final savedName = prefs.getString('userName') ?? '';
+      if (savedName.isNotEmpty && mounted) {
+        setState(() {
+          _username = savedName;
+          _email = savedEmail;
+          _hasProfile = true;
+        });
+      }
+
+      // Explicit guest only
       if (mounted) {
         setState(() {
-          _hasProfile = false;
+          _hasProfile = guestUi ? false : _hasProfile;
           _loadingProfile = false;
         });
       }
@@ -183,16 +142,12 @@ class _MenuPageState extends State<MenuPage> {
       if (mounted) setState(() => _loadingProfile = false);
       debugPrint('Profile load error: $e');
     }
-
-    if (mounted) setState(() => _loadingProfile = false);
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  AVATAR
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildAvatar({double radius = 34}) {
     // Photo from base64
-    if (_base64Image != null) {
+    if (_base64Image != null && _base64Image!.isNotEmpty) {
       try {
         return CircleAvatar(
           radius: radius,
@@ -434,15 +389,18 @@ class _MenuPageState extends State<MenuPage> {
   //  OPEN PROFILE PAGE
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   void _openProfile(BuildContext context) async {
+    final user = FirebaseAuth.instance.currentUser;
+    final isGuest =
+        user == null || await AuthSession.shouldShowGuestUi(user);
     await Navigator.push(
       context,
       MaterialPageRoute(
         builder: (_) => ProfilePage(
-          isAnonymous: !_hasProfile,
+          isAnonymous: isGuest,
           username: _username,
-          email: _email,
+          email: _email.isNotEmpty ? _email : (user?.email ?? ''),
           base64Image: _base64Image,
-          photoUrl: _photoUrl,
+          photoUrl: _photoUrl ?? user?.photoURL,
           onProfileUpdated: _loadProfile,
         ),
       ),
@@ -809,19 +767,7 @@ class _MenuPageState extends State<MenuPage> {
                       ),
                     ),
                   ],
-                  _buildMenuItem(
-                    context,
-                    icon: Icons.mic_none_rounded,
-                    title: 'Personalized Commands',
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => const CustomCommandsPage(),
-                        ),
-                      );
-                    },
-                  ),
+                  
                   _buildMenuItem(
                     context,
                     icon: Icons.info_outline_rounded,

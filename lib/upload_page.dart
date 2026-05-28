@@ -259,12 +259,12 @@ class _UploadPageState extends State<UploadPage> {
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  PICK & UPLOAD FILE
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  // ────────────────────────────────────────────────────────────
   Future<void> _pickAnyFile() async {
     await _requestPermissionsIfNeeded();
     await _resolveUser();
 
-    FilePickerResult? result = await FilePicker.platform.pickFiles(
+    FilePickerResult? result = await FilePicker.pickFiles(
       type: FileType.any,
       withData: true,
     );

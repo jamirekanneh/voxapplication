@@ -7,3 +7,6 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 /// OpenRouter API key for AiService.
 /// Set `OPENROUTER_API_KEY` in [assets/project.env]. Empty string if missing.
 String get kOpenRouterKey => (dotenv.env['OPENROUTER_API_KEY'] ?? '').trim();
+
+/// Groq API key for audio transcription.
+String get kGroqApiKey => (dotenv.env['GROQ_API_KEY'] ?? '').trim();

@@ -5,7 +5,6 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:provider/provider.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'language_provider.dart';
 import 'tts_service.dart';
 import 'reader_page.dart';
@@ -15,6 +14,7 @@ import 'ai_result_page.dart';
 import 'custom_commands_provider.dart';
 import 'theme_provider.dart';
 import 'analytics_service.dart';
+import 'services/auth_session.dart';
 
 class VoxHomePage extends StatefulWidget {
   const VoxHomePage({super.key});
@@ -40,11 +40,16 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
   String? _resolvedUid;
   bool _isAnonymousUser = true;
+  StreamSubscription<User?>? _authSubscription;
 
   @override
   void initState() {
     super.initState();
     _resolveUser();
+    _authSubscription =
+        FirebaseAuth.instance.authStateChanges().listen((_) {
+      _resolveUser();
+    });
 
     _streakSubscription = AnalyticsService.instance.onStreakMilestone.listen((
       streak,
@@ -187,6 +192,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
   @override
   void dispose() {
+    _authSubscription?.cancel();
     _speech.stop();
     _searchController.dispose();
     _streakSubscription?.cancel();
@@ -197,80 +203,12 @@ class _VoxHomePageState extends State<VoxHomePage> {
   //  RESOLVE USER
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _resolveUser() async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      if (mounted) {
-        setState(() {
-          _isAnonymousUser = true;
-          _resolvedUid = null;
-        });
-      }
-      return;
-    }
-
-    if (!user.isAnonymous) {
-      if (mounted) {
-        setState(() {
-          _isAnonymousUser = false;
-          _resolvedUid = user.uid;
-        });
-      }
-      return;
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    final hasProfile = prefs.getBool('hasProfile') ?? false;
-
-    if (!hasProfile) {
-      if (mounted) {
-        setState(() {
-          _isAnonymousUser = true;
-          _resolvedUid = null;
-        });
-      }
-      return;
-    }
-
-    final uidDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    if (uidDoc.exists) {
-      if (mounted) {
-        setState(() {
-          _isAnonymousUser = false;
-          _resolvedUid = user.uid;
-        });
-      }
-      return;
-    }
-
-    final savedEmail = prefs.getString('userEmail') ?? '';
-    if (savedEmail.isNotEmpty) {
-      final query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: savedEmail)
-          .limit(1)
-          .get();
-
-      if (query.docs.isNotEmpty) {
-        final docUid = query.docs.first.id;
-        if (mounted) {
-          setState(() {
-            _isAnonymousUser = false;
-            _resolvedUid = docUid;
-          });
-        }
-        return;
-      }
-    }
-
+    final guestUi = await AuthSession.shouldShowGuestUi();
+    final uid = guestUi ? null : await AuthSession.effectiveUid();
     if (mounted) {
       setState(() {
-        _isAnonymousUser = true;
-        _resolvedUid = null;
+        _isAnonymousUser = guestUi;
+        _resolvedUid = uid;
       });
     }
   }
@@ -834,9 +772,13 @@ class _VoxHomePageState extends State<VoxHomePage> {
                       builder: (context, provider, _) => Tooltip(
                         message: 'Assistant Mode (Voice Activated)',
                         child: GestureDetector(
-                          onTap: () => provider.setAssistantMode(
-                            !provider.assistantModeEnabled,
-                          ),
+                          onTap: () {
+                            final next = !provider.assistantModeEnabled;
+                            provider.setAssistantMode(next);
+                            _showAssistantFeedback(
+                              next ? 'Assistant on' : 'Assistant off',
+                            );
+                          },
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 300),
                             padding: const EdgeInsets.symmetric(
@@ -1032,7 +974,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         if (_selectedFolder == 'PDFs') return t == 'pdf';
                         if (_selectedFolder == 'Notes') return t == 'note';
                         if (_selectedFolder == 'Scans') return t == 'scan';
-                        if (_selectedFolder == 'Documents')
+                        if (_selectedFolder == 'Documents') {
                           return [
                             'doc',
                             'docx',
@@ -1043,6 +985,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             'xls',
                             'rtf',
                           ].contains(t);
+                        }
                         return true;
                       }).toList();
 
