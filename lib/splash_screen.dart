@@ -3,8 +3,11 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
+import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'user_profile.dart';
 import 'home_page.dart';
+import 'language_provider.dart';
 import 'services/app_session.dart';
 import 'services/auth_session.dart';
 
@@ -48,23 +51,43 @@ class _SplashScreenState extends State<SplashScreen>
       await Future.delayed(const Duration(milliseconds: 1200));
       if (!mounted) return;
 
-      final destination = await AppSession.resolveLaunchDestination().timeout(
-        const Duration(seconds: 8),
-        onTimeout: () {
-          debugPrint('Splash: launch routing timed out, using local prefs.');
-          return LaunchDestination.profile;
-        },
-      );
+      LaunchDestination destination;
+      try {
+        destination = await AppSession.resolveLaunchDestination().timeout(
+          const Duration(seconds: 15),
+        );
+      } on TimeoutException {
+        debugPrint('Splash: launch routing timed out, using device/prefs fallback.');
+        destination = await AppSession.resolveLaunchFallback();
+      }
 
       final authUser = FirebaseAuth.instance.currentUser;
+      final lang = context.read<LanguageProvider>();
+      final prefs = await SharedPreferences.getInstance();
 
       if (destination == LaunchDestination.home) {
         nextScreen = const VoxHomePage();
         unawaited(AppSession.markSetupComplete(userId: authUser?.uid));
-        if (authUser != null && !authUser.isAnonymous) {
-          welcomeMessage = 'Welcome back.';
+
+        String? displayName = authUser?.displayName?.trim();
+        if (displayName == null || displayName.isEmpty) {
+          displayName = AppSession.lastRestoredDeviceUser?.username?.trim();
+        }
+        if (displayName == null || displayName.isEmpty) {
+          displayName = prefs.getString('userName')?.trim();
+        }
+
+        if (displayName != null && displayName.isNotEmpty) {
+          welcomeMessage =
+              lang.tNamed('welcome_back_user', {'name': displayName});
+        } else if (authUser != null && !authUser.isAnonymous) {
+          welcomeMessage = lang.t('welcome_back');
         } else if (await AuthSession.isExplicitGuestMode()) {
-          welcomeMessage = 'Continuing as guest.';
+          welcomeMessage = lang.t('continuing_guest');
+        } else {
+          welcomeMessage = kIsWeb
+              ? lang.t('browser_recognized')
+              : lang.t('device_recognized');
         }
       }
     } catch (e, st) {

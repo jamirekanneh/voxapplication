@@ -17,6 +17,7 @@ import 'ai_result_page.dart';
 import 'theme_provider.dart';
 import 'services/groq_service.dart';
 import 'services/auth_session.dart';
+import 'services/mic_coordinator.dart';
 
 const int _kMaxTitleLength = 100;
 const Duration _kMaxRecordingDuration = Duration(hours: 1);
@@ -54,6 +55,12 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   Duration _recordingDuration = Duration.zero;
   Timer? _recordingTimer;
   Timer? _maxDurationTimer;
+  StreamSubscription<Amplitude>? _amplitudeSub;
+  double _peakRecordingDb = -160;
+  bool _speechReadyForRecording = false;
+  bool _recordingSttActive = false;
+  String _recordingSttCommitted = '';
+  String _recordingSttPartial = '';
   bool _isTitleDictating = false;
   bool _isTranscriptDictating = false;
   bool _isUploadingAudio = false;
@@ -112,6 +119,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     _waveController.dispose();
     _recordingTimer?.cancel();
     _maxDurationTimer?.cancel();
+    _amplitudeSub?.cancel();
     _scrollController.dispose();
     _searchController.dispose();
     super.dispose();
@@ -143,7 +151,36 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  MIC PERMISSION
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<bool> _requestMicPermission() async {
+  Future<bool> _requestMicPermission({bool forFileRecording = false}) async {
+    if (forFileRecording) {
+      if (!MicCoordinator.instance.notesMayUseMic) return false;
+      final ok =
+          await MicCoordinator.instance.prepareForFileRecording(_audioRecorder);
+      if (ok) return true;
+      if (mounted) {
+        final status = await Permission.microphone.status;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              status.isPermanentlyDenied
+                  ? 'Microphone blocked. Enable it in Settings to record voice notes.'
+                  : 'Microphone permission is required to record audio.',
+            ),
+            backgroundColor: VoxColors.danger,
+            behavior: SnackBarBehavior.floating,
+            action: status.isPermanentlyDenied
+                ? SnackBarAction(
+                    label: 'Settings',
+                    textColor: Colors.white,
+                    onPressed: openAppSettings,
+                  )
+                : null,
+          ),
+        );
+      }
+      return false;
+    }
+
     final status = await Permission.microphone.request();
     if (status.isGranted) return true;
     if (status.isPermanentlyDenied && mounted) {
@@ -175,6 +212,16 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
 
   Future<void> _toggleDictation(bool isTitle) async {
     if (!mounted) return;
+    if (_recordingState == RecordingState.recording) return;
+    if (!MicCoordinator.instance.notesMayUseMic) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Voice input is only available on the Voice Notes screen.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     final langProvider = context.read<LanguageProvider>();
     final granted = await _requestMicPermission();
     if (!granted) return;
@@ -279,6 +326,103 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     );
   }
 
+  String _combinedRecordingSttText() =>
+      '$_recordingSttCommitted $_recordingSttPartial'.trim();
+
+  bool _isSttTranscriptSufficient(String text, Duration duration) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return false;
+    final words =
+        trimmed.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
+    final sec = duration.inSeconds;
+    if (sec < 3) return words >= 1;
+    if (sec < 15) return words >= 2;
+    return words >= (sec / 4).ceil().clamp(2, 800);
+  }
+
+  Future<bool> _ensureSpeechReadyForRecording() async {
+    if (_speechReadyForRecording) return true;
+    _speechReadyForRecording = await _speech.initialize(
+      onError: (e) {
+        debugPrint('Recording STT error: $e');
+        if (_recordingState == RecordingState.recording && mounted) {
+          unawaited(_scheduleRecordingSttRestart());
+        }
+      },
+      onStatus: (s) {
+        if ((s == 'done' || s == 'notListening') &&
+            _recordingState == RecordingState.recording &&
+            mounted) {
+          unawaited(_scheduleRecordingSttRestart());
+        }
+      },
+    );
+    return _speechReadyForRecording;
+  }
+
+  Future<void> _scheduleRecordingSttRestart() async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    if (!mounted || _recordingState != RecordingState.recording) return;
+    if (_speech.isListening) return;
+    await _startRecordingStt(context.read<LanguageProvider>());
+  }
+
+  Future<void> _startRecordingStt(LanguageProvider lang) async {
+    if (_recordingState != RecordingState.recording) return;
+    final ready = await _ensureSpeechReadyForRecording();
+    if (!ready) return;
+
+    try {
+      await _speech.stop();
+      await _speech.cancel();
+      if (_recordingState != RecordingState.recording) return;
+
+      _recordingSttActive = true;
+      await _speech.listen(
+        localeId: lang.sttLocale,
+        listenOptions: stt.SpeechListenOptions(
+          partialResults: true,
+          cancelOnError: false,
+          listenMode: stt.ListenMode.dictation,
+        ),
+        onResult: (val) {
+          final words = val.recognizedWords.trim();
+          if (words.isEmpty || !mounted) return;
+          setState(() {
+            if (val.finalResult) {
+              _recordingSttCommitted =
+                  '$_recordingSttCommitted $words'.trim();
+              _recordingSttPartial = '';
+            } else {
+              _recordingSttPartial = words;
+            }
+            final display = _combinedRecordingSttText();
+            _transcriptController.text = display;
+            _transcriptController.selection = TextSelection.fromPosition(
+              TextPosition(offset: display.length),
+            );
+          });
+        },
+        listenFor: const Duration(minutes: 5),
+        pauseFor: const Duration(seconds: 6),
+      );
+    } catch (e) {
+      debugPrint('Recording STT listen failed: $e');
+      _recordingSttActive = false;
+    }
+  }
+
+  Future<String> _stopRecordingStt() async {
+    _recordingSttActive = false;
+    try {
+      await _speech.stop();
+    } catch (_) {}
+    final text = _combinedRecordingSttText();
+    _recordingSttCommitted = text;
+    _recordingSttPartial = '';
+    return text;
+  }
+
   Future<void> _startRecording() async {
     final rawTitle = _titleController.text.trim();
     if (rawTitle.isEmpty) {
@@ -293,21 +437,75 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       return;
     }
 
-    final granted = await _requestMicPermission();
+    if (!MicCoordinator.instance.notesMayUseMic) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Recording is only available on the Voice Notes screen.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final granted = await _requestMicPermission(forFileRecording: true);
     if (!granted) return;
+
+    MicCoordinator.instance.setNotesRecordingActive(true);
 
     try {
       if (!mounted) return;
       FocusScope.of(context).unfocus();
       await _speech.stop();
+      await _speech.cancel();
+      await context.read<TtsService>().stop();
+
+      _recordingSttCommitted = '';
+      _recordingSttPartial = '';
+      _transcriptController.clear();
+
       final dir = await getTemporaryDirectory();
-      final fileName = 'voice_note_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      var encoder = AudioEncoder.wav;
+      var ext = 'wav';
+      if (!await _audioRecorder.isEncoderSupported(encoder)) {
+        encoder = AudioEncoder.aacLc;
+        ext = 'm4a';
+        if (!await _audioRecorder.isEncoderSupported(encoder)) {
+          throw Exception('This device does not support audio recording.');
+        }
+      }
+      final fileName =
+          'voice_note_${DateTime.now().millisecondsSinceEpoch}.$ext';
       final path = '${dir.path}/$fileName';
 
-      await _audioRecorder.start(
-        const RecordConfig(encoder: AudioEncoder.aacLc, numChannels: 1),
-        path: path,
-      );
+      _peakRecordingDb = -160;
+      await _amplitudeSub?.cancel();
+      _amplitudeSub = null;
+
+      final RecordConfig config = encoder == AudioEncoder.wav
+          ? const RecordConfig(
+              encoder: AudioEncoder.wav,
+              numChannels: 1,
+              sampleRate: 16000,
+            )
+          : RecordConfig(
+              encoder: encoder,
+              numChannels: 1,
+              sampleRate: 16000,
+              bitRate: 128000,
+            );
+      await _audioRecorder.start(config, path: path);
+      if (!await _audioRecorder.isRecording()) {
+        throw Exception(
+          'Could not start audio recording. Check microphone permission in Settings.',
+        );
+      }
+
+      _amplitudeSub = _audioRecorder
+          .onAmplitudeChanged(const Duration(milliseconds: 200))
+          .listen((amp) {
+        if (amp.current > _peakRecordingDb) _peakRecordingDb = amp.current;
+        if (amp.max > _peakRecordingDb) _peakRecordingDb = amp.max;
+      });
 
       if (!mounted) return;
       setState(() {
@@ -342,9 +540,12 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
 
       _transcriptController.clear();
     } catch (e) {
+      MicCoordinator.instance.setNotesRecordingActive(false);
       debugPrint('Error starting recording: $e');
       _recordingTimer?.cancel();
       _maxDurationTimer?.cancel();
+      await _amplitudeSub?.cancel();
+      _amplitudeSub = null;
       await _audioRecorder.stop().catchError((_) => null);
       if (mounted) {
         setState(() => _recordingState = RecordingState.idle);
@@ -362,89 +563,44 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   Future<void> _stopRecording() async {
     _recordingTimer?.cancel();
     _maxDurationTimer?.cancel();
+    await _amplitudeSub?.cancel();
+    _amplitudeSub = null;
     await _speech.stop();
+    await _speech.cancel();
 
+    if (!mounted) {
+      MicCoordinator.instance.setNotesRecordingActive(false);
+      return;
+    }
     setState(() => _recordingState = RecordingState.processing);
 
     try {
-      final path = await _audioRecorder.stop();
-      final actualPath = path ?? _audioPath;
-      _audioPath = actualPath;
+      String? actualPath = _audioPath;
+      if (await _audioRecorder.isRecording()) {
+        actualPath = await _audioRecorder.stop() ?? _audioPath;
+      }
 
-      final authUser = FirebaseAuth.instance.currentUser;
-      final canUploadAndTranscribe = authUser != null && !authUser.isAnonymous;
-
-      if (actualPath != null && canUploadAndTranscribe) {
-        if (!mounted) return;
-        final messenger = ScaffoldMessenger.of(context);
-        messenger.clearSnackBars();
-        setState(() {
-          _transcriptionError = null;
-          _isUploadingAudio = true;
-          _isTranscribingAudio = false;
-        });
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Uploading audio...'),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-
-        final downloadUrl = await _uploadAudioNow(actualPath);
-        if (!mounted) return;
-        setState(() {
-          _audioUrl = downloadUrl;
-          _isUploadingAudio = false;
-          _isTranscribingAudio = true;
-        });
-
-        messenger.clearSnackBars();
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Transcribing audio...'),
-            duration: Duration(seconds: 2),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-
-        final transcript = await GroqService.transcribeAudio(downloadUrl);
-        if (!mounted) return;
-        setState(() {
-          _isTranscribingAudio = false;
-          _transcriptController.text = transcript.trim();
-          _transcriptController.selection = TextSelection.fromPosition(
-            TextPosition(offset: _transcriptController.text.length),
-          );
-        });
-
-        messenger.clearSnackBars();
-        messenger.showSnackBar(
-          const SnackBar(
-            content: Text('Transcription complete. Review and save your note.'),
-            duration: Duration(seconds: 3),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      } else if (actualPath != null) {
-        if (!mounted) return;
-        setState(() {
-          _transcriptionError =
-              'Cloud transcription needs a signed-in account. Please sign in and retry.';
-        });
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Sign in required for cloud upload/transcription. Recording kept locally.',
-            ),
-            behavior: SnackBarBehavior.floating,
-          ),
+      if (actualPath == null || !await File(actualPath).exists()) {
+        throw Exception(
+          'No audio file was saved. Check microphone permission and try again.',
         );
       }
 
+      _audioPath = actualPath;
+      await _validateRecordingFile(actualPath, _recordingDuration);
+      await _primeAudioPlayback(actualPath);
+
+      if (_transcriptController.text.trim().isEmpty) {
+        _transcriptController.text = '[Audio note - transcript pending]';
+      }
+
+      if (!mounted) return;
       setState(() {
         _recordingState = RecordingState.done;
+        _transcriptionError = null;
       });
+
+      unawaited(_syncRecordingToCloud(actualPath));
     } catch (e) {
       debugPrint('Error stopping recording: $e');
       final errorText = e.toString().replaceFirst('Exception: ', '').trim();
@@ -467,6 +623,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       setState(() {
         _recordingState = RecordingState.done;
       });
+    } finally {
+      MicCoordinator.instance.setNotesRecordingActive(false);
     }
   }
 
@@ -479,7 +637,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     if (!await file.exists()) {
       throw Exception('Audio file not found.');
     }
-    final fileName = '${DateTime.now().millisecondsSinceEpoch}.m4a';
+    await GroqService.ensureLocalAudioReady(localPath);
+    final ext = localPath.toLowerCase().endsWith('.wav') ? 'wav' : 'm4a';
+    final contentType = ext == 'wav' ? 'audio/wav' : 'audio/m4a';
+    final fileName = '${DateTime.now().millisecondsSinceEpoch}.$ext';
     final ref = FirebaseStorage.instance
         .ref()
         .child('recordings')
@@ -488,7 +649,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     try {
       final uploadTask = ref.putFile(
         file,
-        SettableMetadata(contentType: 'audio/m4a'),
+        SettableMetadata(contentType: contentType),
       );
       final snapshot = await uploadTask.whenComplete(() {});
       return snapshot.ref.getDownloadURL();
@@ -504,10 +665,140 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       rethrow;
     }
   }
+
+  Future<void> _primeAudioPlayback(String localPath) async {
+    final file = File(localPath);
+    if (!await file.exists()) return;
+    try {
+      await _audioPlayer.stop();
+      await _audioPlayer.setFilePath(localPath);
+      var duration = _audioPlayer.duration;
+      if (duration == null || duration <= Duration.zero) {
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        duration = _audioPlayer.duration;
+      }
+      if (!mounted) return;
+      setState(() {
+        _audioDuration = (duration != null && duration > Duration.zero)
+            ? duration
+            : _recordingDuration;
+        _currentPosition = Duration.zero;
+        _isPlaying = false;
+      });
+    } catch (e) {
+      debugPrint('Prime playback failed: $e');
+      if (mounted) {
+        setState(() {
+          _audioDuration = _recordingDuration;
+          _currentPosition = Duration.zero;
+          _isPlaying = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _validateRecordingFile(String path, Duration duration) async {
+    await GroqService.ensureLocalAudioReady(path);
+    final size = await File(path).length();
+    if (duration.inSeconds >= 3 && size < duration.inSeconds * 1200) {
+      throw Exception(
+        'Recording file is too small. The microphone may not have captured audio.',
+      );
+    }
+    if (duration.inSeconds >= 2 && _peakRecordingDb < -45) {
+      throw Exception(
+        'No voice detected. Allow microphone access and try again.',
+      );
+    }
+  }
+
+  Future<void> _syncRecordingToCloud(String localPath) async {
+    if (!mounted) return;
+    final lang = context.read<LanguageProvider>();
+    final authUser = FirebaseAuth.instance.currentUser;
+    final canUpload = authUser != null && !authUser.isAnonymous;
+
+    try {
+      if (canUpload) {
+        if (mounted) {
+          setState(() {
+            _transcriptionError = null;
+            _isUploadingAudio = true;
+            _isTranscribingAudio = false;
+          });
+        }
+        final downloadUrl = await _uploadAudioNow(localPath);
+        if (!mounted) return;
+        setState(() {
+          _audioUrl = downloadUrl;
+          _isUploadingAudio = false;
+          _isTranscribingAudio = true;
+        });
+      }
+
+      if (mounted) {
+        setState(() => _isTranscribingAudio = true);
+      }
+      final transcript = (await GroqService.transcribeLocalFile(
+        localPath,
+        expectedDuration: _recordingDuration,
+      )).trim();
+
+      if (!mounted) return;
+      setState(() {
+        _isTranscribingAudio = false;
+        if (transcript.isNotEmpty) {
+          _transcriptController.text = transcript;
+          _transcriptionError = null;
+        } else {
+          _transcriptionError = 'Transcript could not be generated.';
+        }
+      });
+
+      if (canUpload && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              transcript.isNotEmpty
+                  ? lang.t('transcription_complete')
+                  : 'Audio saved. Transcript could not be generated.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Cloud sync failed: $e');
+      if (!mounted) return;
+      final msg = e.toString().replaceFirst('Exception: ', '').trim();
+      setState(() {
+        _isUploadingAudio = false;
+        _isTranscribingAudio = false;
+        _transcriptionError = canUpload ? msg : null;
+      });
+      if (canUpload) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Upload/transcription: $msg'),
+            backgroundColor: VoxColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   void _discardRecording() {
+    MicCoordinator.instance.setNotesRecordingActive(false);
     _recordingTimer?.cancel();
     _maxDurationTimer?.cancel();
+    _amplitudeSub?.cancel();
+    _amplitudeSub = null;
+    _recordingSttCommitted = '';
+    _recordingSttPartial = '';
+    _recordingSttActive = false;
     _speech.stop();
+    _speech.cancel();
     _audioRecorder.stop();
     setState(() {
       _recordingState = RecordingState.idle;
@@ -686,9 +977,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: const Text(
-                  'Note saved temporarily. Create an account to keep it.',
-                ),
+                content: Text(lang.t('guest_note_saved')),
                 backgroundColor: VoxColors.surface(context),
                 behavior: SnackBarBehavior.floating,
                 margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
@@ -715,6 +1004,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
               _transcribeExistingNote(
                 docId: docRef.id,
                 audioUrl: _audioUrl!,
+                localPath: _audioPath,
+                durationSeconds: _recordingDuration.inSeconds,
                 silent: true,
               ),
             );
@@ -1098,6 +1389,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   Future<void> _transcribeExistingNote({
     required String docId,
     required String audioUrl,
+    String? localPath,
+    int? durationSeconds,
     bool silent = false,
   }) async {
     if (_isAnonymousUser) return;
@@ -1111,7 +1404,19 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           ),
         );
       }
-      final transcript = await GroqService.transcribeAudio(audioUrl);
+      final transcript = (localPath != null && localPath.isNotEmpty)
+          ? await GroqService.transcribeLocalFile(
+              localPath,
+              expectedDuration: durationSeconds != null
+                  ? Duration(seconds: durationSeconds)
+                  : null,
+            )
+          : await GroqService.transcribeAudio(
+              audioUrl,
+              expectedDuration: durationSeconds != null
+                  ? Duration(seconds: durationSeconds)
+                  : null,
+            );
       await FirebaseFirestore.instance.collection('notes').doc(docId).update({
         'content': transcript.trim().isEmpty
             ? '[No speech detected in recording]'
@@ -1142,6 +1447,38 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     }
   }
 
+  Future<void> _updateNoteTranscript(String docId, String transcript) async {
+    final cleaned = transcript.trim();
+    if (cleaned.isEmpty) {
+      throw Exception('Transcript cannot be empty.');
+    }
+
+    if (_isAnonymousUser) {
+      final temp = context.read<TempNotesProvider>();
+      final matches = temp.notes.where((n) => n.id == docId);
+      if (matches.isEmpty) {
+        throw Exception('Note not found.');
+      }
+      final existing = matches.first;
+      temp.update(
+        docId,
+        existing.title,
+        cleaned,
+        audioUrl: existing.audioUrl,
+        audioPath: existing.audioPath,
+        durationSeconds: existing.durationSeconds,
+      );
+      return;
+    }
+
+    await FirebaseFirestore.instance.collection('notes').doc(docId).update({
+      'content': cleaned,
+      'pendingTranscript': cleaned,
+      'transcriptStatus': 'done',
+      'lastUpdated': FieldValue.serverTimestamp(),
+    });
+  }
+
   Future<void> _downloadTranscript(String title, String content) async {
     final dir = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
@@ -1166,6 +1503,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   }) {
     final lang = context.read<LanguageProvider>();
     final tts = context.read<TtsService>();
+    final sheetTranscriptController = TextEditingController(text: content);
 
     showModalBottomSheet(
       context: context,
@@ -1173,6 +1511,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       backgroundColor: Colors.transparent,
       builder: (ctx) {
         bool isSpeaking = false;
+        String sheetContent = content;
+        bool isEditingTranscript = false;
+        bool isUpdatingTranscript = false;
         final hasPlayableAudio = (audioUrl?.isNotEmpty ?? false) ||
             (audioPath?.isNotEmpty ?? false);
         int activeTab = hasPlayableAudio ? 1 : 0;
@@ -1187,13 +1528,18 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
             audioUrl != null &&
             audioUrl.isNotEmpty) {
           WidgetsBinding.instance.addPostFrameCallback((_) {
-            _transcribeExistingNote(docId: id, audioUrl: audioUrl, silent: true);
+            _transcribeExistingNote(
+              docId: id,
+              audioUrl: audioUrl,
+              durationSeconds: durationSeconds,
+              silent: true,
+            );
           });
         }
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!GroqService.isTranscriptPending(content)) {
-            tts.play(title, content, lang.ttsLocale);
+          if (!GroqService.isTranscriptPending(sheetContent)) {
+            tts.play(title, sheetContent, lang.ttsLocale);
             isSpeaking = true;
           }
         });
@@ -1254,11 +1600,12 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                   ? const Color(0xFF4B9EFF)
                                   : Color(0x8A0A0E1A),
                               onTap: () {
+                                if (sheetContent.trim().isEmpty) return;
                                 if (isSpeaking) {
                                   tts.stop();
                                   setSheetState(() => isSpeaking = false);
                                 } else {
-                                  tts.play(title, content, lang.ttsLocale);
+                                  tts.play(title, sheetContent, lang.ttsLocale);
                                   setSheetState(() => isSpeaking = true);
                                 }
                               },
@@ -1266,10 +1613,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             _sheetIconBtn(
                               icon: Icons.file_download_outlined,
                               color: Color(0x8A0A0E1A),
-                              onTap: () => _downloadTranscript(title, content),
+                              onTap: () =>
+                                  _downloadTranscript(title, sheetContent),
                             ),
                             if (audioUrl != null &&
-                                GroqService.isTranscriptPending(content))
+                                GroqService.isTranscriptPending(sheetContent))
                               _sheetIconBtn(
                                 icon: Icons.transcribe_outlined,
                                 color: const Color(0xFF4B9EFF),
@@ -1277,32 +1625,23 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                   await _transcribeExistingNote(
                                     docId: id,
                                     audioUrl: audioUrl,
+                                    durationSeconds: durationSeconds,
                                   );
                                 },
                               ),
                             _sheetIconBtn(
-                              icon: Icons.edit_note_rounded,
-                              color: Color(0x8A0A0E1A),
+                              icon: isEditingTranscript
+                                  ? Icons.close
+                                  : Icons.edit_note_rounded,
+                              color: isEditingTranscript
+                                  ? const Color(0xFF4B9EFF)
+                                  : Color(0x8A0A0E1A),
                               onTap: () {
                                 tts.stop();
-                                Navigator.pop(ctx);
-                                setState(() {
-                                _titleController.text = title;
-                                _transcriptController.text = content;
-                                _isEditing = true;
-                                _editingId = id;
-                                _audioUrl = audioUrl;
-                                if (durationSeconds != null) {
-                                  _recordingDuration = Duration(
-                                    seconds: durationSeconds,
-                                  );
-                                }
-                              });
-                                _scrollController.animateTo(
-                                  0,
-                                  duration: const Duration(milliseconds: 300),
-                                  curve: Curves.easeOut,
-                                );
+                                setSheetState(() {
+                                  isEditingTranscript = !isEditingTranscript;
+                                  sheetTranscriptController.text = sheetContent;
+                                });
                               },
                             ),
                           ],
@@ -1335,84 +1674,86 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         ),
 
                       // â”€â”€ AI Tools bar â”€â”€
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 20),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 10,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Color(0xFF0A0E1A),
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          child: Row(
-                            children: [
-                              Icon(
-                                Icons.auto_awesome,
-                                size: 13,
-                                color: Color(0xFF4B9EFF),
-                              ),
-                              const SizedBox(width: 6),
-                              const Text(
-                                'AI Tools',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
+                      if (sheetContent.trim().isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 10,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Color(0xFF0A0E1A),
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Row(
+                              children: [
+                                Icon(
+                                  Icons.auto_awesome,
+                                  size: 13,
                                   color: Color(0xFF4B9EFF),
                                 ),
-                              ),
-                              const Spacer(),
-                              _aiChip(
-                                label: 'Summarize',
-                                icon: Icons.summarize_outlined,
-                                dark: true,
-                                onTap: () {
-                                  tts.stop();
-                                  Navigator.pop(ctx);
-                                  Navigator.push(
-                                    context,
-                                    MaterialPageRoute(
-                                      builder: (_) => AiResultPage(
-                                        documentTitle: title,
-                                        documentContent: content,
-                                        mode: 'summary',
-                                        source: 'Notes',
+                                const SizedBox(width: 6),
+                                const Text(
+                                  'AI Tools',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                    color: Color(0xFF4B9EFF),
+                                  ),
+                                ),
+                                const Spacer(),
+                                _aiChip(
+                                  label: 'Summarize',
+                                  icon: Icons.summarize_outlined,
+                                  dark: true,
+                                  onTap: () {
+                                    tts.stop();
+                                    Navigator.pop(ctx);
+                                    Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (_) => AiResultPage(
+                                          documentTitle: title,
+                                          documentContent: sheetContent,
+                                          mode: 'summary',
+                                          source: 'Notes',
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              _aiChip(
-                                label: 'Q&A Generator',
-                                icon: Icons.style_outlined,
-                                dark: false,
-                                onTap: () async {
-                                  tts.stop();
-                                  final nav = Navigator.of(context);
-                                  final count = await _pickCardCount(context);
-                                  if (count == null) return;
-                                  if (!ctx.mounted) return;
-                                  Navigator.pop(ctx);
-                                  if (!context.mounted) return;
-                                  nav.push(
-                                    MaterialPageRoute(
-                                      builder: (_) => AiResultPage(
-                                        documentTitle: title,
-                                        documentContent: content,
-                                        mode: 'flashcards',
-                                        cardCount: count,
-                                        source: 'Notes',
+                                    );
+                                  },
+                                ),
+                                const SizedBox(width: 8),
+                                _aiChip(
+                                  label: 'Q&A Generator',
+                                  icon: Icons.style_outlined,
+                                  dark: false,
+                                  onTap: () async {
+                                    tts.stop();
+                                    final nav = Navigator.of(context);
+                                    final count =
+                                        await _pickCardCount(context);
+                                    if (count == null) return;
+                                    if (!ctx.mounted) return;
+                                    Navigator.pop(ctx);
+                                    if (!context.mounted) return;
+                                    nav.push(
+                                      MaterialPageRoute(
+                                        builder: (_) => AiResultPage(
+                                          documentTitle: title,
+                                          documentContent: sheetContent,
+                                          mode: 'flashcards',
+                                          cardCount: count,
+                                          source: 'Notes',
+                                        ),
                                       ),
-                                    ),
-                                  );
-                                },
-                              ),
-                            ],
+                                    );
+                                  },
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
                       const SizedBox(height: 12),
 
                       // â”€â”€ Tabs â”€â”€
@@ -1458,14 +1799,159 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                   40,
                                 ),
                                 children: [
-                                  Text(
-                                    content,
-                                    style: TextStyle(
-                                      fontSize: 15,
-                                      height: 1.75,
-                                      color: Color(0xDD0A0E1A),
+                                  if (sheetContent.trim().isNotEmpty) ...[
+                                    Wrap(
+                                      spacing: 8,
+                                      runSpacing: 8,
+                                      children: [
+                                        _transcriptActionChip(
+                                          label: isEditingTranscript
+                                              ? 'Cancel'
+                                              : 'Edit',
+                                          icon: isEditingTranscript
+                                              ? Icons.close
+                                              : Icons.edit_note,
+                                          onTap: () {
+                                            setSheetState(() {
+                                              isEditingTranscript =
+                                                  !isEditingTranscript;
+                                              sheetTranscriptController.text =
+                                                  sheetContent;
+                                            });
+                                          },
+                                        ),
+                                        if (isEditingTranscript)
+                                          _transcriptActionChip(
+                                            label: isUpdatingTranscript
+                                                ? 'Updating...'
+                                                : 'Update',
+                                            icon: Icons.check,
+                                            onTap: isUpdatingTranscript
+                                                ? null
+                                                : () async {
+                                                    final next =
+                                                        sheetTranscriptController
+                                                            .text
+                                                            .trim();
+                                                    if (next.isEmpty) {
+                                                      ScaffoldMessenger.of(
+                                                        context,
+                                                      ).showSnackBar(
+                                                        SnackBar(
+                                                          content: const Text(
+                                                            'Transcript cannot be empty.',
+                                                          ),
+                                                          backgroundColor:
+                                                              VoxColors.danger,
+                                                          behavior:
+                                                              SnackBarBehavior
+                                                                  .floating,
+                                                        ),
+                                                      );
+                                                      return;
+                                                    }
+                                                    setSheetState(() {
+                                                      isUpdatingTranscript =
+                                                          true;
+                                                    });
+                                                    try {
+                                                      await _updateNoteTranscript(
+                                                        id,
+                                                        next,
+                                                      );
+                                                      setSheetState(() {
+                                                        sheetContent = next;
+                                                        isEditingTranscript =
+                                                            false;
+                                                        isUpdatingTranscript =
+                                                            false;
+                                                      });
+                                                      if (context.mounted) {
+                                                        ScaffoldMessenger.of(
+                                                          context,
+                                                        ).showSnackBar(
+                                                          SnackBar(
+                                                            content: const Text(
+                                                              'Transcript updated.',
+                                                            ),
+                                                            backgroundColor:
+                                                                VoxColors
+                                                                    .surface(
+                                                              context,
+                                                            ),
+                                                            behavior:
+                                                                SnackBarBehavior
+                                                                    .floating,
+                                                          ),
+                                                        );
+                                                      }
+                                                    } catch (e) {
+                                                      setSheetState(() {
+                                                        isUpdatingTranscript =
+                                                            false;
+                                                      });
+                                                      if (context.mounted) {
+                                                        ScaffoldMessenger.of(
+                                                          context,
+                                                        ).showSnackBar(
+                                                          SnackBar(
+                                                            content: Text(
+                                                              'Update failed: $e',
+                                                            ),
+                                                            backgroundColor:
+                                                                VoxColors
+                                                                    .danger,
+                                                            behavior:
+                                                                SnackBarBehavior
+                                                                    .floating,
+                                                          ),
+                                                        );
+                                                      }
+                                                    }
+                                                  },
+                                          ),
+                                      ],
                                     ),
-                                  ),
+                                    const SizedBox(height: 14),
+                                  ],
+                                  if (isEditingTranscript)
+                                    TextField(
+                                      controller: sheetTranscriptController,
+                                      maxLines: null,
+                                      minLines: 8,
+                                      textCapitalization:
+                                          TextCapitalization.sentences,
+                                      style: const TextStyle(
+                                        fontSize: 15,
+                                        height: 1.65,
+                                        color: Color(0xDD0A0E1A),
+                                      ),
+                                      decoration: InputDecoration(
+                                        filled: true,
+                                        fillColor: Colors.white,
+                                        hintText: 'Edit transcript...',
+                                        border: OutlineInputBorder(
+                                          borderRadius:
+                                              BorderRadius.circular(14),
+                                          borderSide: BorderSide(
+                                            color: Colors.grey.shade300,
+                                          ),
+                                        ),
+                                      ),
+                                    )
+                                  else
+                                    Text(
+                                      sheetContent.trim().isEmpty
+                                          ? 'No transcript yet.'
+                                          : sheetContent,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        height: 1.75,
+                                        color: sheetContent.trim().isEmpty
+                                            ? Color(0x8A0A0E1A)
+                                            : Color(0xDD0A0E1A),
+                                      ),
+                                    ),
                                 ],
                               )
                             : _audioPlayerPanel(
@@ -1494,7 +1980,29 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       },
     ).whenComplete(() {
       tts.stop();
+      sheetTranscriptController.dispose();
     });
+  }
+
+  Widget _transcriptActionChip({
+    required String label,
+    required IconData icon,
+    required VoidCallback? onTap,
+  }) {
+    return ActionChip(
+      avatar: Icon(icon, size: 15, color: const Color(0xFF4B9EFF)),
+      label: Text(label),
+      onPressed: onTap,
+      backgroundColor: Colors.white,
+      disabledColor: Colors.white.withValues(alpha: 0.65),
+      labelStyle: const TextStyle(
+        color: Color(0xFF0A0E1A),
+        fontSize: 12,
+        fontWeight: FontWeight.w800,
+      ),
+      side: BorderSide(color: Colors.grey.shade300),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+    );
   }
 
   Widget _audioPlayerPanel({
@@ -1893,37 +2401,22 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Recording Â· ${_formatDuration(_kMaxRecordingDuration - _recordingDuration)} left',
+                  'Recording · ${_formatDuration(_kMaxRecordingDuration - _recordingDuration)} left',
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.4),
                     fontSize: 11,
                   ),
                 ),
-
-                // Live transcript preview
-                if (_transcriptController.text.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 16),
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    constraints: const BoxConstraints(maxHeight: 80),
-                    child: SingleChildScrollView(
-                      reverse: true,
-                      child: Text(
-                        _transcriptController.text,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.7),
-                          fontSize: 12,
-                          height: 1.5,
-                        ),
-                      ),
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Recording audio · playback after you stop',
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.45),
+                      fontSize: 11,
                     ),
                   ),
-                ],
+                ),
 
                 const SizedBox(height: 16),
                 // Stop button
@@ -1990,7 +2483,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Uploading & finalising transcript',
+                  'Preparing playback…',
                   style: TextStyle(color: Colors.white38, fontSize: 11),
                 ),
               ],
@@ -2019,9 +2512,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       size: 18,
                     ),
                     const SizedBox(width: 8),
-                    const Text(
-                      'Recording complete',
-                      style: TextStyle(
+                    Text(
+                      lang.t('recording_complete'),
+                      style: const TextStyle(
                         color: Color(0xFF4B9EFF),
                         fontWeight: FontWeight.w700,
                         fontSize: 13,
@@ -2067,7 +2560,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  'Tap Save Note below to add this recording to your list.',
+                  lang.t('save_note_list_hint'),
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.45),
                     fontSize: 11,
@@ -2102,17 +2595,15 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            if (_audioDuration > Duration.zero)
-                              Text(
-                                '${_formatDuration(_currentPosition)} / ${_formatDuration(_audioDuration)}',
-                                style: TextStyle(
-                                  color: Colors.white54,
-                                  fontSize: 11,
-                                ),
+                            Text(
+                              '${_formatDuration(_currentPosition)} / ${_formatDuration(_audioDuration > Duration.zero ? _audioDuration : _recordingDuration)}',
+                              style: TextStyle(
+                                color: Colors.white54,
+                                fontSize: 11,
                               ),
+                            ),
                             const SizedBox(height: 4),
-                            if (_audioDuration > Duration.zero)
-                              SliderTheme(
+                            SliderTheme(
                                 data: SliderTheme.of(context).copyWith(
                                   activeTrackColor: const Color(0xFF4B9EFF),
                                   inactiveTrackColor: Colors.white12,
@@ -2124,9 +2615,18 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                       .toDouble()
                                       .clamp(
                                         0,
-                                        _audioDuration.inSeconds.toDouble(),
+                                        (_audioDuration > Duration.zero
+                                                ? _audioDuration
+                                                : _recordingDuration)
+                                            .inSeconds
+                                            .toDouble(),
                                       ),
-                                  max: _audioDuration.inSeconds.toDouble(),
+                                  max: (_audioDuration > Duration.zero
+                                          ? _audioDuration
+                                          : _recordingDuration)
+                                      .inSeconds
+                                      .toDouble()
+                                      .clamp(1, double.infinity),
                                   onChanged: (v) => _audioPlayer.seek(
                                     Duration(seconds: v.toInt()),
                                   ),
@@ -2306,7 +2806,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 ],
               )
             : Text(
-                'Voice Notes',
+                lang.t('voice_notes_title'),
                 style: TextStyle(
                   color: VoxColors.onBg(context),
                   fontWeight: FontWeight.w900,
@@ -2549,9 +3049,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                               ),
                               padding: const EdgeInsets.symmetric(vertical: 14),
                             ),
-                            child: const Text(
-                              'Discard',
-                              style: TextStyle(fontWeight: FontWeight.w600),
+                            child: Text(
+                              lang.t('discard'),
+                              style: const TextStyle(fontWeight: FontWeight.w600),
                             ),
                           ),
                         ),
@@ -2577,8 +3077,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                   )
                                 : Icon(Icons.save_alt, size: 18),
                             label: Text(
-                              _isEditing ? 'Update Note' : 'Save Note',
-                              style: TextStyle(
+                              _isEditing
+                                  ? lang.t('update_note')
+                                  : lang.t('save_note'),
+                              style: const TextStyle(
                                 fontWeight: FontWeight.w800,
                               ),
                             ),
@@ -2654,7 +3156,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
-                            _isAnonymousUser ? 'GUEST' : 'SAVED',
+                            _isAnonymousUser
+                                ? lang.t('guest_badge')
+                                : lang.t('saved_badge'),
                             style: TextStyle(
                               color: _isAnonymousUser
                                   ? Colors.orange
@@ -2680,7 +3184,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 onChanged: (value) =>
                     setState(() => _searchQuery = value.trim().toLowerCase()),
                 decoration: InputDecoration(
-                  hintText: 'Search recordings by title...',
+                  hintText: lang.t('search_recordings'),
                   prefixIcon: Icon(
                     Icons.search,
                     color: VoxColors.textSecondary(context),

@@ -9,25 +9,87 @@ import 'voice_assistant_intent.dart';
 
 // ignore: uri_does_not_exist
 import 'config/secrets.dart';
+import 'services/groq_service.dart';
 
 class AiService {
-  static const String _baseUrl =
+  static const String _openRouterUrl =
       'https://openrouter.ai/api/v1/chat/completions';
-  static const String _model = 'meta-llama/llama-3.3-70b-instruct';
+  static const String _openRouterModel = 'meta-llama/llama-3.3-70b-instruct';
+  static const String _groqUrl =
+      'https://api.groq.com/openai/v1/chat/completions';
+  static const String _groqModel = 'llama-3.3-70b-versatile';
   static const int _maxChars = 12000;
 
-  static Future<String> _callOpenRouter(
+  static Future<String> _callLlm(
     String systemPrompt,
     String userMessage, {
     double temperature = 0.9,
     int maxTokens = 2048,
   }) async {
-    if (kOpenRouterKey.isEmpty) {
-      throw Exception(
-        'Missing OPENROUTER_API_KEY. Edit assets/project.env and rebuild the app.',
-      );
+    Object? lastError;
+
+    if (kOpenRouterKey.isNotEmpty) {
+      try {
+        return await _postChatCompletion(
+          provider: 'OpenRouter',
+          url: _openRouterUrl,
+          apiKey: kOpenRouterKey,
+          model: _openRouterModel,
+          systemPrompt: systemPrompt,
+          userMessage: userMessage,
+          temperature: temperature,
+          maxTokens: maxTokens,
+          extraHeaders: const {
+            'HTTP-Referer': 'https://voxapplication.app',
+            'X-OpenRouter-Title': 'VoxApplication',
+          },
+        );
+      } catch (e) {
+        lastError = e;
+        debugPrint('OpenRouter chat failed, trying Groq fallback: $e');
+      }
     }
 
+    if (kGroqApiKey.isNotEmpty) {
+      try {
+        return await _postChatCompletion(
+          provider: 'Groq',
+          url: _groqUrl,
+          apiKey: kGroqApiKey,
+          model: _groqModel,
+          systemPrompt: systemPrompt,
+          userMessage: userMessage,
+          temperature: temperature,
+          maxTokens: maxTokens,
+        );
+      } catch (e) {
+        lastError = e;
+        debugPrint('Groq chat failed: $e');
+      }
+    }
+
+    if (lastError != null) {
+      final msg = lastError.toString().replaceFirst('Exception: ', '').trim();
+      throw Exception(msg);
+    }
+
+    throw Exception(
+      'No AI API key configured. Add OPENROUTER_API_KEY or GROQ_API_KEY to '
+      'assets/project.env, then rebuild the app.',
+    );
+  }
+
+  static Future<String> _postChatCompletion({
+    required String provider,
+    required String url,
+    required String apiKey,
+    required String model,
+    required String systemPrompt,
+    required String userMessage,
+    required double temperature,
+    required int maxTokens,
+    Map<String, String> extraHeaders = const {},
+  }) async {
     final content = userMessage.length > _maxChars
         ? '${userMessage.substring(0, _maxChars)}\n\n[...trimmed...]'
         : userMessage;
@@ -35,15 +97,14 @@ class AiService {
     try {
       final response = await http
           .post(
-            Uri.parse(_baseUrl),
+            Uri.parse(url),
             headers: {
               'Content-Type': 'application/json',
-              'Authorization': 'Bearer $kOpenRouterKey',
-              'HTTP-Referer': 'https://voxapplication.app',
-              'X-OpenRouter-Title': 'VoxApplication',
+              'Authorization': 'Bearer $apiKey',
+              ...extraHeaders,
             },
             body: jsonEncode({
-              'model': _model,
+              'model': model,
               'messages': [
                 {'role': 'system', 'content': systemPrompt},
                 {'role': 'user', 'content': content},
@@ -52,13 +113,10 @@ class AiService {
               'temperature': temperature,
             }),
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 60));
 
       if (response.statusCode == 200) {
-        final data = jsonDecode(response.body) as Map<String, dynamic>;
-        final choices = data['choices'] as List<dynamic>;
-        return (choices.first as Map<String, dynamic>)['message']['content']
-            as String;
+        return _extractChatContent(response.body);
       }
 
       if (response.statusCode == 429) {
@@ -66,7 +124,7 @@ class AiService {
       }
       if (response.statusCode == 401) {
         throw Exception(
-          'Invalid OpenRouter key. Check OPENROUTER_API_KEY in assets/project.env.',
+          'Invalid $provider API key. Check assets/project.env and rebuild.',
         );
       }
 
@@ -76,14 +134,58 @@ class AiService {
       throw Exception('Error ${response.statusCode}: $body');
     } on http.ClientException catch (e) {
       AnalyticsService.instance.recordApiError(
-        'OpenRouter',
+        provider,
         'Network Error: $e',
       );
       throw Exception('No internet connection. Please check your network.');
     } catch (e) {
-      AnalyticsService.instance.recordApiError('OpenRouter', e.toString());
+      AnalyticsService.instance.recordApiError(provider, e.toString());
       rethrow;
     }
+  }
+
+  static String _extractChatContent(String responseBody) {
+    final data = jsonDecode(responseBody);
+    if (data is! Map<String, dynamic>) {
+      throw Exception('AI returned an unexpected response format.');
+    }
+    final choices = data['choices'];
+    if (choices is! List || choices.isEmpty) {
+      throw Exception('AI returned no completion choices.');
+    }
+    final first = choices.first;
+    if (first is! Map<String, dynamic>) {
+      throw Exception('AI returned an invalid message structure.');
+    }
+    final message = first['message'];
+    if (message is! Map<String, dynamic>) {
+      throw Exception('AI returned an empty message.');
+    }
+    final text = (message['content'] ?? '').toString().trim();
+    if (text.isEmpty) {
+      throw Exception('AI returned empty text.');
+    }
+    return text;
+  }
+
+  static String _prepareDocumentText(String documentText) {
+    final trimmed = documentText.trim();
+    if (trimmed.isEmpty) {
+      throw Exception(
+        'No text to analyze. Add document content or wait for a voice note transcript.',
+      );
+    }
+    if (GroqService.isTranscriptPending(trimmed)) {
+      throw Exception(
+        'Transcript is not ready yet. Wait for transcription to finish, then try again.',
+      );
+    }
+    if (trimmed.length < 20) {
+      throw Exception(
+        'Text is too short to summarize or generate Q&A (${trimmed.length} characters).',
+      );
+    }
+    return trimmed;
   }
 
   static Future<String> _callNlpAssistant(String userMessage) async {
@@ -122,6 +224,7 @@ class AiService {
 
   /// Summarizes the document and returns plain-text summary.
   static Future<String> summarize(String documentText) {
+    final text = _prepareDocumentText(documentText);
     const system =
         'You are an expert academic summarizer. '
         'Given a document, produce a clear summary with: '
@@ -129,7 +232,12 @@ class AiService {
         '2) Key points each prefixed with "-", '
         '3) Important conclusions. '
         'Use plain text only and no markdown headers or bold.';
-    return _callOpenRouter(system, 'Summarize this document:\n\n$documentText');
+    return _callLlm(
+      system,
+      'Summarize this document:\n\n$text',
+      temperature: 0.4,
+      maxTokens: 4096,
+    );
   }
 
   /// High-level semantic routing: maps STT transcript to structured app command.
@@ -173,7 +281,7 @@ class AiService {
         '$customCommandsContext';
 
     try {
-      final raw = await _callOpenRouter(
+      final raw = await _callLlm(
         systemPrompt,
         'User spoke:\n"""$t"""',
         temperature: 0.12,
@@ -212,9 +320,13 @@ class AiService {
         '7) Voice Commands: Global hands-free control via STT. '
         'Keep answers friendly, concise, and do not invent features not listed here.';
 
-    return _callNlpAssistant(userMessage).catchError((_) {
-      return _callOpenRouter(fallbackSystem, userMessage);
-    });
+    final nlpUrl = dotenv.env['NLP_API_URL']?.trim() ?? '';
+    if (nlpUrl.isNotEmpty) {
+      return _callNlpAssistant(userMessage).catchError((_) {
+        return _callLlm(fallbackSystem, userMessage);
+      });
+    }
+    return _callLlm(fallbackSystem, userMessage);
   }
 
   /// Generates [count] flashcards and returns parsed Q&A.
@@ -222,37 +334,58 @@ class AiService {
     String documentText, {
     int count = 10,
   }) async {
+    final text = _prepareDocumentText(documentText);
     final seed = Random().nextInt(99999);
+    final safeCount = count.clamp(3, 30);
 
     final system =
-        'You are a creative study flashcard generator. '
-        'Generate exactly $count unique flashcards covering important concepts. '
-        'Every call must produce different questions by varying focus and phrasing. '
-        'Seed for variation: $seed. '
-        'Respond only with a valid JSON array and no extra text. '
-        'Format: [{"question":"...","answer":"..."}, ...]';
+        'You are a study flashcard generator. '
+        'Output ONLY a JSON array with exactly $safeCount objects. '
+        'No markdown, no code fences, no explanation. '
+        'Each object must have string fields "question" and "answer". '
+        'Example: [{"question":"What is X?","answer":"X is ..."}] '
+        'Seed: $seed.';
 
-    final raw = await _callOpenRouter(
+    final raw = await _callLlm(
       system,
-      'Generate $count flashcards from this document:\n\n$documentText',
+      'Create $safeCount flashcards from this document:\n\n$text',
+      temperature: 0.5,
+      maxTokens: 4096,
     );
 
-    final cleaned = raw.replaceAll(RegExp(r'```json|```'), '').trim();
+    return _parseFlashcardsFromModel(raw, safeCount);
+  }
+
+  static List<Flashcard> _parseFlashcardsFromModel(String raw, int expectedMin) {
+    var cleaned = raw.replaceAll(RegExp(r'```json|```', caseSensitive: false), '').trim();
+    final start = cleaned.indexOf('[');
+    final end = cleaned.lastIndexOf(']');
+    if (start != -1 && end > start) {
+      cleaned = cleaned.substring(start, end + 1);
+    }
 
     try {
-      final parsed = jsonDecode(cleaned) as List<dynamic>;
-      return parsed
-          .map(
-            (e) => Flashcard(
-              question: (e as Map<String, dynamic>)['question'] as String,
-              answer: e['answer'] as String,
-            ),
-          )
-          .toList();
+      final decoded = jsonDecode(cleaned);
+      if (decoded is! List) {
+        throw const FormatException('Expected JSON array');
+      }
+      final cards = <Flashcard>[];
+      for (final item in decoded) {
+        if (item is! Map) continue;
+        final q = (item['question'] ?? item['q'] ?? '').toString().trim();
+        final a = (item['answer'] ?? item['a'] ?? '').toString().trim();
+        if (q.isNotEmpty && a.isNotEmpty) {
+          cards.add(Flashcard(question: q, answer: a));
+        }
+      }
+      if (cards.length >= 3) return cards;
+      throw FormatException('Only ${cards.length} valid cards parsed');
     } catch (e) {
-      debugPrint('JSON parse error: $e');
-      debugPrint('Raw response: $cleaned');
-      throw Exception('Could not parse flashcards. Please try again.');
+      debugPrint('Flashcard JSON parse error: $e');
+      debugPrint('Raw model output: $raw');
+      throw Exception(
+        'Could not parse Q&A cards from the AI response. Tap Try Again.',
+      );
     }
   }
 

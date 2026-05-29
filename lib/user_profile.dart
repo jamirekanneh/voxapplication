@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -12,6 +13,10 @@ import 'services/app_session.dart';
 import 'services/auth_session.dart';
 
 enum _SnackTone { neutral, success, error }
+
+/// Web client ID from Firebase (client_type 3) — required for idToken on Android.
+const _kGoogleServerClientId =
+    '1033671503358-c8dhmiu6henkq7ig0cg8ata4mq24a9af.apps.googleusercontent.com';
 
 String _googleSignInUserMessage(Object e) {
   if (e is GoogleSignInException) {
@@ -83,7 +88,6 @@ class UserProfilePage extends StatefulWidget {
 }
 
 class _UserProfilePageState extends State<UserProfilePage> {
-  String _stage = 'form';
   bool _isEditingMode = false;
 
   final _nameController = TextEditingController();
@@ -105,7 +109,10 @@ class _UserProfilePageState extends State<UserProfilePage> {
     super.initState();
     _isEditingMode = widget.isEditingMode;
     _ensureAuth();
-    GoogleSignIn.instance.initialize();
+    if (!widget.isEditingMode) {
+      unawaited(_redirectIfDeviceRecognized());
+    }
+    GoogleSignIn.instance.initialize(serverClientId: _kGoogleServerClientId);
     _loadCurrentUserData();
     _evaluateSwitchableEmail();
   }
@@ -156,17 +163,49 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   Future<void> _ensureAuth() async {
     if (FirebaseAuth.instance.currentUser != null) return;
-    final savedUid = await AuthSession.savedUserId();
+
     final guest = await AuthSession.isExplicitGuestMode();
-    if (savedUid != null && !guest) {
-      // Wait for Firebase to restore a signed-in session; do not create anon.
-      await AuthSession.waitForSignedInUser();
+    if (guest) {
+      try {
+        await FirebaseAuth.instance.signInAnonymously();
+      } catch (e) {
+        debugPrint('Silent anon sign-in error: $e');
+      }
       return;
     }
+
+    final savedUid = await AuthSession.savedUserId();
+    final prefs = await SharedPreferences.getInstance();
+    final hasProfile = prefs.getBool('hasProfile') ?? false;
+
+    // Returning device/user: wait for Firebase session — do not create anonymous
+    // (anonymous causes Google/email sign-in errors on first try).
+    if (savedUid != null || hasProfile) {
+      await AuthSession.waitForSignedInUser(
+        timeout: const Duration(seconds: 12),
+      );
+      return;
+    }
+
     try {
       await FirebaseAuth.instance.signInAnonymously();
     } catch (e) {
       debugPrint('Silent anon sign-in error: $e');
+    }
+  }
+
+  Future<void> _redirectIfDeviceRecognized() async {
+    if (widget.isEditingMode || !mounted) return;
+    try {
+      final linked = await AppSession.getDeviceLinkedUser();
+      if (linked == null) return;
+      await AuthSession.restoreFromDevice(linked);
+      AppSession.lastRestoredDeviceUser = linked;
+      await AppSession.markSetupComplete(userId: linked.userId);
+      if (!mounted) return;
+      Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
+    } catch (e) {
+      debugPrint('Device redirect skipped: $e');
     }
   }
 
@@ -263,11 +302,41 @@ class _UserProfilePageState extends State<UserProfilePage> {
     if (confirm == true && mounted) {
       setState(() {
         _isSwitchingEmail = true;
-        _stage = 'form';
         _emailController.clear();
       });
       _showSnack('Enter your new email address and tap Save to apply.');
     }
+  }
+
+  Future<bool?> _promptSyncExistingAccount(String email) {
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Account found'),
+        content: Text(
+          'We found an account for $email.\n\n'
+          'Do you remember your password and want to sync your data to this device?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Not now'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx, false);
+              _sendPasswordReset();
+            },
+            child: const Text('Forgot password'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Yes, sync'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _onSaveTapped() async {
@@ -309,35 +378,27 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
 
     if (mounted) setState(() => _isLoading = true);
-    final exists = await _checkEmailExists(email);
-    if (!mounted) return;
-
-    if (exists) {
-      setState(() {
-        _isLoading = false;
-        _stage = 'returning';
-      });
-    } else {
-      // The creation method below handles the email-as-ID logic
+    try {
       await _createNewAccount(name, email, password);
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        if (!mounted) return;
+        setState(() => _isLoading = false);
+        final sync = await _promptSyncExistingAccount(email);
+        if (sync == true && mounted) {
+          await _signInReturningUser(password);
+        }
+      } else {
+        _showSnack(_authErrorMessage(e), tone: _SnackTone.error);
+        if (mounted) setState(() => _isLoading = false);
+      }
+    } catch (e) {
+      _showSnack('Error creating account: $e', tone: _SnackTone.error);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
   bool _isValidEmail(String email) =>
       RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(email);
-
-  Future<bool> _checkEmailExists(String email) async {
-    try {
-      final snap = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: email)
-          .limit(1)
-          .get();
-      return snap.docs.isNotEmpty;
-    } catch (e) {
-      debugPrint('Email check error: $e');
-      return false;
-    }
-  }
 
  Future<void> _createNewAccount(String name, String email, String password) async {
   try {
@@ -387,8 +448,8 @@ class _UserProfilePageState extends State<UserProfilePage> {
       // Ensure the navigation matches your defined routes
       Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
     }
-  } on FirebaseAuthException catch (e) {
-    _showSnack(_authErrorMessage(e), tone: _SnackTone.error);
+  } on FirebaseAuthException {
+    rethrow;
   } catch (e) {
     _showSnack('Error creating account: $e', tone: _SnackTone.error);
   } finally {
@@ -579,14 +640,15 @@ class _UserProfilePageState extends State<UserProfilePage> {
         }
       } else {
         final googleUser = await GoogleSignIn.instance.authenticate();
-        final googleAuth = googleUser.authentication;
-        final authResult = await googleUser.authorizationClient.authorizeScopes(
-          const ['email'],
-        );
-        credential = GoogleAuthProvider.credential(
-          accessToken: authResult.accessToken,
-          idToken: googleAuth.idToken,
-        );
+        final idToken = googleUser.authentication.idToken;
+        if (idToken == null || idToken.isEmpty) {
+          throw const GoogleSignInException(
+            code: GoogleSignInExceptionCode.unknownError,
+            description:
+                'Google did not return a sign-in token. Check Firebase SHA-1/SHA-256 and google-services.json.',
+          );
+        }
+        credential = GoogleAuthProvider.credential(idToken: idToken);
 
         if (existingUser != null && existingUser.isAnonymous) {
           try {
@@ -596,7 +658,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           } on FirebaseAuthException catch (linkError) {
             if (linkError.code == 'credential-already-in-use' ||
                 linkError.code == 'account-exists-with-different-credential') {
-              // Fallthrough
+              // Fall through to signInWithCredential below.
             } else {
               rethrow;
             }
@@ -795,19 +857,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   @override
   Widget build(BuildContext context) {
-    if (_stage == 'returning') {
-      return VoxScaffoldWrapper(
-        child: _ReturningUserView(
-          key: const ValueKey('returning'),
-          email: _emailController.text.trim(),
-          isLoading: _isLoading,
-          onSignIn: _signInReturningUser,
-          onForgotPassword: _sendPasswordReset,
-          onBack: () => setState(() => _stage = 'form'),
-        ),
-      );
-    }
-
     return VoxScaffoldWrapper(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

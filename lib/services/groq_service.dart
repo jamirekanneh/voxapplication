@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:http/http.dart' as http;
 
@@ -8,31 +9,103 @@ class GroqService {
   static const String _endpoint =
       'https://api.groq.com/openai/v1/audio/transcriptions';
 
-  static Future<String> transcribeAudio(String audioUrl) async {
+  /// Transcribe from a Firebase/download URL (fallback when local file is gone).
+  static Future<String> transcribeAudio(
+    String audioUrl, {
+    Duration? expectedDuration,
+  }) async {
+    final download = await http
+        .get(Uri.parse(audioUrl))
+        .timeout(const Duration(seconds: 60));
+    if (download.statusCode != 200) {
+      throw Exception(
+        'Could not download audio for transcription (${download.statusCode}).',
+      );
+    }
+    final bytes = download.bodyBytes;
+    if (bytes.isEmpty) {
+      throw Exception('Downloaded audio file is empty.');
+    }
+    if (expectedDuration != null && expectedDuration.inSeconds >= 3) {
+      final minBytes = expectedDuration.inSeconds * 1200;
+      if (bytes.length < minBytes) {
+        throw Exception(
+          'Uploaded audio is too small for a ${expectedDuration.inSeconds}s '
+          'recording. Re-record with microphone permission enabled.',
+        );
+      }
+    }
+    return _transcribeBytes(bytes, filename: 'recording.m4a');
+  }
+
+  /// Wait until the recorder has flushed the file to disk.
+  static Future<void> ensureLocalAudioReady(String localPath) =>
+      _waitForFileReady(File(localPath));
+
+  /// Preferred path: transcribe directly from the on-device recording file.
+  static Future<String> transcribeLocalFile(
+    String localPath, {
+    Duration? expectedDuration,
+  }) async {
+    final file = File(localPath);
+    if (!await file.exists()) {
+      throw Exception('Audio file not found on device.');
+    }
+    await _waitForFileReady(file);
+    final bytes = await file.readAsBytes();
+    if (bytes.isEmpty) {
+      throw Exception('Audio file is empty.');
+    }
+    if (expectedDuration != null && expectedDuration.inSeconds >= 3) {
+      final minBytes = expectedDuration.inSeconds * 1200;
+      if (bytes.length < minBytes) {
+        throw Exception(
+          'Recording looks empty (${bytes.length} bytes for '
+          '${expectedDuration.inSeconds}s). The microphone may not have '
+          'captured audio — enable mic permission and close assistant voice '
+          'before recording.',
+        );
+      }
+    }
+    final name = localPath.split(Platform.pathSeparator).last;
+    return _transcribeBytes(bytes, filename: name.endsWith('.') ? 'recording.m4a' : name);
+  }
+
+  static Future<void> _waitForFileReady(File file) async {
+    const attempts = 25;
+    const delay = Duration(milliseconds: 120);
+    var lastSize = -1;
+    for (var i = 0; i < attempts; i++) {
+      if (!await file.exists()) {
+        await Future<void>.delayed(delay);
+        continue;
+      }
+      final size = await file.length();
+      if (size >= 1024 && size == lastSize) return;
+      lastSize = size;
+      await Future<void>.delayed(delay);
+    }
+    if (await file.exists() && await file.length() >= 512) return;
+    throw Exception(
+      'Recording file is not ready yet. Wait a moment and try again.',
+    );
+  }
+
+  static Future<String> _transcribeBytes(
+    List<int> audioBytes, {
+    required String filename,
+  }) async {
     final apiKey = kGroqApiKey;
     if (apiKey.isEmpty) {
       throw Exception(
         'Groq API key is missing. Add GROQ_API_KEY to assets/project.env and restart the app.',
       );
     }
-
-    late List<int> audioBytes;
-    try {
-      final download = await http
-          .get(Uri.parse(audioUrl))
-          .timeout(const Duration(seconds: 60));
-      if (download.statusCode != 200) {
-        throw Exception(
-          'Could not download audio for transcription (${download.statusCode}).',
-        );
-      }
-      audioBytes = download.bodyBytes;
-      if (audioBytes.isEmpty) {
-        throw Exception('Downloaded audio file is empty.');
-      }
-    } catch (e) {
-      if (e is Exception) rethrow;
-      throw Exception('Could not download audio. Check internet and try again.');
+    if (audioBytes.length < 512) {
+      throw Exception(
+        'Audio file is too small (${audioBytes.length} bytes). '
+        'The recording may not have finished saving.',
+      );
     }
 
     late http.Response response;
@@ -45,7 +118,7 @@ class GroqService {
           http.MultipartFile.fromBytes(
             'file',
             audioBytes,
-            filename: 'recording.m4a',
+            filename: filename,
           ),
         );
 

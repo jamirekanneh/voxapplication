@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -88,10 +89,13 @@ class LanguageProvider extends ChangeNotifier {
     _selectedLanguage = language;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefKey, language);
-    
-    // Switch dynamic cache
+
     await _loadDynamicCache();
     notifyListeners();
+
+    if (language != 'English') {
+      unawaited(_warmUpAllStrings());
+    }
   }
 
   Future<void> setDyslexicFont(bool enabled) async {
@@ -143,6 +147,38 @@ class LanguageProvider extends ChangeNotifier {
   // English phrase and fires off a background request to translate it.
   // When translated, it caches and injects directly via notifyListeners().
   // ─────────────────────────────────────────────────────────────
+  /// Replaces `{name}`-style placeholders in a translated string.
+  String tNamed(String key, Map<String, String> params) {
+    var text = t(key);
+    params.forEach((placeholder, value) {
+      text = text.replaceAll('{$placeholder}', value);
+    });
+    return text;
+  }
+
+  Future<void> _warmUpAllStrings() async {
+    if (_selectedLanguage == 'English') return;
+
+    final manual = AppStrings.of(_selectedLanguage);
+    final batch = <Future<void>>[];
+
+    for (final entry in AppStrings.english.entries) {
+      if (manual.containsKey(entry.key)) continue;
+      if (_dynamicTranslations.containsKey(entry.key)) continue;
+      if (_translatingSet.contains(entry.key)) continue;
+
+      batch.add(_translateAsync(entry.key, entry.value));
+      if (batch.length >= 6) {
+        await Future.wait(batch);
+        batch.clear();
+      }
+    }
+    if (batch.isNotEmpty) {
+      await Future.wait(batch);
+    }
+    notifyListeners();
+  }
+
   String t(String key) {
     // 1. Fallback base text is either English from AppStrings or the key itself
     final baseEnText = AppStrings.of('English')[key] ?? key;

@@ -97,7 +97,7 @@ class TranscriptionQueue {
           final snapshot = await uploadTask.whenComplete(() {});
           final downloadUrl = await snapshot.ref.getDownloadURL();
 
-          final transcription = await GroqService.transcribeAudio(downloadUrl);
+          final transcription = await GroqService.transcribeLocalFile(localFile.path);
           await FirebaseFirestore.instance.collection('notes').add({
             'userId': rec.uid,
             'title': 'Audio Note ${DateTime.fromMillisecondsSinceEpoch(rec.timestamp)}',

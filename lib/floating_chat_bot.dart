@@ -4,6 +4,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'ai_service.dart';
 import 'tts_service.dart';
 import 'language_provider.dart';
+import 'services/mic_coordinator.dart';
 
 class FloatingBotWrapper extends StatefulWidget {
   final Widget child;
@@ -51,12 +52,16 @@ class _FloatingBotWrapperState extends State<FloatingBotWrapper> {
 
   void _openChat() {
     final ctx = context;
+    MicCoordinator.instance.setChatbotSheetOpen(true);
     showModalBottomSheet(
       context: ctx,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (context) => const ChatBotBottomSheet(),
-    );
+    ).whenComplete(() {
+      MicCoordinator.instance.setChatbotSheetOpen(false);
+      MicCoordinator.instance.setChatbotListening(false);
+    });
   }
 
   @override
@@ -152,9 +157,18 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
   bool _isLoading = false;
   bool _voiceOutputEnabled = true;
 
+  Future<void> _releaseChatbotMic() async {
+    try {
+      await _speech.stop();
+    } catch (_) {}
+    if (mounted) setState(() => _isListening = false);
+    MicCoordinator.instance.setChatbotListening(false);
+  }
+
   @override
   void initState() {
     super.initState();
+    MicCoordinator.instance.registerReleaseHandler(_releaseChatbotMic);
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1000),
@@ -163,6 +177,8 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
 
   @override
   void dispose() {
+    MicCoordinator.instance.unregisterReleaseHandler(_releaseChatbotMic);
+    MicCoordinator.instance.setChatbotListening(false);
     _pulseController.dispose();
     _speech.stop();
     _controller.dispose();
@@ -171,6 +187,19 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
 
   void _listen() async {
     if (!_isListening) {
+      if (!MicCoordinator.instance.chatbotMayListen) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Chatbot microphone is only available on Menu and FAQs.',
+              ),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
       bool available = await _speech.initialize(
         onStatus: (status) {
           if (status == 'done' || status == 'notListening') {
@@ -187,6 +216,11 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
       );
       if (!mounted) return;
       if (available) {
+        MicCoordinator.instance.unregisterReleaseHandler(_releaseChatbotMic);
+        await MicCoordinator.instance.releaseAll();
+        if (!mounted) return;
+        MicCoordinator.instance.registerReleaseHandler(_releaseChatbotMic);
+        MicCoordinator.instance.setChatbotListening(true);
         setState(() => _isListening = true);
         _speech.listen(
           listenOptions: stt.SpeechListenOptions(
@@ -215,8 +249,7 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
         );
       }
     } else {
-      setState(() => _isListening = false);
-      _speech.stop();
+      await _releaseChatbotMic();
     }
   }
 
@@ -255,10 +288,11 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
       }
     } catch (e) {
       if (mounted) {
+        final err = e.toString().replaceFirst('Exception: ', '').trim();
         setState(() {
           _messages.add({
             'role': 'assistant',
-            'content': 'Sorry, I encountered an error: $e',
+            'content': 'Sorry, I encountered an error: $err',
           });
           _isLoading = false;
         });

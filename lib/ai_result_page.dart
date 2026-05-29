@@ -105,6 +105,11 @@ class _AiResultPageState extends State<AiResultPage> {
     });
     await _stopSpeaking();
     try {
+      if (widget.documentContent.trim().isEmpty) {
+        throw Exception(
+          'No text to analyze. Add content or wait for the voice note transcript.',
+        );
+      }
       if (widget.mode == 'summary') {
         final s = await AiService.summarize(widget.documentContent);
         if (mounted) {
@@ -139,7 +144,7 @@ class _AiResultPageState extends State<AiResultPage> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = e.toString();
+          _error = e.toString().replaceFirst('Exception: ', '').trim();
           _loading = false;
         });
       }

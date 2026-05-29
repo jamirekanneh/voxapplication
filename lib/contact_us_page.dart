@@ -7,6 +7,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'theme_provider.dart';
+import 'data/country_dial_codes.dart';
 
 const _kDevWhatsApp = '905488265289';
 const _kEmailJSServiceId = String.fromEnvironment(
@@ -25,87 +26,7 @@ const _kEmailJSPublicKey = String.fromEnvironment(
 
 enum ContactPreference { email, whatsapp }
 
-const List<Map<String, String>> _kCountries = [
-  {'name': 'Afghanistan', 'dial': '+93', 'flag': 'ðŸ‡¦ðŸ‡«'},
-  {'name': 'Albania', 'dial': '+355', 'flag': 'ðŸ‡¦ðŸ‡±'},
-  {'name': 'Algeria', 'dial': '+213', 'flag': 'ðŸ‡©ðŸ‡¿'},
-  {'name': 'Argentina', 'dial': '+54', 'flag': 'ðŸ‡¦ðŸ‡·'},
-  {'name': 'Australia', 'dial': '+61', 'flag': 'ðŸ‡¦ðŸ‡º'},
-  {'name': 'Austria', 'dial': '+43', 'flag': 'ðŸ‡¦ðŸ‡¹'},
-  {'name': 'Bahrain', 'dial': '+973', 'flag': 'ðŸ‡§ðŸ‡­'},
-  {'name': 'Bangladesh', 'dial': '+880', 'flag': 'ðŸ‡§ðŸ‡©'},
-  {'name': 'Belgium', 'dial': '+32', 'flag': 'ðŸ‡§ðŸ‡ª'},
-  {'name': 'Brazil', 'dial': '+55', 'flag': 'ðŸ‡§ðŸ‡·'},
-  {'name': 'Canada', 'dial': '+1', 'flag': 'ðŸ‡¨ðŸ‡¦'},
-  {'name': 'Chile', 'dial': '+56', 'flag': 'ðŸ‡¨ðŸ‡±'},
-  {'name': 'China', 'dial': '+86', 'flag': 'ðŸ‡¨ðŸ‡³'},
-  {'name': 'Colombia', 'dial': '+57', 'flag': 'ðŸ‡¨ðŸ‡´'},
-  {'name': 'Croatia', 'dial': '+385', 'flag': 'ðŸ‡­ðŸ‡·'},
-  {'name': 'Czech Republic', 'dial': '+420', 'flag': 'ðŸ‡¨ðŸ‡¿'},
-  {'name': 'Denmark', 'dial': '+45', 'flag': 'ðŸ‡©ðŸ‡°'},
-  {'name': 'Egypt', 'dial': '+20', 'flag': 'ðŸ‡ªðŸ‡¬'},
-  {'name': 'Ethiopia', 'dial': '+251', 'flag': 'ðŸ‡ªðŸ‡¹'},
-  {'name': 'Finland', 'dial': '+358', 'flag': 'ðŸ‡«ðŸ‡®'},
-  {'name': 'France', 'dial': '+33', 'flag': 'ðŸ‡«ðŸ‡·'},
-  {'name': 'Germany', 'dial': '+49', 'flag': 'ðŸ‡©ðŸ‡ª'},
-  {'name': 'Ghana', 'dial': '+233', 'flag': 'ðŸ‡¬ðŸ‡­'},
-  {'name': 'Greece', 'dial': '+30', 'flag': 'ðŸ‡¬ðŸ‡·'},
-  {'name': 'Hungary', 'dial': '+36', 'flag': 'ðŸ‡­ðŸ‡º'},
-  {'name': 'India', 'dial': '+91', 'flag': 'ðŸ‡®ðŸ‡³'},
-  {'name': 'Indonesia', 'dial': '+62', 'flag': 'ðŸ‡®ðŸ‡©'},
-  {'name': 'Iran', 'dial': '+98', 'flag': 'ðŸ‡®ðŸ‡·'},
-  {'name': 'Iraq', 'dial': '+964', 'flag': 'ðŸ‡®ðŸ‡¶'},
-  {'name': 'Ireland', 'dial': '+353', 'flag': 'ðŸ‡®ðŸ‡ª'},
-  {'name': 'Israel', 'dial': '+972', 'flag': 'ðŸ‡®ðŸ‡±'},
-  {'name': 'Italy', 'dial': '+39', 'flag': 'ðŸ‡®ðŸ‡¹'},
-  {'name': 'Japan', 'dial': '+81', 'flag': 'ðŸ‡¯ðŸ‡µ'},
-  {'name': 'Jordan', 'dial': '+962', 'flag': 'ðŸ‡¯ðŸ‡´'},
-  {'name': 'Kenya', 'dial': '+254', 'flag': 'ðŸ‡°ðŸ‡ª'},
-  {'name': 'Kuwait', 'dial': '+965', 'flag': 'ðŸ‡°ðŸ‡¼'},
-  {'name': 'Lebanon', 'dial': '+961', 'flag': 'ðŸ‡±ðŸ‡§'},
-  {'name': 'Libya', 'dial': '+218', 'flag': 'ðŸ‡±ðŸ‡¾'},
-  {'name': 'Malaysia', 'dial': '+60', 'flag': 'ðŸ‡²ðŸ‡¾'},
-  {'name': 'Mexico', 'dial': '+52', 'flag': 'ðŸ‡²ðŸ‡½'},
-  {'name': 'Morocco', 'dial': '+212', 'flag': 'ðŸ‡²ðŸ‡¦'},
-  {'name': 'Netherlands', 'dial': '+31', 'flag': 'ðŸ‡³ðŸ‡±'},
-  {'name': 'New Zealand', 'dial': '+64', 'flag': 'ðŸ‡³ðŸ‡¿'},
-  {'name': 'Nigeria', 'dial': '+234', 'flag': 'ðŸ‡³ðŸ‡¬'},
-  {'name': 'Norway', 'dial': '+47', 'flag': 'ðŸ‡³ðŸ‡´'},
-  {'name': 'Oman', 'dial': '+968', 'flag': 'ðŸ‡´ðŸ‡²'},
-  {'name': 'Pakistan', 'dial': '+92', 'flag': 'ðŸ‡µðŸ‡°'},
-  {'name': 'Palestine', 'dial': '+970', 'flag': 'ðŸ‡µðŸ‡¸'},
-  {'name': 'Peru', 'dial': '+51', 'flag': 'ðŸ‡µðŸ‡ª'},
-  {'name': 'Philippines', 'dial': '+63', 'flag': 'ðŸ‡µðŸ‡­'},
-  {'name': 'Poland', 'dial': '+48', 'flag': 'ðŸ‡µðŸ‡±'},
-  {'name': 'Portugal', 'dial': '+351', 'flag': 'ðŸ‡µðŸ‡¹'},
-  {'name': 'Qatar', 'dial': '+974', 'flag': 'ðŸ‡¶ðŸ‡¦'},
-  {'name': 'Romania', 'dial': '+40', 'flag': 'ðŸ‡·ðŸ‡´'},
-  {'name': 'Russia', 'dial': '+7', 'flag': 'ðŸ‡·ðŸ‡º'},
-  {'name': 'Saudi Arabia', 'dial': '+966', 'flag': 'ðŸ‡¸ðŸ‡¦'},
-  {'name': 'Senegal', 'dial': '+221', 'flag': 'ðŸ‡¸ðŸ‡³'},
-  {'name': 'Serbia', 'dial': '+381', 'flag': 'ðŸ‡·ðŸ‡¸'},
-  {'name': 'Singapore', 'dial': '+65', 'flag': 'ðŸ‡¸ðŸ‡¬'},
-  {'name': 'South Africa', 'dial': '+27', 'flag': 'ðŸ‡¿ðŸ‡¦'},
-  {'name': 'South Korea', 'dial': '+82', 'flag': 'ðŸ‡°ðŸ‡·'},
-  {'name': 'Spain', 'dial': '+34', 'flag': 'ðŸ‡ªðŸ‡¸'},
-  {'name': 'Sudan', 'dial': '+249', 'flag': 'ðŸ‡¸ðŸ‡©'},
-  {'name': 'Sweden', 'dial': '+46', 'flag': 'ðŸ‡¸ðŸ‡ª'},
-  {'name': 'Switzerland', 'dial': '+41', 'flag': 'ðŸ‡¨ðŸ‡­'},
-  {'name': 'Syria', 'dial': '+963', 'flag': 'ðŸ‡¸ðŸ‡¾'},
-  {'name': 'Taiwan', 'dial': '+886', 'flag': 'ðŸ‡¹ðŸ‡¼'},
-  {'name': 'Tanzania', 'dial': '+255', 'flag': 'ðŸ‡¹ðŸ‡¿'},
-  {'name': 'Thailand', 'dial': '+66', 'flag': 'ðŸ‡¹ðŸ‡­'},
-  {'name': 'Tunisia', 'dial': '+216', 'flag': 'ðŸ‡¹ðŸ‡³'},
-  {'name': 'Turkey', 'dial': '+90', 'flag': 'ðŸ‡¹ðŸ‡·'},
-  {'name': 'UAE', 'dial': '+971', 'flag': 'ðŸ‡¦ðŸ‡ª'},
-  {'name': 'Uganda', 'dial': '+256', 'flag': 'ðŸ‡ºðŸ‡¬'},
-  {'name': 'Ukraine', 'dial': '+380', 'flag': 'ðŸ‡ºðŸ‡¦'},
-  {'name': 'United Kingdom', 'dial': '+44', 'flag': 'ðŸ‡¬ðŸ‡§'},
-  {'name': 'United States', 'dial': '+1', 'flag': 'ðŸ‡ºðŸ‡¸'},
-  {'name': 'Venezuela', 'dial': '+58', 'flag': 'ðŸ‡»ðŸ‡ª'},
-  {'name': 'Vietnam', 'dial': '+84', 'flag': 'ðŸ‡»ðŸ‡³'},
-  {'name': 'Yemen', 'dial': '+967', 'flag': 'ðŸ‡¾ðŸ‡ª'},
-];
+List<Map<String, String>> get _kCountries => kCountries;
 
 class _BlinkingHint extends StatefulWidget {
   final String text;
@@ -379,7 +300,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
               child: TextField(
                 autofocus: true,
                 decoration: InputDecoration(
-                   hintText: 'Search countryâ€¦',
+                  hintText: 'Search country...',
                   prefixIcon: const Icon(Icons.search, size: 18),
                   filled: true,
                   fillColor: VoxColors.onBg(context).withValues(alpha: 0.04),
@@ -675,7 +596,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
               Text(
                 isEmail
                     ? 'We will reply directly to your email'
-                    : 'WhatsApp opens â€” tap Send to deliver your message',
+                    : 'WhatsApp opens — tap Send to deliver your message',
                 style: TextStyle(
                   fontSize: 11.5,
                   color: isEmail ? VoxColors.textSecondary(context) : VoxColors.accent(context),
@@ -1184,7 +1105,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   forceStrutHeight: false,
                                 ),
                                 decoration: _inputDeco().copyWith(
-                                  hintText: 'Write your message hereâ€¦',
+                                  hintText: 'Write your message here...',
                                   hintStyle: TextStyle(
                                     color: Colors.white.withValues(alpha: 0.3),
                                     fontSize: 13,

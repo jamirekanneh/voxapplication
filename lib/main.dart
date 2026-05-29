@@ -35,6 +35,7 @@ import 'recommendations_page.dart';
 import 'recycle_bin_page.dart';
 import 'history_page.dart';
 import 'services/transcription_queue.dart';
+import 'services/mic_route_observer.dart';
 
 final GlobalKey<NavigatorState> globalNavigatorKey =
     GlobalKey<NavigatorState>();
@@ -113,6 +114,7 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: globalNavigatorKey,
+      navigatorObservers: [MicRouteObserver()],
       themeMode: themeProvider.themeMode,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,

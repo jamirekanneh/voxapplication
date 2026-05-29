@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:speech_to_text/speech_to_text.dart' as stt;
@@ -6,6 +8,7 @@ import 'custom_commands_provider.dart';
 import 'command_dispatcher.dart';
 import 'tts_service.dart';
 import 'language_provider.dart';
+import 'services/mic_coordinator.dart';
 
 // ─────────────────────────────────────────────
 //  GLOBAL STT WRAPPER
@@ -32,9 +35,17 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
 
+  Future<void> _releaseMicForRecording() async {
+    _updateListening(hardware: false, ui: false);
+    await _speech.stop();
+    await _speech.cancel();
+  }
+
   @override
   void initState() {
     super.initState();
+    MicCoordinator.instance.registerReleaseHandler(_releaseMicForRecording);
+    MicCoordinator.instance.addListener(_onMicPriorityChanged);
     _initSpeech();
 
     _pulseController = AnimationController(
@@ -52,20 +63,35 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     });
   }
 
+  void _onMicPriorityChanged() {
+    if (!mounted) return;
+    if (!MicCoordinator.instance.assistantMayListen && _isHardwareListening) {
+      unawaited(_releaseMicForRecording());
+    }
+  }
+
   void _onProviderChange() {
     if (!mounted) return;
     final assistantEnabled =
         context.read<CustomCommandsProvider>().assistantModeEnabled;
-    if (assistantEnabled && !_isHardwareListening) {
+    if (assistantEnabled &&
+        MicCoordinator.instance.assistantMayListen &&
+        !_isHardwareListening) {
       _startListening(manual: false);
     } else if (!assistantEnabled && !_showListeningUI && _isHardwareListening) {
       // If toggled off while passively listening, stop hardware
       _speech.stop();
+    } else if (assistantEnabled &&
+        !MicCoordinator.instance.assistantMayListen &&
+        _isHardwareListening) {
+      unawaited(_releaseMicForRecording());
     }
   }
 
   @override
   void dispose() {
+    MicCoordinator.instance.removeListener(_onMicPriorityChanged);
+    MicCoordinator.instance.unregisterReleaseHandler(_releaseMicForRecording);
     _pulseController.dispose();
     super.dispose();
   }
@@ -87,6 +113,23 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
   }
 
   Future<void> _startListening({bool manual = false}) async {
+    if (!MicCoordinator.instance.assistantMayListen) {
+      if (manual && mounted) {
+        final route = MicCoordinator.instance.currentRoute ?? 'this screen';
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              route == '/home'
+                  ? 'Assistant microphone is busy.'
+                  : 'Voice assistant is only active on the Home screen.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
     // Explicit permission check for robust Android support
     final status = await Permission.microphone.request();
     if (status != PermissionStatus.granted) return;
@@ -238,6 +281,7 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
 
   void _checkAutoRestart() {
     if (!mounted) return;
+    if (!MicCoordinator.instance.assistantMayListen) return;
     final assistantEnabled =
         context.read<CustomCommandsProvider>().assistantModeEnabled;
     if (assistantEnabled && !_isHardwareListening) {
@@ -245,7 +289,9 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
         if (!mounted) return;
         final stillEnabled =
             context.read<CustomCommandsProvider>().assistantModeEnabled;
-        if (stillEnabled && !_isHardwareListening) {
+        if (stillEnabled &&
+            MicCoordinator.instance.assistantMayListen &&
+            !_isHardwareListening) {
           await _initSpeech();
           if (mounted) _startListening(manual: false); // Auto restart hidden
         }

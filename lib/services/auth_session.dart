@@ -1,5 +1,9 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+import 'device_linked_user.dart';
 
 /// Distinguishes explicit guest mode from a signed-in Firebase user.
 class AuthSession {
@@ -31,6 +35,40 @@ class AuthSession {
     if (user.displayName?.isNotEmpty ?? false) {
       await prefs.setString('userName', user.displayName!);
     }
+  }
+
+  /// Restores local session from a device-linked account (Firestore data by UID).
+  static Future<void> restoreFromDevice(DeviceLinkedUser linked) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyGuestMode, false);
+    await prefs.setBool(_keyHasProfile, true);
+    await prefs.setString(_keyUserId, linked.userId);
+
+    var email = linked.email?.trim() ?? '';
+    var username = linked.username?.trim() ?? '';
+
+    if (email.isEmpty || username.isEmpty) {
+      try {
+        final doc = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(linked.userId)
+            .get();
+        if (doc.exists) {
+          final data = doc.data() ?? {};
+          if (username.isEmpty) {
+            username = (data['username'] as String? ?? '').trim();
+          }
+          if (email.isEmpty) {
+            email = (data['email'] as String? ?? '').trim();
+          }
+        }
+      } catch (e) {
+        debugPrint('restoreFromDevice profile load: $e');
+      }
+    }
+
+    if (email.isNotEmpty) await prefs.setString('userEmail', email);
+    if (username.isNotEmpty) await prefs.setString('userName', username);
   }
 
   static Future<void> markGuestContinue() async {
