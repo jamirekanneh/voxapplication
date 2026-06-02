@@ -104,6 +104,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   String? _currentName;
   String? _currentPhotoBase64;
   bool _entryGatePending = true;
+  bool _showReturningSignIn = false;
 
   @override
   void initState() {
@@ -274,7 +275,13 @@ class _UserProfilePageState extends State<UserProfilePage> {
     if (email.isEmpty) return;
 
     final usersRef = FirebaseFirestore.instance.collection('users');
-    final sameEmail = await usersRef.where('email', isEqualTo: email).get();
+    QuerySnapshot<Map<String, dynamic>> sameEmail;
+    try {
+      sameEmail = await usersRef.where('email', isEqualTo: email).get();
+    } catch (e) {
+      debugPrint('mergeLegacy: email lookup failed ($e), continuing with uid doc.');
+      sameEmail = await usersRef.where(FieldPath.documentId, isEqualTo: user.uid).get();
+    }
     final currentRef = usersRef.doc(user.uid);
 
     final merged = <String, dynamic>{
@@ -296,26 +303,44 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
     await currentRef.set(merged, SetOptions(merge: true));
 
+    // Only migrate records that used email-as-userId. Trying to migrate
+    // arbitrary old uid owners can fail Firestore ownership checks.
     final legacyOwnerIds = <String>{email};
-    for (final doc in sameEmail.docs) {
-      if (doc.id != user.uid) legacyOwnerIds.add(doc.id);
-    }
     for (final legacyId in legacyOwnerIds) {
-      await _reassignCollectionOwner(
-        collection: 'notes',
-        fromUserId: legacyId,
-        toUserId: user.uid,
-      );
-      await _reassignCollectionOwner(
-        collection: 'library',
-        fromUserId: legacyId,
-        toUserId: user.uid,
-      );
-      await _reassignCollectionOwner(
-        collection: 'custom_commands',
-        fromUserId: legacyId,
-        toUserId: user.uid,
-      );
+      try {
+        await _reassignCollectionOwner(
+          collection: 'notes',
+          fromUserId: legacyId,
+          toUserId: user.uid,
+        );
+        await _reassignCollectionOwner(
+          collection: 'library',
+          fromUserId: legacyId,
+          toUserId: user.uid,
+        );
+        await _reassignCollectionOwner(
+          collection: 'custom_commands',
+          fromUserId: legacyId,
+          toUserId: user.uid,
+        );
+      } catch (e) {
+        debugPrint('mergeLegacy: owner reassignment skipped for $legacyId: $e');
+      }
+    }
+
+    // Cleanup duplicate profile docs that used email as document id / owner id.
+    for (final doc in sameEmail.docs) {
+      if (doc.id == user.uid) continue;
+      final data = doc.data();
+      final legacyOwner = (data['userId'] as String?)?.trim() ?? '';
+      final isLegacyEmailDoc = doc.id == email || legacyOwner == email;
+      if (!isLegacyEmailDoc) continue;
+      try {
+        await usersRef.doc(doc.id).delete();
+        debugPrint('mergeLegacy: removed duplicate legacy user doc ${doc.id}');
+      } catch (e) {
+        debugPrint('mergeLegacy: could not delete legacy user doc ${doc.id}: $e');
+      }
     }
   }
 
@@ -348,37 +373,6 @@ class _UserProfilePageState extends State<UserProfilePage> {
       });
       _showSnack('Enter your new email address and tap Save to apply.');
     }
-  }
-
-  Future<bool?> _promptSyncExistingAccount(String email) {
-    return showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Account found'),
-        content: Text(
-          'We found an account for $email.\n\n'
-          'Do you remember your password and want to sync your data to this device?',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Not now'),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx, false);
-              _sendPasswordReset();
-            },
-            child: const Text('Forgot password'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Yes, sync'),
-          ),
-        ],
-      ),
-    );
   }
 
   Future<void> _onSaveTapped() async {
@@ -425,11 +419,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
     } on FirebaseAuthException catch (e) {
       if (e.code == 'email-already-in-use') {
         if (!mounted) return;
-        setState(() => _isLoading = false);
-        final sync = await _promptSyncExistingAccount(email);
-        if (sync == true && mounted) {
-          await _signInReturningUser(password);
-        }
+        setState(() {
+          _isLoading = false;
+          _showReturningSignIn = true;
+        });
+        _showSnack(
+          'This email is already registered. Sign in with your password to sync your data.',
+          tone: _SnackTone.neutral,
+        );
       } else {
         _showSnack(_authErrorMessage(e), tone: _SnackTone.error);
         if (mounted) setState(() => _isLoading = false);
@@ -917,6 +914,21 @@ class _UserProfilePageState extends State<UserProfilePage> {
       );
     }
 
+    if (_showReturningSignIn && !_isEditingMode) {
+      return VoxScaffoldWrapper(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.only(bottom: 32),
+          child: _ReturningUserView(
+            email: _emailController.text.trim(),
+            isLoading: _isLoading,
+            onSignIn: _signInReturningUser,
+            onForgotPassword: _sendPasswordReset,
+            onBack: () => setState(() => _showReturningSignIn = false),
+          ),
+        ),
+      );
+    }
+
     return VoxScaffoldWrapper(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -981,6 +993,17 @@ class _UserProfilePageState extends State<UserProfilePage> {
                   color: VoxColors.textHint(context),
                 ),
                 onPressed: () => setState(() => _passwordVisible = !_passwordVisible),
+              ),
+            ),
+
+          if (!_isEditingMode)
+            Center(
+              child: TextButton(
+                onPressed: _sendPasswordReset,
+                child: Text(
+                  'Forgot Password?',
+                  style: TextStyle(color: VoxColors.primary(context)),
+                ),
               ),
             ),
 

@@ -27,6 +27,10 @@ class TtsService extends ChangeNotifier {
 
   // Tracks char position so we can seek forward/back
   int _currentCharOffset = 0;
+  // Some TTS engines reset progress start/end for internal chunks.
+  int _engineChunkBase = 0;
+  int _lastEngineStart = 0;
+  int _lastEngineEnd = 0;
 
   List<Map<String, String>> get availableVoices => _availableVoices;
   Map<String, String>? get selectedVoice => _selectedVoice;
@@ -48,13 +52,20 @@ class TtsService extends ChangeNotifier {
 
     _tts.setProgressHandler((text, start, end, word) {
       final total = content?.length ?? 1;
-      _currentCharOffset = start;
+      if (start < _lastEngineStart) {
+        _engineChunkBase += _lastEngineEnd;
+      }
+      final absoluteStart = (_engineChunkBase + start).clamp(0, total);
+      final absoluteEnd = (_engineChunkBase + end).clamp(absoluteStart, total);
+      _lastEngineStart = start;
+      _lastEngineEnd = end;
+      _currentCharOffset = absoluteStart;
       if (total > 0) {
-        progress = end / total;
-        wordStart = start;
-        wordEnd = end;
+        progress = absoluteEnd / total;
+        wordStart = absoluteStart;
+        wordEnd = absoluteEnd;
         // Find sentence boundaries around current word
-        _updateSentenceBounds(start);
+        _updateSentenceBounds(absoluteStart);
       }
       notifyListeners();
     });
@@ -174,6 +185,9 @@ class TtsService extends ChangeNotifier {
     sentenceStart = 0;
     sentenceEnd = 0;
     _currentCharOffset = 0;
+    _engineChunkBase = 0;
+    _lastEngineStart = 0;
+    _lastEngineEnd = 0;
 
     _updateSentenceBounds(0);
 
@@ -198,6 +212,9 @@ class TtsService extends ChangeNotifier {
         await _tts.setSpeechRate(speechRate);
         // Resume from where we left off, not from the very beginning
         final remaining = content!.substring(_currentCharOffset.clamp(0, content!.length));
+        _engineChunkBase = _currentCharOffset;
+        _lastEngineStart = 0;
+        _lastEngineEnd = 0;
         await _tts.speak(remaining.isNotEmpty ? remaining : content!);
         isPlaying = true;
       }
@@ -218,6 +235,9 @@ class TtsService extends ChangeNotifier {
     sentenceStart = 0;
     sentenceEnd = 0;
     _currentCharOffset = 0;
+    _engineChunkBase = 0;
+    _lastEngineStart = 0;
+    _lastEngineEnd = 0;
     notifyListeners();
   }
 
@@ -229,6 +249,9 @@ class TtsService extends ChangeNotifier {
       await _applyVoiceOrLocale(locale);
       // Resume from current offset
       final remaining = content!.substring(_currentCharOffset.clamp(0, content!.length));
+      _engineChunkBase = _currentCharOffset;
+      _lastEngineStart = 0;
+      _lastEngineEnd = 0;
       await _tts.speak(remaining.isNotEmpty ? remaining : content!);
     }
     notifyListeners();
@@ -263,6 +286,9 @@ class TtsService extends ChangeNotifier {
     wordStart = newOffset;
     wordEnd = newOffset;
     progress = newOffset / text.length;
+    _engineChunkBase = newOffset;
+    _lastEngineStart = 0;
+    _lastEngineEnd = 0;
     await _applyVoiceOrLocale(locale);
     await _tts.speak(remaining);
     isPlaying = true;
@@ -290,6 +316,9 @@ class TtsService extends ChangeNotifier {
     wordStart = newOffset;
     wordEnd = newOffset;
     progress = newOffset / text.length;
+    _engineChunkBase = newOffset;
+    _lastEngineStart = 0;
+    _lastEngineEnd = 0;
     await _applyVoiceOrLocale(locale);
     await _tts.speak(remaining);
     isPlaying = true;

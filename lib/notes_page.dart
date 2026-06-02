@@ -89,6 +89,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   @override
   void initState() {
     super.initState();
+    MicCoordinator.instance.setRoute('/notes');
     final bootUid = AppSession.bootstrapUid;
     if (bootUid != null) {
       _resolvedUid = bootUid;
@@ -109,6 +110,12 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     _pulseAnimation = Tween<double>(begin: 0.9, end: 1.1).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    MicCoordinator.instance.setRoute('/notes');
   }
 
   @override
@@ -431,14 +438,24 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   Future<void> _startRecording() async {
     final rawTitle = _titleController.text.trim();
     if (rawTitle.isEmpty) {
+      final lang = context.read<LanguageProvider>();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(context.read<LanguageProvider>().t('title_before_record')),
+          content: Text(lang.t('title_before_record')),
           backgroundColor: VoxColors.danger,
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
         ),
       );
+      try {
+        unawaited(
+          context.read<TtsService>().play(
+                'Voice Notes',
+                lang.t('title_before_record'),
+                lang.ttsLocale,
+              ),
+        );
+      } catch (_) {}
       return;
     }
 

@@ -334,6 +334,25 @@ class AppSession {
     );
   }
 
+  /// Called on logout: clear this device's last linked account
+  /// so next launch goes to profile/login instead of auto-home.
+  static Future<void> clearDeviceLinkForLogout() async {
+    lastRestoredDeviceUser = null;
+    final id = await deviceId();
+    if (id == null || id.isEmpty) return;
+
+    await _timeout(
+      FirebaseFirestore.instance.collection('devices').doc(id).set({
+        'hasCompletedSetup': false,
+        'lastOpenedAt': FieldValue.serverTimestamp(),
+        'lastUserId': FieldValue.delete(),
+        'lastUserEmail': FieldValue.delete(),
+        'lastUserName': FieldValue.delete(),
+      }, SetOptions(merge: true)),
+      _firestoreTimeout,
+    );
+  }
+
   /// Returning phone → Home. New phone → Profile setup only.
   static Future<LaunchDestination> resolveLaunchDestination() async {
     if (await AuthSession.isExplicitGuestMode()) {

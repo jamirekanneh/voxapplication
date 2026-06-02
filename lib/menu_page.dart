@@ -17,6 +17,8 @@ import 'analytics_service.dart';
 import 'floating_chat_bot.dart';
 import 'recommendations_page.dart';
 import 'reminders_page.dart';
+import 'user_profile.dart';
+import 'services/app_session.dart';
 import 'services/auth_session.dart';
 
 
@@ -386,11 +388,23 @@ class _MenuPageState extends State<MenuPage> {
                     child: ElevatedButton(
                       onPressed: () async {
                         Navigator.pop(ctx);
+                        await AppSession.clearDeviceLinkForLogout();
+                        await AuthSession.clearGuestMode();
                         final prefs = await SharedPreferences.getInstance();
-                        await prefs.clear();
+                        await prefs.remove('hasProfile');
+                        await prefs.remove('userId');
+                        await prefs.remove('userEmail');
+                        await prefs.remove('userName');
+                        await prefs.remove('pendingEmailLink');
                         await FirebaseAuth.instance.signOut();
                         if (context.mounted) {
-                          Navigator.pushReplacementNamed(context, '/');
+                          Navigator.of(context).pushAndRemoveUntil(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  const UserProfilePage(isEditingMode: false),
+                            ),
+                            (route) => false,
+                          );
                         }
                       },
                       style: ElevatedButton.styleFrom(

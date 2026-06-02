@@ -33,6 +33,8 @@ import 'recycle_bin_page.dart';
 import 'reminders_page.dart';
 import 'history_page.dart';
 import 'services/mic_route_observer.dart';
+import 'services/auth_session.dart';
+import 'services/app_session.dart';
 
 final GlobalKey<NavigatorState> globalNavigatorKey =
     GlobalKey<NavigatorState>();
@@ -90,11 +92,29 @@ class _MyAppState extends State<MyApp> {
     if (email == null) return;
 
     try {
-      await FirebaseAuth.instance.signInWithEmailLink(
+      final cred = await FirebaseAuth.instance.signInWithEmailLink(
         email: email,
         emailLink: link,
       );
       await prefs.remove('pendingEmailLink');
+
+      final user = cred.user;
+      if (user != null) {
+        await AuthSession.markSignedIn(user);
+        try {
+          final doc = await FirebaseFirestore.instance
+              .collection('users')
+              .doc(user.uid)
+              .get();
+          if (doc.exists) {
+            final name = (doc.data()?['username'] as String?)?.trim();
+            if (name != null && name.isNotEmpty) {
+              await prefs.setString('userName', name);
+            }
+          }
+        } catch (_) {}
+        await AppSession.markSetupComplete(userId: user.uid);
+      }
 
       // Give the navigator a moment to be ready, then navigate to home.
       await Future.delayed(const Duration(milliseconds: 300));

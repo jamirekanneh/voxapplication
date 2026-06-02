@@ -655,56 +655,68 @@ class _ReaderPageState extends State<ReaderPage> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
-      builder: (ctx) => Padding(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 36),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 40,
-              height: 4,
-              margin: const EdgeInsets.only(bottom: 20),
-              decoration: BoxDecoration(
-                color: Colors.grey[700],
-                borderRadius: BorderRadius.circular(10),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheetState) => Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 36),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 40,
+                height: 4,
+                margin: const EdgeInsets.only(bottom: 20),
+                decoration: BoxDecoration(
+                  color: Colors.grey[700],
+                  borderRadius: BorderRadius.circular(10),
+                ),
               ),
-            ),
-            const Text(
-              'Reader Settings',
-              style: TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 17,
+              const Text(
+                'Reader Settings',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 17,
+                ),
               ),
-            ),
-            const SizedBox(height: 20),
-            SwitchListTile(
-              title: const Text(
-                'OpenDyslexic Font',
-                style: TextStyle(color: Colors.white),
+              const SizedBox(height: 20),
+              SwitchListTile(
+                title: const Text(
+                  'OpenDyslexic Font',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: const Text(
+                  'Enhanced readability for dyslexia',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                value: lang.isDyslexicFontEnabled,
+                activeThumbColor: const Color(0xFF4B9EFF),
+                onChanged: (v) async {
+                  await lang.setDyslexicFont(v);
+                  if (!mounted) return;
+                  setState(() {});
+                  setSheetState(() {});
+                },
               ),
-              subtitle: const Text(
-                'Enhanced readability for dyslexia',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
+              SwitchListTile(
+                title: const Text(
+                  'Bionic Reading',
+                  style: TextStyle(color: Colors.white),
+                ),
+                subtitle: const Text(
+                  'Highlight word starts for faster focus',
+                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                value: lang.isBionicReadingEnabled,
+                activeThumbColor: const Color(0xFF4B9EFF),
+                onChanged: (v) async {
+                  await lang.setBionicReading(v);
+                  if (!mounted) return;
+                  setState(() {});
+                  setSheetState(() {});
+                },
               ),
-              value: lang.isDyslexicFontEnabled,
-              activeThumbColor: const Color(0xFF4B9EFF),
-              onChanged: (v) => lang.setDyslexicFont(v),
-            ),
-            SwitchListTile(
-              title: const Text(
-                'Bionic Reading',
-                style: TextStyle(color: Colors.white),
-              ),
-              subtitle: const Text(
-                'Highlight word starts for faster focus',
-                style: TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-              value: lang.isBionicReadingEnabled,
-              activeThumbColor: const Color(0xFF4B9EFF),
-              onChanged: (v) => lang.setBionicReading(v),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

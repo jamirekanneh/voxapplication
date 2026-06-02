@@ -4,45 +4,56 @@ service cloud.firestore {
 
     // Users can only read their own profile, but can list to check email availability
     match /users/{userId} {
-      allow get: if request.auth != null && request.auth.uid == userId;
+      allow get: if request.auth != null &&
+        (request.auth.uid == userId || request.auth.token.email == userId);
       allow list: if request.auth != null; // Allows the .where('email', ...) query
-      allow write: if request.auth != null && request.auth.uid == userId;
+      allow write: if request.auth != null &&
+        (request.auth.uid == userId || request.auth.token.email == userId);
       
       match /{subcollection}/{docId} {
-        allow read, write: if request.auth != null && request.auth.uid == userId;
+        allow read, write: if request.auth != null &&
+          (request.auth.uid == userId || request.auth.token.email == userId);
       }
     }
 
     // Notes: only the owner can read/write/delete
     match /notes/{noteId} {
       allow read, update, delete: if request.auth != null
-        && request.auth.uid == resource.data.userId;
+        && (request.auth.uid == resource.data.userId ||
+            request.auth.token.email == resource.data.userId);
       allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.userId;
+        && (request.auth.uid == request.resource.data.userId ||
+            request.auth.token.email == request.resource.data.userId);
     }
 
     // Custom Commands: only the owner can read/write/delete
     match /custom_commands/{commandId} {
       allow read, update, delete: if request.auth != null
-        && request.auth.uid == resource.data.userId;
+        && (request.auth.uid == resource.data.userId ||
+            request.auth.token.email == resource.data.userId);
       allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.userId;
+        && (request.auth.uid == request.resource.data.userId ||
+            request.auth.token.email == request.resource.data.userId);
     }
 
     // Library: only the owner can read/write/delete
     match /library/{docId} {
       allow read, update, delete: if request.auth != null
-        && request.auth.uid == resource.data.userId;
+        && (request.auth.uid == resource.data.userId ||
+            request.auth.token.email == resource.data.userId);
       allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.userId;
+        && (request.auth.uid == request.resource.data.userId ||
+            request.auth.token.email == request.resource.data.userId);
     }
 
     // Assessments: only the owner can read/write/delete
     match /assessments/{docId} {
       allow read, update, delete: if request.auth != null
-        && request.auth.uid == resource.data.userId;
+        && (request.auth.uid == resource.data.userId ||
+            request.auth.token.email == resource.data.userId);
       allow create: if request.auth != null
-        && request.auth.uid == request.resource.data.userId;
+        && (request.auth.uid == request.resource.data.userId ||
+            request.auth.token.email == request.resource.data.userId);
     }
 
     // Device registry: link physical device to last signed-in user (cold start).
