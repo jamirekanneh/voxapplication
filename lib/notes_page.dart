@@ -16,8 +16,13 @@ import 'tts_service.dart';
 import 'ai_result_page.dart';
 import 'theme_provider.dart';
 import 'services/groq_service.dart';
+import 'services/app_session.dart';
 import 'services/auth_session.dart';
+import 'widgets/firestore_data_gate.dart';
 import 'services/mic_coordinator.dart';
+import 'analytics_service.dart';
+import 'services/saved_docs_service.dart';
+import 'document_chat_buddy_sheet.dart';
 
 const int _kMaxTitleLength = 100;
 const Duration _kMaxRecordingDuration = Duration(hours: 1);
@@ -73,7 +78,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   late Animation<double> _pulseAnimation;
 
   String? _resolvedUid;
-  bool _isAnonymousUser = true;
+  bool _isAnonymousUser = false;
   final ScrollController _scrollController = ScrollController();
 
   // Multi-select mode
@@ -81,16 +86,15 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   final Set<String> _selectedNoteIds = {};
   List<String> _visibleNoteIds = [];
 
-  StreamSubscription<User?>? _authSubscription;
-
   @override
   void initState() {
     super.initState();
+    final bootUid = AppSession.bootstrapUid;
+    if (bootUid != null) {
+      _resolvedUid = bootUid;
+      _isAnonymousUser = false;
+    }
     _resolveUser();
-    _authSubscription =
-        FirebaseAuth.instance.authStateChanges().listen((_) {
-      _resolveUser();
-    });
 
     _pulseController = AnimationController(
       vsync: this,
@@ -109,7 +113,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
 
   @override
   void dispose() {
-    _authSubscription?.cancel();
     _speech.stop();
     _audioRecorder.dispose();
     _audioPlayer.dispose();
@@ -130,21 +133,23 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _resolveUser() async {
     try {
-      final guestUi = await AuthSession.shouldShowGuestUi();
-      final uid = guestUi ? null : await AuthSession.effectiveUid();
-      if (mounted) {
-        setState(() {
-          _isAnonymousUser = guestUi;
-          _resolvedUid = uid;
-        });
-      }
+      final session = await AuthSession.resolveForApp();
+      if (!mounted) return;
+      final nextGuest = session.guest;
+      final nextUid = nextGuest ? null : (session.uid ?? _resolvedUid);
+      if (nextGuest == _isAnonymousUser && nextUid == _resolvedUid) return;
+      setState(() {
+        _isAnonymousUser = nextGuest;
+        _resolvedUid = nextUid;
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _isAnonymousUser = true;
-          _resolvedUid = null;
-        });
-      }
+      if (!mounted) return;
+      final guest = await AuthSession.usesGuestExperience();
+      if (guest == _isAnonymousUser && _resolvedUid == null) return;
+      setState(() {
+        _isAnonymousUser = guest;
+        if (guest) _resolvedUid = null;
+      });
     }
   }
 
@@ -152,6 +157,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   //  MIC PERMISSION
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<bool> _requestMicPermission({bool forFileRecording = false}) async {
+    final lang = context.read<LanguageProvider>();
     if (forFileRecording) {
       if (!MicCoordinator.instance.notesMayUseMic) return false;
       final ok =
@@ -163,14 +169,14 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           SnackBar(
             content: Text(
               status.isPermanentlyDenied
-                  ? 'Microphone blocked. Enable it in Settings to record voice notes.'
-                  : 'Microphone permission is required to record audio.',
+                  ? lang.t('mic_blocked_settings')
+                  : lang.t('mic_permission_required'),
             ),
             backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
             action: status.isPermanentlyDenied
                 ? SnackBarAction(
-                    label: 'Settings',
+                    label: lang.t('settings'),
                     textColor: Colors.white,
                     onPressed: openAppSettings,
                   )
@@ -186,13 +192,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     if (status.isPermanentlyDenied && mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text(
-            'Microphone permission denied. Enable it in Settings.',
-          ),
+          content: Text(lang.t('mic_denied_settings')),
           backgroundColor: VoxColors.surface(context),
           behavior: SnackBarBehavior.floating,
           action: SnackBarAction(
-            label: 'Settings',
+            label: lang.t('settings'),
             textColor: VoxColors.primary(context),
             onPressed: openAppSettings,
           ),
@@ -200,8 +204,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       );
     } else if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Microphone permission is required to record.'),
+        SnackBar(
+          content: Text(lang.t('mic_permission_required')),
           backgroundColor: VoxColors.danger,
           behavior: SnackBarBehavior.floating,
         ),
@@ -214,9 +218,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     if (!mounted) return;
     if (_recordingState == RecordingState.recording) return;
     if (!MicCoordinator.instance.notesMayUseMic) {
+      final lang = context.read<LanguageProvider>();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Voice input is only available on the Voice Notes screen.'),
+        SnackBar(
+          content: Text(lang.t('voice_input_notes_only')),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -428,7 +433,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     if (rawTitle.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Please add a title before recording.'),
+          content: Text(context.read<LanguageProvider>().t('title_before_record')),
           backgroundColor: VoxColors.danger,
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
@@ -438,9 +443,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     }
 
     if (!MicCoordinator.instance.notesMayUseMic) {
+      final lang = context.read<LanguageProvider>();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Recording is only available on the Voice Notes screen.'),
+        SnackBar(
+          content: Text(lang.t('recording_notes_only')),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -919,7 +925,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     if (rawTitle.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Please add a title before saving.'),
+          content: Text(lang.t('title_before_save')),
           backgroundColor: VoxColors.danger,
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
@@ -930,7 +936,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     if (!hasTranscript && !hasAudio) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: const Text('Please record audio before saving.'),
+          content: Text(lang.t('record_before_save')),
           backgroundColor: VoxColors.danger,
           behavior: SnackBarBehavior.floating,
           margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
@@ -1023,6 +1029,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         }
       }
 
+      unawaited(AnalyticsService.instance.recordNoteSaved());
+      if (!_isAnonymousUser) {
+        unawaited(AnalyticsService.instance.syncToFirebase());
+      }
+
       if (mounted) {
         setState(() {
           _titleController.clear();
@@ -1088,6 +1099,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   //  DELETE
   // ————————————————————————————————————————————————
   Future<void> _deleteNote(String docId) async {
+    final lang = context.read<LanguageProvider>();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1100,19 +1112,20 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           children: [
             Icon(Icons.delete_outline, color: VoxColors.danger),
             const SizedBox(width: 8),
-            Text('Delete Note?', style: TextStyle(color: VoxColors.onSurface(context))),
+            Text(lang.t('delete_note_title'),
+                style: TextStyle(color: VoxColors.onSurface(context))),
           ],
         ),
         content: Text(
-          'This item will be stored in the Recycle Bin and permanently deleted after 30 days.',
+          lang.t('delete_note_body'),
           style: TextStyle(color: VoxColors.textSecondary(context)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Color(0x8A0A0E1A)),
+            child: Text(
+              lang.t('cancel'),
+              style: const TextStyle(color: Color(0x8A0A0E1A)),
             ),
           ),
           ElevatedButton(
@@ -1124,7 +1137,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            child: const Text('Delete'),
+            child: Text(lang.t('delete')),
           ),
         ],
       ),
@@ -1175,7 +1188,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 const SizedBox(width: 10),
                 Expanded(
                   child: Text(
-                    '${noteTitle != null ? '"$noteTitle" moved' : 'Note moved'} to Recycle Bin. Kept for 30 days.',
+                    noteTitle != null
+                        ? lang.tNamed('note_moved_recycle_named', {
+                            'title': noteTitle,
+                          })
+                        : lang.t('note_moved_recycle'),
                   ),
                 ),
               ],
@@ -1195,8 +1212,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           SnackBar(
             content: Text(
               e.code == 'unavailable'
-                  ? 'Cannot delete while offline.'
-                  : 'Delete failed: ${e.message}',
+                  ? lang.t('cannot_delete_offline')
+                  : '${lang.t('delete_failed')} ${e.message}',
             ),
             backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
@@ -1211,7 +1228,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     if (_isEditing && _editingId == id) _cancelEdit();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: const Text('Note deleted.'),
+        content: Text(context.read<LanguageProvider>().t('note_deleted')),
         behavior: SnackBarBehavior.floating,
         backgroundColor: VoxColors.surface(context),
         margin: const EdgeInsets.only(bottom: 30, left: 20, right: 20),
@@ -1266,6 +1283,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   // ————————————————————————————————————————————————
   Future<void> _deleteSelectedNotes() async {
     if (_selectedNoteIds.isEmpty) return;
+    final lang = context.read<LanguageProvider>();
     final count = _selectedNoteIds.length;
     final confirmed = await showDialog<bool>(
       context: context,
@@ -1279,19 +1297,20 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           children: [
             Icon(Icons.delete_outline, color: VoxColors.danger),
             const SizedBox(width: 8),
-            Text('Delete Selected?', style: TextStyle(color: VoxColors.onSurface(context))),
+            Text(lang.t('delete_selected_title'),
+                style: TextStyle(color: VoxColors.onSurface(context))),
           ],
         ),
         content: Text(
-          '$count note${count == 1 ? '' : 's'} will be moved to the Recycle Bin and permanently deleted after 30 days.',
+          lang.t('delete_note_body'),
           style: TextStyle(color: VoxColors.textSecondary(context)),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text(
-              'Cancel',
-              style: TextStyle(color: Color(0x8A0A0E1A)),
+            child: Text(
+              lang.t('cancel'),
+              style: const TextStyle(color: Color(0x8A0A0E1A)),
             ),
           ),
           ElevatedButton(
@@ -1303,7 +1322,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 borderRadius: BorderRadius.circular(10),
               ),
             ),
-            child: Text('Delete $count'),
+            child: Text(lang.tNamed('delete_notes_count', {'count': '$count'})),
           ),
         ],
       ),
@@ -1320,7 +1339,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('$count note${count == 1 ? '' : 's'} deleted.'),
+              content: Text(
+                lang.tNamed('notes_deleted_count', {'count': '$count'}),
+              ),
               backgroundColor: const Color(0xFF333333),
             ),
           );
@@ -1361,7 +1382,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                '$count note${count == 1 ? '' : 's'} moved to Recycle Bin.',
+                lang.tNamed('notes_deleted_count', {'count': '$count'}),
               ),
               backgroundColor: const Color(0xFF333333),
             ),
@@ -1372,7 +1393,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Failed to delete: $e'),
+            content: Text('${lang.t('failed_to_delete')} $e'),
             backgroundColor: Colors.redAccent,
           ),
         );
@@ -1398,7 +1419,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       if (!silent && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Transcribing audio...'),
+            content: Text(context.read<LanguageProvider>().t('transcribing_audio')),
             backgroundColor: VoxColors.surface(context),
             behavior: SnackBarBehavior.floating,
           ),
@@ -1427,7 +1448,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       if (!silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Transcript updated.'),
+            content: Text(context.read<LanguageProvider>().t('transcript_updated')),
             backgroundColor: VoxColors.surface(context),
             behavior: SnackBarBehavior.floating,
           ),
@@ -1438,7 +1459,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       if (!silent) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Transcription failed: $e'),
+            content: Text(
+              '${context.read<LanguageProvider>().t('transcription_failed')} $e',
+            ),
             backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
@@ -1450,14 +1473,14 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   Future<void> _updateNoteTranscript(String docId, String transcript) async {
     final cleaned = transcript.trim();
     if (cleaned.isEmpty) {
-      throw Exception('Transcript cannot be empty.');
+      throw Exception(context.read<LanguageProvider>().t('transcript_empty'));
     }
 
     if (_isAnonymousUser) {
       final temp = context.read<TempNotesProvider>();
       final matches = temp.notes.where((n) => n.id == docId);
       if (matches.isEmpty) {
-        throw Exception('Note not found.');
+        throw Exception(context.read<LanguageProvider>().t('note_not_found'));
       }
       final existing = matches.first;
       temp.update(
@@ -1479,6 +1502,123 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     });
   }
 
+  bool _canSaveTranscriptToDocs(String content) {
+    final cleaned = content.trim();
+    return cleaned.isNotEmpty && !GroqService.isTranscriptPending(cleaned);
+  }
+
+  String _editorNoteTitle() {
+    final raw = _titleController.text.trim();
+    if (raw.isNotEmpty) return raw;
+    if (_recordingState == RecordingState.done) {
+      return _defaultRecordingTitle();
+    }
+    return 'Note';
+  }
+
+  Future<void> _saveCurrentEditorToSavedDocs(LanguageProvider lang) async {
+    await _saveNoteToSavedDocs(
+      _editingId ?? '',
+      _editorNoteTitle(),
+      _transcriptController.text,
+    );
+  }
+
+  void _openChatBuddy(String title, String content) {
+    DocumentChatBuddySheet.show(
+      context,
+      documentTitle: title,
+      documentContent: content,
+    );
+  }
+
+  Future<void> _saveNoteToSavedDocs(
+    String noteId,
+    String title,
+    String content,
+  ) async {
+    if (_isAnonymousUser) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.read<LanguageProvider>().t('saved_docs_sign_in_hint'),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+    final cleaned = content.trim();
+    if (cleaned.isEmpty ||
+        GroqService.isTranscriptPending(cleaned)) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.read<LanguageProvider>().t('save_note_need_transcript'),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    final lang = context.read<LanguageProvider>();
+    final saveTitle = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final ctrl = TextEditingController(text: title);
+        return AlertDialog(
+          title: Text(lang.t('save_to_saved_docs')),
+          content: TextField(
+            controller: ctrl,
+            decoration: InputDecoration(
+              hintText: lang.t('note_title_field_hint'),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(lang.t('cancel')),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
+              child: Text(lang.t('save_note')),
+            ),
+          ],
+        );
+      },
+    );
+    if (saveTitle == null || saveTitle.isEmpty) return;
+
+    try {
+      await SavedDocsService.saveNote(
+        title: saveTitle,
+        content: cleaned,
+        source: 'Notes',
+        noteId: noteId,
+      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(lang.t('saved_to_saved_docs')),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${lang.t('error_saving')} $e'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
+  }
+
   Future<void> _downloadTranscript(String title, String content) async {
     final dir = await getApplicationDocumentsDirectory();
     final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
@@ -1486,7 +1626,13 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     await file.writeAsString(content);
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Transcript saved to ${file.path}')),
+      SnackBar(
+        content: Text(
+          context.read<LanguageProvider>().tNamed('transcript_saved_to', {
+            'path': file.path,
+          }),
+        ),
+      ),
     );
   }
 
@@ -1504,24 +1650,23 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     final lang = context.read<LanguageProvider>();
     final tts = context.read<TtsService>();
     final sheetTranscriptController = TextEditingController(text: content);
+    bool isSpeaking = false;
+    String sheetContent = content;
+    bool isEditingTranscript = false;
+    bool isUpdatingTranscript = false;
+    final hasPlayableAudio =
+        (audioUrl?.isNotEmpty ?? false) || (audioPath?.isNotEmpty ?? false);
+    int activeTab = hasPlayableAudio ? 1 : 0;
+    final AudioPlayer localPlayer = AudioPlayer();
+    bool isPlayingLocal = false;
+    Duration localPos = Duration.zero;
+    Duration localDur = Duration.zero;
 
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        bool isSpeaking = false;
-        String sheetContent = content;
-        bool isEditingTranscript = false;
-        bool isUpdatingTranscript = false;
-        final hasPlayableAudio = (audioUrl?.isNotEmpty ?? false) ||
-            (audioPath?.isNotEmpty ?? false);
-        int activeTab = hasPlayableAudio ? 1 : 0;
-        AudioPlayer localPlayer = AudioPlayer();
-        bool isPlayingLocal = false;
-        Duration localPos = Duration.zero;
-        Duration localDur = Duration.zero;
-
         if (!_isAnonymousUser &&
             hasPlayableAudio &&
             GroqService.isTranscriptPending(content) &&
@@ -1539,6 +1684,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
 
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (!GroqService.isTranscriptPending(sheetContent)) {
+            localPlayer.stop();
+            _audioPlayer.stop();
             tts.play(title, sheetContent, lang.ttsLocale);
             isSpeaking = true;
           }
@@ -1605,6 +1752,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                   tts.stop();
                                   setSheetState(() => isSpeaking = false);
                                 } else {
+                                  localPlayer.stop();
+                                  _audioPlayer.stop();
                                   tts.play(title, sheetContent, lang.ttsLocale);
                                   setSheetState(() => isSpeaking = true);
                                 }
@@ -1615,6 +1764,15 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                               color: Color(0x8A0A0E1A),
                               onTap: () =>
                                   _downloadTranscript(title, sheetContent),
+                            ),
+                            _sheetIconBtn(
+                              icon: Icons.bookmark_add_outlined,
+                              color: const Color(0xFF4B9EFF),
+                              onTap: () => _saveNoteToSavedDocs(
+                                id,
+                                title,
+                                sheetContent,
+                              ),
                             ),
                             if (audioUrl != null &&
                                 GroqService.isTranscriptPending(sheetContent))
@@ -1686,70 +1844,94 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                               color: Color(0xFF0A0E1A),
                               borderRadius: BorderRadius.circular(16),
                             ),
-                            child: Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Icon(
-                                  Icons.auto_awesome,
-                                  size: 13,
-                                  color: Color(0xFF4B9EFF),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.auto_awesome,
+                                      size: 13,
+                                      color: Color(0xFF4B9EFF),
+                                    ),
+                                    const SizedBox(width: 6),
+                                    Text(
+                                      lang.t('ai_tools'),
+                                      style: TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
+                                        color: Color(0xFF4B9EFF),
+                                      ),
+                                    ),
+                                  ],
                                 ),
-                                const SizedBox(width: 6),
-                                const Text(
-                                  'AI Tools',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
-                                    color: Color(0xFF4B9EFF),
+                                const SizedBox(height: 10),
+                                SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Row(
+                                    children: [
+                                      _aiChip(
+                                    label: lang.t('summarize'),
+                                    icon: Icons.summarize_outlined,
+                                    dark: true,
+                                    onTap: () {
+                                      tts.stop();
+                                      Navigator.pop(ctx);
+                                      Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (_) => AiResultPage(
+                                            documentTitle: title,
+                                            documentContent: sheetContent,
+                                            mode: 'summary',
+                                            source: 'Notes',
+                                          ),
+                                        ),
+                                      );
+                                    },
                                   ),
-                                ),
-                                const Spacer(),
-                                _aiChip(
-                                  label: 'Summarize',
-                                  icon: Icons.summarize_outlined,
-                                  dark: true,
-                                  onTap: () {
-                                    tts.stop();
-                                    Navigator.pop(ctx);
-                                    Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (_) => AiResultPage(
-                                          documentTitle: title,
-                                          documentContent: sheetContent,
-                                          mode: 'summary',
-                                          source: 'Notes',
+                                  const SizedBox(width: 8),
+                                  _aiChip(
+                                    label: lang.t('qa_generator'),
+                                    icon: Icons.style_outlined,
+                                    dark: false,
+                                    onTap: () async {
+                                      tts.stop();
+                                      final nav = Navigator.of(context);
+                                      final count =
+                                          await _pickCardCount(context);
+                                      if (count == null) return;
+                                      if (!ctx.mounted) return;
+                                      Navigator.pop(ctx);
+                                      if (!context.mounted) return;
+                                      nav.push(
+                                        MaterialPageRoute(
+                                          builder: (_) => AiResultPage(
+                                            documentTitle: title,
+                                            documentContent: sheetContent,
+                                            mode: 'flashcards',
+                                            cardCount: count,
+                                            source: 'Notes',
+                                          ),
                                         ),
-                                      ),
-                                    );
-                                  },
-                                ),
-                                const SizedBox(width: 8),
-                                _aiChip(
-                                  label: 'Q&A Generator',
-                                  icon: Icons.style_outlined,
-                                  dark: false,
-                                  onTap: () async {
-                                    tts.stop();
-                                    final nav = Navigator.of(context);
-                                    final count =
-                                        await _pickCardCount(context);
-                                    if (count == null) return;
-                                    if (!ctx.mounted) return;
-                                    Navigator.pop(ctx);
-                                    if (!context.mounted) return;
-                                    nav.push(
-                                      MaterialPageRoute(
-                                        builder: (_) => AiResultPage(
-                                          documentTitle: title,
-                                          documentContent: sheetContent,
-                                          mode: 'flashcards',
-                                          cardCount: count,
-                                          source: 'Notes',
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                ),
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _aiChip(
+                                    label: lang.t('study_buddy'),
+                                    icon: Icons.psychology,
+                                    dark: true,
+                                    onTap: () {
+                                      tts.stop();
+                                      localPlayer.stop();
+                                      _audioPlayer.stop();
+                                      _openChatBuddy(title, sheetContent);
+                                    },
+                                  ),
+                                ],
+                              ),
+                            ),
                               ],
                             ),
                           ),
@@ -1764,13 +1946,13 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           child: Row(
                             children: [
                               _tabChip(
-                                label: 'Transcript',
+                                label: lang.t('tab_transcript'),
                                 selected: activeTab == 0,
                                 onTap: () => setSheetState(() => activeTab = 0),
                               ),
                               const SizedBox(width: 8),
                               _tabChip(
-                                label: 'Audio',
+                                label: lang.t('tab_audio'),
                                 selected: activeTab == 1,
                                 onTap: () => setSheetState(() => activeTab = 1),
                               ),
@@ -1806,13 +1988,15 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                       children: [
                                         _transcriptActionChip(
                                           label: isEditingTranscript
-                                              ? 'Cancel'
-                                              : 'Edit',
+                                              ? lang.t('cancel')
+                                              : lang.t('edit'),
                                           icon: isEditingTranscript
                                               ? Icons.close
                                               : Icons.edit_note,
                                           onTap: () {
+                                            tts.stop();
                                             setSheetState(() {
+                                              isSpeaking = false;
                                               isEditingTranscript =
                                                   !isEditingTranscript;
                                               sheetTranscriptController.text =
@@ -1823,8 +2007,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                         if (isEditingTranscript)
                                           _transcriptActionChip(
                                             label: isUpdatingTranscript
-                                                ? 'Updating...'
-                                                : 'Update',
+                                                ? lang.t('updating')
+                                                : lang.t('update'),
                                             icon: Icons.check,
                                             onTap: isUpdatingTranscript
                                                 ? null
@@ -1838,8 +2022,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                                         context,
                                                       ).showSnackBar(
                                                         SnackBar(
-                                                          content: const Text(
-                                                            'Transcript cannot be empty.',
+                                                          content: Text(
+                                                            lang.t('transcript_empty'),
                                                           ),
                                                           backgroundColor:
                                                               VoxColors.danger,
@@ -1871,8 +2055,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                                           context,
                                                         ).showSnackBar(
                                                           SnackBar(
-                                                            content: const Text(
-                                                              'Transcript updated.',
+                                                            content: Text(
+                                                              lang.t('transcript_updated'),
                                                             ),
                                                             backgroundColor:
                                                                 VoxColors
@@ -1896,7 +2080,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                                         ).showSnackBar(
                                                           SnackBar(
                                                             content: Text(
-                                                              'Update failed: $e',
+                                                              '${lang.t('update_failed')} $e',
                                                             ),
                                                             backgroundColor:
                                                                 VoxColors
@@ -1929,7 +2113,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                       decoration: InputDecoration(
                                         filled: true,
                                         fillColor: Colors.white,
-                                        hintText: 'Edit transcript...',
+                                        hintText: lang.t('transcript_edit_hint'),
                                         border: OutlineInputBorder(
                                           borderRadius:
                                               BorderRadius.circular(14),
@@ -1942,7 +2126,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                   else
                                     Text(
                                       sheetContent.trim().isEmpty
-                                          ? 'No transcript yet.'
+                                          ? lang.t('no_transcript_yet')
                                           : sheetContent,
                                       style: TextStyle(
                                         fontSize: 15,
@@ -1957,6 +2141,15 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             : _audioPlayerPanel(
                                 audioUrl: audioUrl,
                                 audioPath: audioPath,
+                                beforePlay: () async {
+                                  if (isSpeaking) {
+                                    tts.stop();
+                                    if (ctx.mounted) {
+                                      setSheetState(() => isSpeaking = false);
+                                    }
+                                  }
+                                  await _audioPlayer.stop();
+                                },
                                 isPlayingLocal: isPlayingLocal,
                                 localPos: localPos,
                                 localDur: localDur,
@@ -1980,6 +2173,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       },
     ).whenComplete(() {
       tts.stop();
+      localPlayer.stop();
+      localPlayer.dispose();
       sheetTranscriptController.dispose();
     });
   }
@@ -2008,6 +2203,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   Widget _audioPlayerPanel({
     String? audioUrl,
     String? audioPath,
+    required Future<void> Function() beforePlay,
     required bool isPlayingLocal,
     required Duration localPos,
     required Duration localDur,
@@ -2015,6 +2211,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     required void Function(bool playing, Duration pos, Duration dur)
     onStateChanged,
   }) {
+    final lang = context.read<LanguageProvider>();
     return Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
@@ -2033,8 +2230,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   children: [
                     Icon(Icons.mic, color: const Color(0xFF4B9EFF), size: 18),
                     const SizedBox(width: 8),
-                    const Text(
-                      'Voice Recording',
+                    Text(
+                      lang.t('voice_recording'),
                       style: TextStyle(
                         color: Color(0xFF4B9EFF),
                         fontWeight: FontWeight.w700,
@@ -2052,18 +2249,19 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         onStateChanged(false, localPos, localDur);
                         return;
                       }
+                      await beforePlay();
                       if (audioUrl != null && audioUrl.isNotEmpty) {
                         await localPlayer.setUrl(audioUrl);
                       } else if (audioPath != null && audioPath.isNotEmpty) {
                         final file = File(audioPath);
                         if (!await file.exists()) {
                           throw Exception(
-                            'Audio file is no longer on this device.',
+                            lang.t('audio_gone_device'),
                           );
                         }
                         await localPlayer.setFilePath(audioPath);
                       } else {
-                        throw Exception('No audio available for this note.');
+                        throw Exception(lang.t('no_audio_for_note'));
                       }
                       localPlayer.positionStream.listen(
                         (p) => onStateChanged(true, p, localDur),
@@ -2083,7 +2281,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       if (context.mounted) {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
-                            content: Text('Could not play audio: $e'),
+                            content: Text('${lang.t('could_not_play_audio')} $e'),
                             behavior: SnackBarBehavior.floating,
                           ),
                         );
@@ -2235,6 +2433,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   }
 
   Future<int?> _pickCardCount(BuildContext context) async {
+    final lang = context.read<LanguageProvider>();
     int selected = 10;
     return showDialog<int>(
       context: context,
@@ -2244,15 +2443,15 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Text(
-            'How many questions?',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+          title: Text(
+            lang.t('how_many_questions'),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '$selected cards',
+                lang.tNamed('cards_count', {'count': '$selected'}),
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
@@ -2286,9 +2485,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Color(0x8A0A0E1A)),
+              child: Text(
+                lang.t('cancel'),
+                style: const TextStyle(color: Color(0x8A0A0E1A)),
               ),
             ),
             ElevatedButton(
@@ -2300,7 +2499,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Generate'),
+              child: Text(lang.t('generate')),
             ),
           ],
         ),
@@ -2329,9 +2528,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 child: ElevatedButton.icon(
                   onPressed: _startRecording,
                   icon: const Icon(Icons.fiber_manual_record, size: 18),
-                  label: const Text(
-                    'Record',
-                    style: TextStyle(fontWeight: FontWeight.w800),
+                  label: Text(
+                    lang.t('record'),
+                    style: const TextStyle(fontWeight: FontWeight.w800),
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: VoxColors.primary(context),
@@ -2401,7 +2600,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Recording · ${_formatDuration(_kMaxRecordingDuration - _recordingDuration)} left',
+                  lang.tNamed('recording_time_left', {
+                    'time': _formatDuration(
+                      _kMaxRecordingDuration - _recordingDuration,
+                    ),
+                  }),
                   style: TextStyle(
                     color: Colors.white.withValues(alpha: 0.4),
                     fontSize: 11,
@@ -2410,7 +2613,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    'Recording audio · playback after you stop',
+                    lang.t('recording_audio_hint'),
                     style: TextStyle(
                       color: Colors.white.withValues(alpha: 0.45),
                       fontSize: 11,
@@ -2430,18 +2633,18 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       border: Border.all(color: Colors.red.withValues(alpha: 0.5)),
                       borderRadius: BorderRadius.circular(16),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(
+                        const Icon(
                           Icons.stop_circle_outlined,
                           color: Colors.redAccent,
                           size: 20,
                         ),
-                        SizedBox(width: 8),
+                        const SizedBox(width: 8),
                         Text(
-                          'Stop Recording',
-                          style: TextStyle(
+                          lang.t('stop_recording'),
+                          style: const TextStyle(
                             color: Colors.redAccent,
                             fontWeight: FontWeight.w700,
                             fontSize: 14,
@@ -2475,7 +2678,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 ),
                 SizedBox(height: 16),
                 Text(
-                  'Processing audio...',
+                  lang.t('processing_audio'),
                   style: TextStyle(
                     color: Colors.white,
                     fontWeight: FontWeight.w600,
@@ -2483,7 +2686,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 ),
                 SizedBox(height: 4),
                 Text(
-                  'Preparing playback…',
+                  lang.t('preparing_playback'),
                   style: TextStyle(color: Colors.white38, fontSize: 11),
                 ),
               ],
@@ -2536,10 +2739,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         ),
                         child: Text(
                           _transcriptionError != null
-                              ? 'Transcription failed'
+                              ? lang.t('transcription_failed_short')
                               : _isUploadingAudio
-                              ? 'Uploading...'
-                              : 'Transcribing...',
+                              ? lang.t('uploading_audio')
+                              : lang.t('transcribing_audio'),
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -2640,8 +2843,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                 ] else ...[
                   Text(
                     _transcriptionError != null
-                        ? 'Audio saved locally. ${_transcriptionError!}'
-                        : 'Audio saved locally',
+                        ? lang.tNamed('audio_saved_locally_error', {
+                            'error': _transcriptionError!,
+                          })
+                        : lang.t('audio_saved_locally'),
                     style: TextStyle(
                       color: _transcriptionError != null
                           ? Colors.redAccent
@@ -2657,19 +2862,17 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     context: context,
                     builder: (ctx) => AlertDialog(
                       backgroundColor: const Color(0xFFF0F4FF),
-                      title: const Text(
-                        'Discard recording?',
-                        style: TextStyle(fontWeight: FontWeight.bold),
+                      title: Text(
+                        lang.t('discard_recording_title'),
+                        style: const TextStyle(fontWeight: FontWeight.bold),
                       ),
-                      content: const Text(
-                        'This will delete the audio and transcript.',
-                      ),
+                      content: Text(lang.t('discard_recording_body')),
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(ctx),
-                          child: const Text(
-                            'Keep',
-                            style: TextStyle(color: Color(0x8A0A0E1A)),
+                          child: Text(
+                            lang.t('keep'),
+                            style: const TextStyle(color: Color(0x8A0A0E1A)),
                           ),
                         ),
                         ElevatedButton(
@@ -2684,7 +2887,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                               borderRadius: BorderRadius.circular(10),
                             ),
                           ),
-                          child: const Text('Discard'),
+                          child: Text(lang.t('discard')),
                         ),
                       ],
                     ),
@@ -2699,7 +2902,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Discard recording',
+                        lang.t('discard_recording_btn'),
                         style: TextStyle(
                           color: Colors.white.withValues(alpha: 0.3),
                           fontSize: 11,
@@ -2735,9 +2938,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           color: Color(0x730A0E1A),
                         ),
                         const SizedBox(width: 6),
-                        const Text(
-                          'Transcript',
-                          style: TextStyle(
+                        Text(
+                          lang.t('transcript_label'),
+                          style: const TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
                             color: Color(0x730A0E1A),
@@ -2748,6 +2951,22 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                           '${_transcriptController.text.length} chars',
                           style: TextStyle(fontSize: 10, color: Colors.grey[400]),
                         ),
+                        if (!_isAnonymousUser &&
+                            _canSaveTranscriptToDocs(_transcriptController.text))
+                          IconButton(
+                            tooltip: lang.t('save_transcript_to_docs'),
+                            icon: const Icon(
+                              Icons.bookmark_add_outlined,
+                              size: 20,
+                              color: Color(0xFF4B9EFF),
+                            ),
+                            onPressed: () => _saveCurrentEditorToSavedDocs(lang),
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                              minWidth: 32,
+                              minHeight: 32,
+                            ),
+                          ),
                       ],
                     ),
                   ),
@@ -2758,13 +2977,93 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     textCapitalization: TextCapitalization.sentences,
                     onChanged: (_) => setState(() {}),
                     style: TextStyle(fontSize: 14, height: 1.6),
-                    decoration: const InputDecoration(
-                      hintText: 'Transcript appears here. Edit if needed...',
+                    decoration: InputDecoration(
+                      hintText: lang.t('transcript_edit_hint'),
                       counterText: '',
                       border: InputBorder.none,
-                      contentPadding: EdgeInsets.fromLTRB(16, 8, 16, 14),
+                      contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
                     ),
                   ),
+                  if (!_canSaveTranscriptToDocs(_transcriptController.text) &&
+                      _transcriptController.text.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+                      child: Text(
+                        lang.t('transcript_not_ready_chat'),
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: Colors.orange[800],
+                        ),
+                      ),
+                    )
+                  else if (_canSaveTranscriptToDocs(_transcriptController.text))
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            _aiChip(
+                              label: lang.t('summarize'),
+                              icon: Icons.summarize_outlined,
+                              dark: true,
+                              onTap: () {
+                                context.read<TtsService>().stop();
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => AiResultPage(
+                                      documentTitle: _editorNoteTitle(),
+                                      documentContent:
+                                          _transcriptController.text.trim(),
+                                      mode: 'summary',
+                                      source: 'Notes',
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            _aiChip(
+                              label: lang.t('qa_generator'),
+                              icon: Icons.style_outlined,
+                              dark: false,
+                              onTap: () async {
+                                context.read<TtsService>().stop();
+                                final count = await _pickCardCount(context);
+                                if (count == null || !mounted) return;
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                    builder: (_) => AiResultPage(
+                                      documentTitle: _editorNoteTitle(),
+                                      documentContent:
+                                          _transcriptController.text.trim(),
+                                      mode: 'flashcards',
+                                      cardCount: count,
+                                      source: 'Notes',
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                            const SizedBox(width: 8),
+                            _aiChip(
+                              label: lang.t('study_buddy'),
+                              icon: Icons.psychology,
+                              dark: true,
+                              onTap: () {
+                                context.read<TtsService>().stop();
+                                _openChatBuddy(
+                                  _editorNoteTitle(),
+                                  _transcriptController.text,
+                                );
+                              },
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -2796,7 +3095,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     onPressed: _exitNoteSelectionMode,
                   ),
                   Text(
-                    '${_selectedNoteIds.length} selected',
+                    lang.tNamed('selected_count', {
+                      'count': '${_selectedNoteIds.length}',
+                    }),
                     style: TextStyle(
                       color: VoxColors.onPrimary(context),
                       fontWeight: FontWeight.w700,
@@ -2843,8 +3144,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   label: Text(
                     _selectedNoteIds.length == _visibleNoteIds.length &&
                             _visibleNoteIds.isNotEmpty
-                        ? 'Deselect'
-                        : 'Select All',
+                        ? lang.t('deselect')
+                        : lang.t('select_all'),
                     style: TextStyle(
                       color: VoxColors.onPrimary(context),
                       fontWeight: FontWeight.w700,
@@ -2859,9 +3160,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         ? _deleteSelectedNotes
                         : null,
                     icon: Icon(Icons.delete_outline, size: 18),
-                    label: const Text(
-                      'Delete',
-                      style: TextStyle(
+                    label: Text(
+                      lang.t('delete'),
+                      style: const TextStyle(
                         fontWeight: FontWeight.w700,
                         fontSize: 12,
                       ),
@@ -2989,7 +3290,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         letterSpacing: -0.3,
                       ),
                       decoration: InputDecoration(
-                        hintText: 'Note title...',
+                        hintText: lang.t('note_title_field_hint'),
                         hintStyle: TextStyle(
                           color: VoxColors.textHint(context),
                           fontWeight: FontWeight.w500,
@@ -3097,6 +3398,29 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         ),
                       ],
                     ),
+                    if (!_isAnonymousUser &&
+                        _canSaveTranscriptToDocs(_transcriptController.text)) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _saveCurrentEditorToSavedDocs(lang),
+                          icon: const Icon(Icons.folder_copy_outlined, size: 18),
+                          label: Text(
+                            lang.t('save_transcript_to_docs'),
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: const Color(0xFF4B9EFF),
+                            side: const BorderSide(color: Color(0xFF4B9EFF)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(30),
+                            ),
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                          ),
+                        ),
+                      ),
+                    ],
                     if (_isEditing) ...[
                       const SizedBox(height: 8),
                       SizedBox(
@@ -3108,9 +3432,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             size: 16,
                             color: VoxColors.danger,
                           ),
-                          label: const Text(
-                            'Cancel Edit',
-                            style: TextStyle(
+                          label: Text(
+                            lang.t('cancel_edit'),
+                            style: const TextStyle(
                               color: VoxColors.danger,
                               fontWeight: FontWeight.bold,
                             ),
@@ -3224,6 +3548,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
             // â”€â”€ Notes list â”€â”€
             Consumer<TempNotesProvider>(
               builder: (context, tempNotes, _) {
+                final lang = context.watch<LanguageProvider>();
                 if (_isAnonymousUser) {
                   if (tempNotes.notes.isEmpty) {
                     _visibleNoteIds = [];
@@ -3305,7 +3630,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   );
                 }
 
-                if (_resolvedUid == null) {
+                final notesUid = _resolvedUid;
+                if (notesUid == null) {
                   return const Center(
                     child: Padding(
                       padding: EdgeInsets.all(40),
@@ -3314,18 +3640,24 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                   );
                 }
 
-                return StreamBuilder<QuerySnapshot>(
-                  stream: FirebaseFirestore.instance
-                      .collection('notes')
-                      .where(
-                        'userId',
-                        isEqualTo:
-                            FirebaseAuth.instance.currentUser?.uid ??
-                            _resolvedUid,
-                      )
-                      .snapshots(),
-                  builder: (context, snapshot) {
+                return FirestoreDataGate(
+                  userId: notesUid,
+                  loadingMessage: 'Loading your notes...',
+                  builder: (context) => StreamBuilder<QuerySnapshot>(
+                    key: ValueKey('notes_$notesUid'),
+                    stream: FirebaseFirestore.instance
+                        .collection('notes')
+                        .where('userId', isEqualTo: notesUid)
+                        .snapshots(),
+                    builder: (context, snapshot) {
                     if (snapshot.hasError) {
+                      if (firestoreSnapshotDenied(snapshot.error, notesUid)) {
+                        return Center(
+                          child: CircularProgressIndicator(
+                            color: VoxColors.primary(context),
+                          ),
+                        );
+                      }
                       return Center(
                         child: Padding(
                           padding: const EdgeInsets.all(40),
@@ -3333,6 +3665,14 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             'Could not load notes',
                             style: TextStyle(color: VoxColors.textHint(context)),
                           ),
+                        ),
+                      );
+                    }
+                    if (snapshot.hasData &&
+                        firestoreSnapshotCacheOnly(snapshot.data!, notesUid)) {
+                      return Center(
+                        child: CircularProgressIndicator(
+                          color: VoxColors.primary(context),
                         ),
                       );
                     }
@@ -3434,7 +3774,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         );
                       },
                     );
-                  },
+                    },
+                  ),
                 );
               },
             ),

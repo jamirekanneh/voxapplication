@@ -19,7 +19,7 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
     {
       'q': 'How do I recover deleted files?',
       'a':
-          'Open the main Menu and navigate to "Recycle Files". From there, you can view your deleted notes and files and safely restore them directly to your library.',
+          'Open Menu → Recycle Bin. You can restore deleted notes, voice recordings, and uploaded library files. The Commands tab was removed—only Notes, Recordings, and Uploads are listed.',
     },
     {
       'q': 'Is my data securely backed up?',
@@ -39,7 +39,7 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
     {
       'q': 'How do voice commands work?',
       'a':
-          'Voice commands use speech recognition to let you control the app hands-free. Double-tap anywhere on the screen to activate voice mode, then speak your command. The app recognizes phrases like "open notes", "play reading", or your custom commands.',
+          'On Home, turn on Assistant for hands-free control, or double-tap anywhere when Assistant is enabled. Say phrases like "open notes", "open dictionary", or "open saved docs". Custom commands are in Menu. The search-bar mic on Home and Dictionary is separate—it filters your library or looks up words and temporarily pauses the Assistant.',
     },
     {
       'q': 'What are custom voice commands?',
@@ -84,12 +84,12 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
     {
       'q': 'How does the dictionary feature work?',
       'a':
-          'The dictionary helps you look up word definitions and pronunciations. You can search for words using voice commands or text input.',
+          'Open Dictionary from the bottom navigation. Choose General, Medical, or Technical sources. Type a word or tap the mic in the search bar to speak it. You can also say "open dictionary" or "define [word]" from Home when Assistant is on.',
     },
     {
       'q': 'What is the Statistics page?',
       'a':
-          'The Statistics page shows usage analytics including reading time, voice commands used, files uploaded, and AI interactions.',
+          'Menu → Statistics shows reading time, voice usage, uploads, and AI activity. It includes gamification: XP, levels, achievements, weekly trends, and reading streaks. Data syncs to the cloud when you are signed in.',
     },
     {
       'q': 'How does guest mode work?',
@@ -119,7 +119,7 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
     {
       'q': 'What is the AI Study Buddy?',
       'a':
-          'The AI Study Buddy is an interactive chat inside the document reader. You can ask it questions about what you are currently reading or get explanations of complex paragraphs.',
+          'Study Buddy is a chat that answers questions about text you are reading or a note transcript. Find it in the document reader AI tools, in a note\'s detail sheet (Summarize / Q&A / Study Buddy bar), and in the notes editor when a transcript is ready. It uses your actual document or transcript content.',
     },
     {
       'q': 'How do I use OpenDyslexic font or Bionic Reading?',
@@ -134,7 +134,27 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
     {
       'q': 'What is the difference between guest and authenticated accounts?',
       'a':
-          'Guest accounts store data locally and temporarily. Authenticated accounts provide cloud backup, cross-device sync, custom command persistence, and access to advanced features.',
+          'Guest mode keeps data on this device for the session. Signed-in accounts get cloud backup, Saved Docs, Statistics sync, custom command sync, and Reminders tied to your library and notes.',
+    },
+    {
+      'q': 'What are Saved Docs?',
+      'a':
+          'Menu → Saved Docs stores AI summaries, Q&A sets from Home or Notes, and note transcripts you save. Search by title, open to read, export, or delete. Requires signing in (not guest mode).',
+    },
+    {
+      'q': 'How do Reminders work?',
+      'a':
+          'Menu → Reminders lets you schedule a phone notification to study a specific library file or voice note. Pick the item, date, time, and whether it repeats daily. The old Remind button in the reader was moved here.',
+    },
+    {
+      'q': 'How do I use voice search on Home?',
+      'a':
+          'On Home, tap the mic icon inside the library search bar (not the Assistant toggle). Speak your search words—they filter your uploaded files. While the search mic is active, the hands-free Assistant pauses so only one microphone session runs at a time.',
+    },
+    {
+      'q': 'What is the floating chatbot on Menu and FAQs?',
+      'a':
+          'The blue "?" button opens the Vox Assistant chat. Ask how features work, navigation, or troubleshooting. You can type or use the mic in the chat sheet. It is for app help—not the same as Study Buddy, which answers about a specific document or note.',
     },
   ];
 

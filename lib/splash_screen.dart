@@ -4,12 +4,15 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter_native_splash/flutter_native_splash.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'user_profile.dart';
 import 'home_page.dart';
 import 'language_provider.dart';
+import 'services/app_bootstrap.dart';
 import 'services/app_session.dart';
 import 'services/auth_session.dart';
+
+/// Minimum time the branded splash (VOX + tagline + INITIALIZING) stays visible.
+const Duration _kMinBrandingDuration = Duration(milliseconds: 4200);
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -23,6 +26,7 @@ class _SplashScreenState extends State<SplashScreen>
   late AnimationController _controller;
   late Animation<double> _fadeAnimation;
   late Animation<double> _scaleAnimation;
+  DateTime? _brandingStarted;
 
   @override
   void initState() {
@@ -40,66 +44,84 @@ class _SplashScreenState extends State<SplashScreen>
       end: 1.0,
     ).animate(CurvedAnimation(parent: _controller, curve: Curves.bounceInOut));
     _controller.forward();
-    _checkDeviceHistory();
+
+    // First frame: drop native logo-only splash so our full UI shows.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _brandingStarted = DateTime.now();
+      FlutterNativeSplash.remove();
+      unawaited(_runLaunchSequence());
+    });
   }
 
-  Future<void> _checkDeviceHistory() async {
-    Widget nextScreen = const UserProfilePage(isEditingMode: false);
+  Future<void> _ensureMinBrandingTime() async {
+    final started = _brandingStarted ?? DateTime.now();
+    final elapsed = DateTime.now().difference(started);
+    if (elapsed < _kMinBrandingDuration) {
+      await Future.delayed(_kMinBrandingDuration - elapsed);
+    }
+  }
+
+  Future<void> _runLaunchSequence() async {
+    final deviceKnown = await AppSession.isDeviceRecognized();
+    Widget nextScreen =
+        deviceKnown ? const VoxHomePage() : const UserProfilePage(isEditingMode: false);
     String? welcomeMessage;
 
+    // Device recognition + services while branded splash is on screen.
+    await AppBootstrap.run();
+
     try {
-      await Future.delayed(const Duration(milliseconds: 1200));
       if (!mounted) return;
 
       LaunchDestination destination;
       try {
         destination = await AppSession.resolveLaunchDestination().timeout(
-          const Duration(seconds: 15),
+          const Duration(seconds: 20),
         );
       } on TimeoutException {
-        debugPrint('Splash: launch routing timed out, using device/prefs fallback.');
+        debugPrint('Splash: launch routing timed out, using fallback.');
         destination = await AppSession.resolveLaunchFallback();
       }
 
-      final authUser = FirebaseAuth.instance.currentUser;
       final lang = context.read<LanguageProvider>();
-      final prefs = await SharedPreferences.getInstance();
 
       if (destination == LaunchDestination.home) {
         nextScreen = const VoxHomePage();
-        unawaited(AppSession.markSetupComplete(userId: authUser?.uid));
 
-        String? displayName = authUser?.displayName?.trim();
-        if (displayName == null || displayName.isEmpty) {
-          displayName = AppSession.lastRestoredDeviceUser?.username?.trim();
-        }
-        if (displayName == null || displayName.isEmpty) {
-          displayName = prefs.getString('userName')?.trim();
-        }
-
+        final displayName = await AppSession.welcomeDisplayName();
         if (displayName != null && displayName.isNotEmpty) {
           welcomeMessage =
               lang.tNamed('welcome_back_user', {'name': displayName});
-        } else if (authUser != null && !authUser.isAnonymous) {
-          welcomeMessage = lang.t('welcome_back');
-        } else if (await AuthSession.isExplicitGuestMode()) {
-          welcomeMessage = lang.t('continuing_guest');
         } else {
-          welcomeMessage = kIsWeb
-              ? lang.t('browser_recognized')
-              : lang.t('device_recognized');
+          final authUser = FirebaseAuth.instance.currentUser;
+          if (authUser != null && !authUser.isAnonymous) {
+            welcomeMessage = lang.t('welcome_back');
+          } else if (await AuthSession.isExplicitGuestMode()) {
+            welcomeMessage = lang.t('continuing_guest');
+          } else {
+            welcomeMessage = kIsWeb
+                ? lang.t('browser_recognized')
+                : lang.t('device_recognized');
+          }
         }
+      } else {
+        nextScreen = const UserProfilePage(isEditingMode: false);
       }
     } catch (e, st) {
       debugPrint('Splash routing error: $e\n$st');
-      if (await AuthSession.isSignedIn() ||
+      if (await AppSession.isDeviceRecognized() ||
+          await AuthSession.isSignedIn() ||
           await AuthSession.isExplicitGuestMode()) {
         nextScreen = const VoxHomePage();
+        final name = await AppSession.welcomeDisplayName();
+        if (name != null && name.isNotEmpty && mounted) {
+          final lang = context.read<LanguageProvider>();
+          welcomeMessage = lang.tNamed('welcome_back_user', {'name': name});
+        }
       }
-    } finally {
-      FlutterNativeSplash.remove();
     }
 
+    await _ensureMinBrandingTime();
     if (!mounted) return;
 
     if (welcomeMessage != null) {
@@ -111,6 +133,7 @@ class _SplashScreenState extends State<SplashScreen>
           ),
           backgroundColor: const Color(0xFF4B9EFF),
           behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 4),
         ),
       );
     }
@@ -206,7 +229,7 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                     const SizedBox(height: 54),
                     const Text(
-                      "VOX",
+                      'VOX',
                       style: TextStyle(
                         fontSize: 72,
                         fontWeight: FontWeight.w900,
@@ -227,7 +250,7 @@ class _SplashScreenState extends State<SplashScreen>
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Text(
-                        "SOLVING ALL YOUR STUDENT PROBLEMS",
+                        'SOLVING ALL YOUR STUDENT PROBLEMS',
                         style: TextStyle(
                           fontSize: 10,
                           color: Colors.white,
@@ -257,7 +280,7 @@ class _SplashScreenState extends State<SplashScreen>
                     ),
                     const SizedBox(height: 12),
                     Text(
-                      "INITIALIZING SYSTEM",
+                      'INITIALIZING SYSTEM',
                       style: TextStyle(
                         fontSize: 8,
                         color: Colors.white.withValues(alpha: 0.3),

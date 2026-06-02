@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'analytics_service.dart';
+import 'services/mic_coordinator.dart';
 
 class TtsService extends ChangeNotifier {
   final FlutterTts _tts = FlutterTts();
@@ -41,6 +42,7 @@ class TtsService extends ChangeNotifier {
     _tts.setCompletionHandler(() {
       isPlaying = false;
       progress = 1.0;
+      MicCoordinator.instance.setTtsPlaybackActive(false);
       notifyListeners();
     });
 
@@ -159,6 +161,7 @@ class TtsService extends ChangeNotifier {
   }
 
   Future<void> play(String t, String c, String locale) async {
+    await MicCoordinator.instance.prepareForTtsPlayback();
     AnalyticsService.instance.recordTtsUsage();
     await _tts.stop();
     title = t;
@@ -187,8 +190,10 @@ class TtsService extends ChangeNotifier {
     if (isPlaying) {
       await _tts.pause();
       isPlaying = false;
+      MicCoordinator.instance.setTtsPlaybackActive(false);
     } else {
       if (content != null) {
+        await MicCoordinator.instance.prepareForTtsPlayback();
         await _applyVoiceOrLocale(locale);
         await _tts.setSpeechRate(speechRate);
         // Resume from where we left off, not from the very beginning
@@ -202,6 +207,7 @@ class TtsService extends ChangeNotifier {
 
   Future<void> stop() async {
     await _tts.stop();
+    MicCoordinator.instance.setTtsPlaybackActive(false);
     isPlaying = false;
     isVisible = false;
     title = null;

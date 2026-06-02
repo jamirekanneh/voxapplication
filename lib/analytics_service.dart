@@ -63,7 +63,16 @@ class AnalyticsService extends ChangeNotifier {
   DateTime? _lastGoalDate; // Last day goal was met
 
   Timer?             _syncTimer;
-  static const int   _analyticsSchemaVersion = 2; // Incremented version
+  static const int   _analyticsSchemaVersion = 3;
+
+  static const _kXp = 'vox_total_xp';
+  static const _kAchievements = 'vox_achievements';
+  static const _kWeeklyXp = 'vox_weekly_xp';
+
+  int _totalXp = 0;
+  Map<String, int> _achievements = {};
+  Map<String, int> _weeklyXp = {};
+  DateTime? _lastXpSync;
 
   List<DateTime>     get opens     => List.unmodifiable(_opens);
   Map<String, int>   get featureMs => Map.unmodifiable(_featureMs);
@@ -79,6 +88,16 @@ class AnalyticsService extends ChangeNotifier {
   int                get dailyGoalMinutes => _dailyGoalMinutes;
   int                get currentStreak => _currentStreak;
   int                get bestStreak => _bestStreak;
+  int                get totalXp => _totalXp;
+  Map<String, int>   get achievements => Map.unmodifiable(_achievements);
+  Map<String, int>   get weeklyXp => Map.unmodifiable(_weeklyXp);
+  int                get level => _levelForXp(_totalXp);
+  int                get xpForNextLevel => _xpForLevel(level + 1);
+  int                get xpProgressInLevel => _totalXp - _xpForLevel(level);
+  int                get xpNeededForNextLevel =>
+      (_xpForLevel(level + 1) - _xpForLevel(level)).clamp(1, 999999);
+  double             get levelProgress =>
+      (xpProgressInLevel / xpNeededForNextLevel).clamp(0.0, 1.0);
   double             get todayGoalProgress => (todayTotalMs / (1000 * 60 * _dailyGoalMinutes)).clamp(0.0, 1.0);
 
   // ── Load all persisted data ───────────────────────────────
@@ -152,7 +171,22 @@ class AnalyticsService extends ChangeNotifier {
     final lgd = p.getString('vox_last_goal_date');
     if (lgd != null) _lastGoalDate = DateTime.tryParse(lgd);
 
+    _totalXp = p.getInt(_kXp) ?? 0;
+
+    final ach = p.getString(_kAchievements);
+    if (ach != null) {
+      _achievements = (jsonDecode(ach) as Map)
+          .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+    }
+
+    final wx = p.getString(_kWeeklyXp);
+    if (wx != null) {
+      _weeklyXp = (jsonDecode(wx) as Map)
+          .map((k, v) => MapEntry(k.toString(), (v as num).toInt()));
+    }
+
     _calculateStreak();
+    _evaluateAchievements();
 
     _syncTimer ??= Timer.periodic(const Duration(hours: 4), (_) {
         autoSyncIfNeeded();
@@ -162,6 +196,173 @@ class AnalyticsService extends ChangeNotifier {
     autoSyncIfNeeded();
 
     notifyListeners();
+  }
+
+  static int _xpForLevel(int level) {
+    if (level <= 1) return 0;
+    return (level - 1) * (level - 1) * 100;
+  }
+
+  static int _levelForXp(int xp) {
+    var level = 1;
+    while (_xpForLevel(level + 1) <= xp) {
+      level++;
+    }
+    return level;
+  }
+
+  static String _weekKey(DateTime d) {
+    final mon = _weekStart(d);
+    return '${mon.year}-${mon.month.toString().padLeft(2, '0')}-'
+        '${mon.day.toString().padLeft(2, '0')}';
+  }
+
+  Future<void> _awardXp(int amount, {String? reason}) async {
+    if (amount <= 0) return;
+    _totalXp += amount;
+    final wk = _weekKey(DateTime.now());
+    _weeklyXp[wk] = (_weeklyXp[wk] ?? 0) + amount;
+    final p = await SharedPreferences.getInstance();
+    await p.setInt(_kXp, _totalXp);
+    await p.setString(_kWeeklyXp, jsonEncode(_weeklyXp));
+    _evaluateAchievements();
+    notifyListeners();
+    unawaited(_syncGamificationSoon());
+    if (reason != null) debugPrint('+$amount XP ($reason) → total $_totalXp');
+  }
+
+  Future<void> _syncGamificationSoon() async {
+    final now = DateTime.now();
+    if (_lastXpSync != null &&
+        now.difference(_lastXpSync!) < const Duration(seconds: 30)) {
+      return;
+    }
+    _lastXpSync = now;
+    await syncToFirebase();
+  }
+
+  Future<void> unlockAchievement(String id) async {
+    if (_achievements.containsKey(id)) return;
+    _achievements[id] = DateTime.now().millisecondsSinceEpoch;
+    await _persist(_kAchievements, jsonEncode(_achievements));
+    await _awardXp(25, reason: 'achievement:$id');
+    notifyListeners();
+  }
+
+  void _evaluateAchievements() {
+    if (_opens.isNotEmpty) {
+      unawaited(unlockAchievement('first_launch'));
+    }
+    if (_currentStreak >= 3) {
+      unawaited(unlockAchievement('streak_3'));
+    }
+    if (_currentStreak >= 7) {
+      unawaited(unlockAchievement('streak_7'));
+    }
+    if (_bestStreak >= 14) {
+      unawaited(unlockAchievement('streak_14'));
+    }
+    if (totalDictLookups >= 10) {
+      unawaited(unlockAchievement('dictionary_10'));
+    }
+    if (totalDictLookups >= 50) {
+      unawaited(unlockAchievement('dictionary_50'));
+    }
+    if (totalFileOps >= 5) {
+      unawaited(unlockAchievement('files_5'));
+    }
+    if (totalVoiceCmds >= 10) {
+      unawaited(unlockAchievement('voice_10'));
+    }
+    if (_dailyMs.values.fold<int>(0, (a, b) => a + b) >= 60 * 60 * 1000) {
+      unawaited(unlockAchievement('hour_total'));
+    }
+    if (level >= 5) {
+      unawaited(unlockAchievement('level_5'));
+    }
+  }
+
+  /// Merge cloud gamification stats (e.g. after login on a new device).
+  Future<void> applyCloudSnapshot(Map<String, dynamic>? data) async {
+    if (data == null) return;
+    final cloudXp = (data['totalXp'] as num?)?.toInt() ?? 0;
+    if (cloudXp > _totalXp) _totalXp = cloudXp;
+
+    final cloudStreak = (data['currentStreak'] as num?)?.toInt();
+    if (cloudStreak != null && cloudStreak > _currentStreak) {
+      _currentStreak = cloudStreak;
+    }
+    final cloudBest = (data['bestStreak'] as num?)?.toInt();
+    if (cloudBest != null && cloudBest > _bestStreak) {
+      _bestStreak = cloudBest;
+    }
+
+    final cloudAch = data['achievements'];
+    if (cloudAch is Map) {
+      cloudAch.forEach((k, v) {
+        final key = k.toString();
+        final val = v is num ? v.toInt() : 0;
+        if (!_achievements.containsKey(key) ||
+            (_achievements[key] ?? 0) < val) {
+          _achievements[key] = val;
+        }
+      });
+    }
+
+    final cloudWeekly = data['weeklyXp'];
+    if (cloudWeekly is Map) {
+      cloudWeekly.forEach((k, v) {
+        final key = k.toString();
+        final val = (v as num).toInt();
+        final local = _weeklyXp[key] ?? 0;
+        _weeklyXp[key] = val > local ? val : local;
+      });
+    }
+
+    final p = await SharedPreferences.getInstance();
+    await p.setInt(_kXp, _totalXp);
+    await p.setInt('vox_current_streak', _currentStreak);
+    await p.setInt('vox_best_streak', _bestStreak);
+    await p.setString(_kAchievements, jsonEncode(_achievements));
+    await p.setString(_kWeeklyXp, jsonEncode(_weeklyXp));
+    _evaluateAchievements();
+    notifyListeners();
+  }
+
+  Map<String, dynamic> gamificationPayload() => {
+        'totalXp': _totalXp,
+        'level': level,
+        'currentStreak': _currentStreak,
+        'bestStreak': _bestStreak,
+        'dailyGoalMinutes': _dailyGoalMinutes,
+        'achievements': _achievements,
+        'weeklyXp': _weeklyXp,
+        'todayGoalProgress': todayGoalProgress,
+      };
+
+  /// Pull latest stats from Firestore for the signed-in user.
+  Future<Map<String, dynamic>?> fetchCloudStats() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) return null;
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection('users')
+          .doc(user.uid)
+          .collection('analytics')
+          .doc('daily_stats')
+          .get();
+      if (!doc.exists) return null;
+      final data = Map<String, dynamic>.from(doc.data() ?? {});
+      await applyCloudSnapshot(
+        data['gamification'] is Map
+            ? Map<String, dynamic>.from(data['gamification'] as Map)
+            : null,
+      );
+      return data;
+    } catch (e) {
+      debugPrint('fetchCloudStats failed: $e');
+      return null;
+    }
   }
 
   bool get analyticsEnabled => _userPrefs['analyticsEnabled'] as bool? ?? true;
@@ -180,6 +381,7 @@ class AnalyticsService extends ChangeNotifier {
 
     _dictWords[cleanWord] = (_dictWords[cleanWord] ?? 0) + 1;
     await _persist(_kDictWords, jsonEncode(_dictWords));
+    await _awardXp(3, reason: 'dictionary');
     notifyListeners();
   }
 
@@ -187,6 +389,7 @@ class AnalyticsService extends ChangeNotifier {
   Future<void> recordFileOperation(String operation) async {
     _fileOps[operation] = (_fileOps[operation] ?? 0) + 1;
     await _persist(_kFileOps, jsonEncode(_fileOps));
+    await _awardXp(5, reason: 'file:$operation');
     notifyListeners();
   }
 
@@ -194,7 +397,16 @@ class AnalyticsService extends ChangeNotifier {
   Future<void> recordVoiceCommand(String command) async {
     _voiceCmds[command] = (_voiceCmds[command] ?? 0) + 1;
     await _persist(_kVoiceCmds, jsonEncode(_voiceCmds));
+    await _awardXp(4, reason: 'voice');
     notifyListeners();
+  }
+
+  Future<void> recordNoteSaved() async {
+    await _awardXp(10, reason: 'note_saved');
+  }
+
+  Future<void> recordAssessmentCompleted() async {
+    await _awardXp(15, reason: 'assessment');
   }
 
   // ── Record API Error ───────────────────────────────────────
@@ -225,6 +437,7 @@ class AnalyticsService extends ChangeNotifier {
   Future<void> recordAppOpen() async {
     _opens.add(DateTime.now());
     await _persist(_kOpens, jsonEncode(_opens.map((d) => d.toIso8601String()).toList()));
+    await _awardXp(5, reason: 'app_open');
     notifyListeners();
   }
 
@@ -274,9 +487,25 @@ class AnalyticsService extends ChangeNotifier {
           final d = DateTime.tryParse(k);
           return d != null && d.isAfter(DateTime.now().subtract(const Duration(days: 30)));
         }).length,
+        'gamification': gamificationPayload(),
+        'apiErrors': _apiErrors,
+        'unmatchedCommands': _unmatchedCommands,
+        'currentStreak': _currentStreak,
+        'bestStreak': _bestStreak,
+        'dailyGoalMinutes': _dailyGoalMinutes,
       };
 
       await analyticsDoc.set(syncData, SetOptions(merge: true));
+
+      // Per-user gamification doc for developer dashboards / cohort analysis.
+      await userDoc.collection('analytics').doc('gamification').set(
+        {
+          ...gamificationPayload(),
+          'updatedAt': FieldValue.serverTimestamp(),
+          'userId': user.uid,
+        },
+        SetOptions(merge: true),
+      );
 
       // Update last sync time
       _lastSync = DateTime.now();
@@ -326,7 +555,12 @@ class AnalyticsService extends ChangeNotifier {
     _prune();
     await _persist(_kFeature, jsonEncode(_featureMs));
     await _persist(_kDaily,   jsonEncode(_dailyMs));
-    
+
+    final minutes = (ms / 60000).floor();
+    if (minutes > 0) {
+      await _awardXp(minutes * 2, reason: 'session:$feature');
+    }
+
     _checkGoalReached();
     notifyListeners();
   }
@@ -344,7 +578,9 @@ class AnalyticsService extends ChangeNotifier {
       await p.setString('vox_last_goal_date', _lastGoalDate!.toIso8601String());
       await p.setInt('vox_current_streak', _currentStreak);
       await p.setInt('vox_best_streak', _bestStreak);
-      
+      await _awardXp(50, reason: 'daily_goal');
+      unawaited(unlockAchievement('daily_goal'));
+
       // Notify user!
       // This would normally call NotificationService, but since we are in a singleton, 
       // we can just notify listeners and let the UI handle the "Goal Reached" animation.

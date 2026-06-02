@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
 import 'theme_provider.dart';
+import 'language_provider.dart';
 
 class RecommendationsPage extends StatefulWidget {
   const RecommendationsPage({super.key});
@@ -155,6 +157,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>();
     final primary = VoxColors.primary(context);
     final onBg = VoxColors.onBg(context);
 
@@ -163,7 +166,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        title: Text('Recommendations',
+        title: Text(lang.t('recommendations_title'),
             style: TextStyle(color: onBg, fontWeight: FontWeight.bold)),
         iconTheme: IconThemeData(color: onBg),
       ),
@@ -173,7 +176,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Help Us Make\nIt Better!',
+              lang.t('recommendations_headline'),
               style: TextStyle(
                 fontSize: 28,
                 fontWeight: FontWeight.w900,
@@ -184,7 +187,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'Your feedback helps us improve\nand build features you\'ll love.',
+              lang.t('recommendations_subtitle'),
               style: TextStyle(
                   fontSize: 14,
                   color: VoxColors.textSecondary(context),
@@ -203,13 +206,13 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Rate Vox Features',
+                  Text(lang.t('recommendations_rate_title'),
                       style: TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                           color: onBg)),
                   const SizedBox(height: 8),
-                  Text('How would you rate your experience so far?',
+                  Text(lang.t('recommendations_rate_subtitle'),
                       style: TextStyle(
                           fontSize: 13,
                           color: VoxColors.textSecondary(context))),
@@ -261,7 +264,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                     children: [
                       Icon(Icons.edit_note_rounded, color: primary, size: 24),
                       const SizedBox(width: 8),
-                      Text('Share Your Suggestions',
+                      Text(lang.t('recommendations_suggestions_title'),
                           style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
@@ -269,7 +272,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                     ],
                   ),
                   const SizedBox(height: 12),
-                  Text('What can we improve or add next?',
+                  Text(lang.t('recommendations_suggestions_subtitle'),
                       style: TextStyle(
                           fontSize: 13,
                           color: VoxColors.textSecondary(context))),
@@ -287,7 +290,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                       textCapitalization: TextCapitalization.sentences,
                       style: TextStyle(color: onBg),
                       decoration: InputDecoration(
-                        hintText: 'Write your recommendation here...',
+                        hintText: lang.t('recommendations_hint'),
                         hintStyle: TextStyle(
                             color: VoxColors.textHint(context), fontSize: 14),
                         border: InputBorder.none,
@@ -369,7 +372,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                       Icon(Icons.lightbulb_outline_rounded,
                           color: primary, size: 22),
                       const SizedBox(width: 8),
-                      Text('Example Suggestions',
+                      Text(lang.t('recommendations_examples_title'),
                           style: TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.bold,
@@ -377,11 +380,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  _buildBullet(context, 'Add offline dictionary lookups'),
-                  _buildBullet(
-                      context, 'Include voice note language translation'),
-                  _buildBullet(
-                      context, 'Allow importing custom flashcard decks'),
+                  _buildBullet(context, lang.t('recommendations_example_1')),
+                  _buildBullet(context, lang.t('recommendations_example_2')),
+                  _buildBullet(context, lang.t('recommendations_example_3')),
                 ],
               ),
             ),
@@ -389,7 +390,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
             Center(
               child: Text(
-                'This is optional. You can skip and do it later.',
+                lang.t('recommendations_optional'),
                 style: TextStyle(
                     fontSize: 12, color: VoxColors.textHint(context)),
               ),
@@ -420,7 +421,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                         height: 20,
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: VoxColors.onPrimary(context)))
-                    : Text('Submit Recommendation',
+                    : Text(lang.t('recommendations_submit'),
                         style: TextStyle(
                             fontWeight: FontWeight.bold, fontSize: 16)),
               ),
@@ -438,8 +439,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                   shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16)),
                 ),
-                child: const Text('Skip',
-                    style: TextStyle(
+                child: Text(lang.t('recommendations_skip'),
+                    style: const TextStyle(
                         fontWeight: FontWeight.bold, fontSize: 16)),
               ),
             ),

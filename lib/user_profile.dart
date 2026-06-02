@@ -103,18 +103,52 @@ class _UserProfilePageState extends State<UserProfilePage> {
   String? _currentEmail;
   String? _currentName;
   String? _currentPhotoBase64;
+  bool _entryGatePending = true;
 
   @override
   void initState() {
     super.initState();
     _isEditingMode = widget.isEditingMode;
-    _ensureAuth();
-    if (!widget.isEditingMode) {
-      unawaited(_redirectIfDeviceRecognized());
-    }
     GoogleSignIn.instance.initialize(serverClientId: _kGoogleServerClientId);
-    _loadCurrentUserData();
-    _evaluateSwitchableEmail();
+    unawaited(_resolveEntry());
+  }
+
+  /// Block sign-in UI until device restore / auth restore finishes (avoids flash).
+  Future<void> _resolveEntry() async {
+    try {
+      if (!widget.isEditingMode) {
+        final redirected = await _redirectIfDeviceRecognized();
+        if (redirected) return;
+      }
+      await _ensureAuth();
+      if (widget.isEditingMode) {
+        await _loadCurrentUserData();
+        await _evaluateSwitchableEmail();
+      } else {
+        await _prefillFromDeviceOrPrefs();
+      }
+    } finally {
+      if (mounted) setState(() => _entryGatePending = false);
+    }
+  }
+
+  Future<void> _prefillFromDeviceOrPrefs() async {
+    final linked = AppSession.lastRestoredDeviceUser ??
+        await AppSession.getDeviceLinkedUser(attempts: 2);
+    if (linked != null) {
+      if (linked.email?.isNotEmpty ?? false) {
+        _emailController.text = linked.email!;
+      }
+      if (linked.username?.isNotEmpty ?? false) {
+        _nameController.text = linked.username!;
+      }
+      return;
+    }
+    final prefs = await SharedPreferences.getInstance();
+    final email = prefs.getString('userEmail');
+    final name = prefs.getString('userName');
+    if (email != null && email.isNotEmpty) _emailController.text = email;
+    if (name != null && name.isNotEmpty) _nameController.text = name;
   }
 
   @override
@@ -194,18 +228,26 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  Future<void> _redirectIfDeviceRecognized() async {
-    if (widget.isEditingMode || !mounted) return;
+  /// Returns true if navigated away to home (device recognized — skip profile).
+  Future<bool> _redirectIfDeviceRecognized() async {
+    if (widget.isEditingMode || !mounted) return false;
     try {
-      final linked = await AppSession.getDeviceLinkedUser();
-      if (linked == null) return;
-      await AuthSession.restoreFromDevice(linked);
-      AppSession.lastRestoredDeviceUser = linked;
-      await AppSession.markSetupComplete(userId: linked.userId);
-      if (!mounted) return;
+      final user = FirebaseAuth.instance.currentUser;
+      if (user != null && !user.isAnonymous) {
+        await AppSession.markSetupComplete(userId: user.uid);
+        if (!mounted) return false;
+        Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
+        return true;
+      }
+
+      final linked = await AppSession.recognizeAndPrepareDevice();
+      if (linked == null || !mounted) return false;
+
       Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
+      return true;
     } catch (e) {
       debugPrint('Device redirect skipped: $e');
+      return false;
     }
   }
 
@@ -857,6 +899,24 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_entryGatePending) {
+      return VoxScaffoldWrapper(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              CircularProgressIndicator(color: VoxColors.primary(context)),
+              const SizedBox(height: 16),
+              Text(
+                'Checking this device…',
+                style: TextStyle(color: VoxColors.textSecondary(context)),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
     return VoxScaffoldWrapper(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

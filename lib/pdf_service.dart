@@ -76,6 +76,45 @@ class PdfService {
     await _savePdfAndNotify(context, pdf, 'QnA_$title');
   }
 
+  static Future<void> exportTextFile(
+    BuildContext context,
+    String title,
+    String content,
+    String prefix,
+  ) async {
+    try {
+      final sanitizedName =
+          '${prefix}_${title.replaceAll(RegExp(r'[^\w\s]+'), '').replaceAll(' ', '_')}';
+      Directory? dir;
+      if (Platform.isAndroid) {
+        dir = await getExternalStorageDirectory();
+        dir ??= await getApplicationDocumentsDirectory();
+      } else {
+        dir = await getApplicationDocumentsDirectory();
+      }
+      final file = File('${dir.path}/$sanitizedName.txt');
+      await file.writeAsString(content);
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Saved to ${file.path}'),
+            backgroundColor: Colors.green,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error saving file: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   static Future<void> _savePdfAndNotify(BuildContext context, pw.Document pdf, String fileNameBase) async {
     try {
       final sanitizedName = fileNameBase.replaceAll(RegExp(r'[^\w\s]+'), '').replaceAll(' ', '_');

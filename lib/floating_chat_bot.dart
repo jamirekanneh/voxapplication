@@ -190,9 +190,9 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
       if (!MicCoordinator.instance.chatbotMayListen) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
+            SnackBar(
               content: Text(
-                'Chatbot microphone is only available on Menu and FAQs.',
+                context.read<LanguageProvider>().t('chatbot_mic_menu_faqs'),
               ),
               behavior: SnackBarBehavior.floating,
             ),
@@ -241,9 +241,9 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Speech recognition not available. Check permissions.',
+              context.read<LanguageProvider>().t('speech_not_available'),
             ),
           ),
         );
@@ -302,6 +302,7 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
 
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>();
     return Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
@@ -321,9 +322,9 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Text(
-                  'Vox Assistant',
-                  style: TextStyle(
+                Text(
+                  lang.t('vox_assistant'),
+                  style: const TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
                     color: Colors.white,
@@ -345,7 +346,7 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                           context.read<TtsService>().stop();
                         }
                       },
-                      tooltip: 'Toggle Voice Output',
+                      tooltip: lang.t('toggle_voice_output'),
                     ),
                     Consumer<TtsService>(
                       builder: (context, tts, _) {
@@ -353,7 +354,7 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                           return IconButton(
                             icon: const Icon(Icons.stop_circle_rounded, color: Colors.redAccent),
                             onPressed: () => tts.stop(),
-                            tooltip: 'Stop Voice Output',
+                            tooltip: lang.t('stop_voice_output'),
                           );
                         }
                         return const SizedBox.shrink();
@@ -377,6 +378,11 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                 itemBuilder: (context, index) {
                   final msg = _messages[index];
                   final isUser = msg['role'] == 'user';
+                  final isGreeting =
+                      !isUser && index == 0 && _messages.length == 1;
+                  final text = isGreeting
+                      ? lang.t('chatbot_greeting')
+                      : (msg['content'] ?? '');
                   return Align(
                     alignment: isUser
                         ? Alignment.centerRight
@@ -396,7 +402,7 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                         ),
                       ),
                       child: Text(
-                        msg['content'] ?? '',
+                        text,
                         style: const TextStyle(
                           fontSize: 15,
                           color: Colors.white,
@@ -455,8 +461,8 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                     style: const TextStyle(color: Colors.white),
                     decoration: InputDecoration(
                       hintText: _isListening
-                          ? 'Listening...'
-                          : 'Ask something...',
+                          ? lang.t('listening_dots')
+                          : lang.t('ask_something'),
                       hintStyle: TextStyle(
                         color: Colors.white.withValues(alpha: 0.3),
                       ),

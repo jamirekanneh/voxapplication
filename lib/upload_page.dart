@@ -19,6 +19,7 @@ import 'language_provider.dart';
 import 'tts_service.dart';
 import 'reader_page.dart';
 import 'analytics_service.dart';
+import 'services/auth_session.dart';
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});
@@ -825,12 +826,13 @@ class _UploadPageState extends State<UploadPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>();
     return Scaffold(
       backgroundColor: const Color(0xFF0A0E1A),
       appBar: AppBar(
-        title: const Text(
-          'Upload Files',
-          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1),
+        title: Text(
+          lang.t('upload_files_title'),
+          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
@@ -863,9 +865,9 @@ class _UploadPageState extends State<UploadPage> {
                       color: Colors.white12,
                     ),
                     const SizedBox(height: 18),
-                    const Text(
-                      'Upload a file or scan a\nphysical document with your camera',
-                      style: TextStyle(
+                    Text(
+                      lang.t('upload_hero'),
+                      style: const TextStyle(
                         color: Colors.white70,
                         fontSize: 15,
                         height: 1.5,
@@ -875,8 +877,18 @@ class _UploadPageState extends State<UploadPage> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Reading starts automatically',
+                      lang.t('upload_reading_starts'),
                       style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      lang.t('upload_supported_types_label'),
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.45),
+                        fontSize: 11,
+                        height: 1.4,
+                      ),
                       textAlign: TextAlign.center,
                     ),
 
@@ -905,7 +917,7 @@ class _UploadPageState extends State<UploadPage> {
                               const SizedBox(width: 10),
                               Expanded(
                                 child: Text(
-                                  "You're browsing as a guest. Files will only be available until you close the app.",
+                                  lang.t('upload_guest_notice'),
                                   style: TextStyle(
                                     color: Colors.white.withValues(alpha: 0.6),
                                     fontSize: 12,
@@ -929,9 +941,9 @@ class _UploadPageState extends State<UploadPage> {
                         child: ElevatedButton.icon(
                           onPressed: _pickAnyFile,
                           icon: const Icon(Icons.upload_file_rounded, size: 20),
-                          label: const Text(
-                            'CHOOSE FILE',
-                            style: TextStyle(
+                          label: Text(
+                            lang.t('upload_choose_file'),
+                            style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w900,
                               letterSpacing: 1.2,
@@ -965,7 +977,7 @@ class _UploadPageState extends State<UploadPage> {
                         Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 14),
                           child: Text(
-                            'OR',
+                            lang.t('upload_or'),
                             style: TextStyle(
                               color: Colors.white.withValues(alpha: 0.3),
                               fontWeight: FontWeight.w900,
@@ -997,9 +1009,9 @@ class _UploadPageState extends State<UploadPage> {
                             Icons.document_scanner_rounded,
                             size: 20,
                           ),
-                          label: const Text(
-                            'SCAN DOCUMENT',
-                            style: TextStyle(
+                          label: Text(
+                            lang.t('upload_scan_document'),
+                            style: const TextStyle(
                               fontSize: 15,
                               fontWeight: FontWeight.w900,
                               letterSpacing: 1.2,
@@ -1035,17 +1047,17 @@ class _UploadPageState extends State<UploadPage> {
                         children: [
                           _tipRow(
                             Icons.wb_sunny_outlined,
-                            'Good lighting improves accuracy',
+                            lang.t('upload_tip_lighting'),
                           ),
                           const SizedBox(height: 8),
                           _tipRow(
                             Icons.crop_free_rounded,
-                            'Fill the frame with the text and hold camera steady',
+                            lang.t('upload_tip_frame'),
                           ),
                           const SizedBox(height: 8),
                           _tipRow(
                             Icons.layers_rounded,
-                            'Multi-page mode merges all pages into one document',
+                            lang.t('upload_tip_multipage'),
                           ),
                         ],
                       ),
@@ -1079,11 +1091,7 @@ class _UploadPageState extends State<UploadPage> {
   }
 
   Future<bool> _isGuestAsync() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return true;
-    if (!user.isAnonymous) return false;
-    final prefs = await SharedPreferences.getInstance();
-    return !(prefs.getBool('hasProfile') ?? false);
+    return AuthSession.usesGuestExperience();
   }
 }
 

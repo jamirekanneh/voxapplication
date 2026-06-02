@@ -86,7 +86,7 @@ extension CommandActionTypeLabel on CommandActionType {
       case CommandActionType.searchLibrary:
         return 'Search Library';
       case CommandActionType.openAssessments:
-        return 'Open Saved Q&A';
+        return 'Open Saved Docs';
       case CommandActionType.macroSequence:
         return 'Run Macro Sequence';
       case CommandActionType.navigateProfile:
@@ -558,6 +558,46 @@ class CustomCommandsProvider extends ChangeNotifier {
         phrase: 'history',
         action: CommandActionType.navigateHistory,
       ),
+      CustomCommand(
+        id: 'def_history2',
+        phrase: 'open history',
+        action: CommandActionType.navigateHistory,
+      ),
+      CustomCommand(
+        id: 'def_dict2',
+        phrase: 'open dictionary',
+        action: CommandActionType.navigateDictionary,
+      ),
+      CustomCommand(
+        id: 'def_stop',
+        phrase: 'stop',
+        action: CommandActionType.ttsStop,
+      ),
+      CustomCommand(
+        id: 'def_stop2',
+        phrase: 'stop reading',
+        action: CommandActionType.ttsStop,
+      ),
+      CustomCommand(
+        id: 'def_stop3',
+        phrase: 'stop play',
+        action: CommandActionType.ttsStop,
+      ),
+      CustomCommand(
+        id: 'def_pause',
+        phrase: 'pause',
+        action: CommandActionType.ttsPause,
+      ),
+      CustomCommand(
+        id: 'def_play',
+        phrase: 'play',
+        action: CommandActionType.ttsPlay,
+      ),
+      CustomCommand(
+        id: 'def_play2',
+        phrase: 'resume',
+        action: CommandActionType.ttsPlay,
+      ),
     ];
   }
 
@@ -582,6 +622,16 @@ class CustomCommandsProvider extends ChangeNotifier {
         score += 0.3;
       } else if (cmd.action == CommandActionType.navigateHome && (input.contains('home') || input.contains('back'))) {
         score += 0.3;
+      } else if (cmd.action == CommandActionType.navigateHistory && input.contains('history')) {
+        score += 0.3;
+      } else if (cmd.action == CommandActionType.ttsStop &&
+          (input.contains('stop') || input.contains('quit'))) {
+        score += 0.35;
+      } else if (cmd.action == CommandActionType.ttsPause && input.contains('pause')) {
+        score += 0.35;
+      } else if (cmd.action == CommandActionType.ttsPlay &&
+          (input.contains('play') || input.contains('resume') || input.contains('continue'))) {
+        score += 0.35;
       }
 
       if (score > bestScore) {

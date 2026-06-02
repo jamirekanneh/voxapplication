@@ -7,8 +7,11 @@ import 'language_provider.dart';
 import 'ai_result_page.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'analytics_service.dart';
-import 'notification_service.dart';
 import 'pdf_service.dart';
+import 'document_chat_buddy_sheet.dart';
+import 'services/mic_coordinator.dart';
+import 'services/reading_voice_commands.dart';
+import 'main.dart';
 
 class ReaderPage extends StatefulWidget {
   final String title;
@@ -42,13 +45,16 @@ class _ReaderPageState extends State<ReaderPage> {
   int _pinnedStart = 0;
   int _pinnedEnd = 0;
 
-  final TextEditingController _buddyController = TextEditingController();
-  final List<Map<String, String>> _buddyMessages = [];
-  bool _isBuddyThinking = false;
-
-  // Always-on listening
-  bool _alwaysOnEnabled = true;
+  bool _alwaysOnEnabled = false;
   bool _commandProcessing = false;
+
+  Future<void> _releaseReaderMic() async {
+    try {
+      await _speech.stop();
+      await _speech.cancel();
+    } catch (_) {}
+    if (mounted) setState(() => _isListening = false);
+  }
 
   // Debounce timer to prevent restart loops
   DateTime _lastRestartTime = DateTime.now();
@@ -71,13 +77,17 @@ class _ReaderPageState extends State<ReaderPage> {
     ['⚡', 'faster / speed up', 'Increase speed'],
     ['🐢', 'slower / slow down', 'Decrease speed'],
     ['🔄', 'restart / beginning', 'Start from beginning'],
-    ['🛑', 'stop / exit', 'Close reader'],
+    ['🛑', 'close document', 'Stop and close reader'],
+    ['📖', 'define [word]', 'Pause and open Dictionary'],
     ['🖍️', 'highlight / mark', 'Highlight last sentence'],
   ];
 
   @override
   void initState() {
     super.initState();
+    MicCoordinator.instance.registerReleaseHandler(_releaseReaderMic);
+    MicCoordinator.instance.setReaderVoiceActive(true);
+
     final tts = context.read<TtsService>();
 
     // Clean content for reading (strip XML tags if detected in docx/xml)
@@ -101,15 +111,20 @@ class _ReaderPageState extends State<ReaderPage> {
   }
 
   void _onTtsUpdate() {
-    if (mounted && context.read<TtsService>().isPlaying) {
+    if (!mounted) return;
+    final tts = context.read<TtsService>();
+    if (tts.isPlaying) {
       _scrollToHighlight();
+    } else if (_alwaysOnEnabled && !_isListening && !_commandProcessing) {
+      _scheduleRestart();
     }
   }
 
   @override
   void dispose() {
+    MicCoordinator.instance.unregisterReleaseHandler(_releaseReaderMic);
+    MicCoordinator.instance.setReaderVoiceActive(false);
     context.read<TtsService>().removeListener(_onTtsUpdate);
-    _buddyController.dispose();
     _speech.stop();
     _scrollController.dispose();
     super.dispose();
@@ -172,6 +187,8 @@ class _ReaderPageState extends State<ReaderPage> {
   // ── Continuous listening (always-on) ──────────────────
   Future<void> _startAlwaysOnListening() async {
     if (!mounted || !_speechReady || _isListening || _commandProcessing) return;
+    final tts = context.read<TtsService>();
+    if (tts.isPlaying) return;
     _lastRestartTime = DateTime.now();
 
     try {
@@ -180,10 +197,16 @@ class _ReaderPageState extends State<ReaderPage> {
         await Future.delayed(const Duration(milliseconds: 100));
       }
 
+      final langProvider = context.read<LanguageProvider>();
+      final tts = context.read<TtsService>();
+      if (tts.isPlaying) {
+        await tts.togglePause(langProvider.ttsLocale);
+      }
+
       setState(() => _isListening = true);
 
       await _speech.listen(
-        localeId: 'en_US',
+        localeId: langProvider.sttLocale,
         // 60s window — engine auto-chunks; onStatus 'done' restarts it
         listenFor: const Duration(seconds: 60),
         // Wait 2.5s of silence before considering the utterance done
@@ -215,7 +238,7 @@ class _ReaderPageState extends State<ReaderPage> {
             final wasPlaying = tts.isPlaying;
 
             Future.delayed(const Duration(milliseconds: 100), () {
-              _executeCommand(words, tts, locale, wasPlaying);
+              _executeCommand(words, tts, locale);
             });
           }
         },
@@ -230,15 +253,8 @@ class _ReaderPageState extends State<ReaderPage> {
   }
 
   bool _matchesAnyCommand(String words) {
-    return _has(words, ['play', 'resume', 'continue', 'start reading', 'go']) ||
-        _has(words, ['pause', 'stop reading', 'wait', 'hold on']) ||
-        _has(words, ['forward', 'skip', 'next', 'skip ahead']) ||
-        _has(words, ['back', 'backward', 'rewind', 'go back', 'previous']) ||
-        _has(words, ['faster', 'speed up', 'increase speed', 'go faster']) ||
-        _has(words, ['slower', 'slow down', 'decrease speed', 'go slower']) ||
-        _has(words, ['restart', 'start over', 'from the beginning']) ||
-        _has(words, ['stop', 'close', 'exit', 'quit reader']) ||
-        _has(words, ['highlight', 'mark', 'highlight that', 'mark text']);
+    if (ReadingVoiceCommands.looksLikeReadingCommand(words)) return true;
+    return _has(words, ['highlight', 'mark', 'highlight that', 'mark text']);
   }
 
   /// High-confidence = very short utterance that's clearly a command keyword
@@ -263,79 +279,50 @@ class _ReaderPageState extends State<ReaderPage> {
   void _toggleAlwaysOn() {
     setState(() => _alwaysOnEnabled = !_alwaysOnEnabled);
     if (_alwaysOnEnabled) {
-      _startAlwaysOnListening();
+      final tts = context.read<TtsService>();
+      if (!tts.isPlaying) {
+        _startAlwaysOnListening();
+      }
     } else {
       _speech.stop();
       setState(() => _isListening = false);
     }
   }
 
-  void _executeCommand(
+  Future<void> _executeCommand(
     String words,
     TtsService tts,
     String locale,
-    bool wasPlaying,
-  ) {
+  ) async {
     if (!mounted) return;
 
-    String feedback = '❓ Not recognised';
+    final result = await ReadingVoiceCommands.execute(
+      spoken: words,
+      tts: tts,
+      locale: locale,
+    );
+
+    String feedback = result.handled ? result.feedback : '❓ Not recognised';
     VoidCallback? action;
 
-    if (_has(words, ['play', 'resume', 'continue', 'start reading', 'go'])) {
-      feedback = '▶ Playing';
+    if (result.dictionaryQuery != null) {
       action = () {
-        if (!tts.isPlaying) tts.togglePause(locale);
+        globalNavigatorKey.currentState?.pushNamed(
+          '/dictionary',
+          arguments: {'searchQuery': result.dictionaryQuery},
+        );
       };
-    } else if (_has(words, ['pause', 'stop reading', 'wait', 'hold on'])) {
-      feedback = '⏸ Paused';
+    } else if (result.closeReader) {
       action = () {
-        if (tts.isPlaying) tts.togglePause(locale);
-      };
-    } else if (_has(words, ['forward', 'skip', 'next', 'skip ahead'])) {
-      feedback = '⏭ +10 seconds';
-      action = () => tts.seekForward(10, locale);
-    } else if (_has(words, [
-      'back',
-      'backward',
-      'rewind',
-      'go back',
-      'previous',
-    ])) {
-      feedback = '⏮ −10 seconds';
-      action = () => tts.seekBackward(10, locale);
-    } else if (_has(words, [
-      'faster',
-      'speed up',
-      'increase speed',
-      'go faster',
-    ])) {
-      feedback = '⚡ Speed up';
-      action = () =>
-          tts.setRate((tts.speechRate + 0.2).clamp(0.1, 2.0), locale);
-    } else if (_has(words, [
-      'slower',
-      'slow down',
-      'decrease speed',
-      'go slower',
-    ])) {
-      feedback = '🐢 Slower';
-      action = () =>
-          tts.setRate((tts.speechRate - 0.2).clamp(0.1, 2.0), locale);
-    } else if (_has(words, ['restart', 'start over', 'from the beginning'])) {
-      feedback = '🔄 Restarted';
-      action = () => tts.restart(locale);
-    } else if (_has(words, ['stop', 'close', 'exit', 'quit reader'])) {
-      feedback = '🛑 Stopped';
-      action = () {
-        tts.stop();
         if (mounted) Navigator.pop(context);
       };
-    } else if (_has(words, [
-      'highlight',
-      'mark',
-      'highlight that',
-      'mark text',
-    ])) {
+    } else if (!result.handled &&
+        _has(words, [
+          'highlight',
+          'mark',
+          'highlight that',
+          'mark text',
+        ])) {
       feedback = '🖍️ Sentence highlighted';
       action = () {
         setState(() {
@@ -346,17 +333,15 @@ class _ReaderPageState extends State<ReaderPage> {
       };
     }
 
+    if (!mounted) return;
     setState(() {
       _isListening = false;
       _commandFeedback = feedback;
     });
 
     action?.call();
-
-    // Ensure we scroll to the new position if it changed
     _scrollToHighlight();
 
-    // Resume always-on listening after command
     _commandProcessing = false;
     if (_alwaysOnEnabled) {
       _scheduleRestart();
@@ -656,170 +641,11 @@ class _ReaderPageState extends State<ReaderPage> {
 
   // ── Study Buddy Chat ────────────────────────────
   void _showStudyBuddySheet() {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Container(
-          height: MediaQuery.of(context).size.height * 0.75,
-          decoration: const BoxDecoration(
-            color: Color(0xFF0A0E1A),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-            border: Border(top: BorderSide(color: Color(0xFF4B9EFF), width: 2)),
-          ),
-          padding: EdgeInsets.only(
-            bottom: MediaQuery.of(ctx).viewInsets.bottom,
-          ),
-          child: Column(
-            children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    const Icon(
-                      Icons.psychology,
-                      color: Color(0xFF4B9EFF),
-                      size: 28,
-                    ),
-                    const SizedBox(width: 12),
-                    const Text(
-                      'AI Study Buddy',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w900,
-                        fontSize: 18,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white54),
-                      onPressed: () => Navigator.pop(ctx),
-                    ),
-                  ],
-                ),
-              ),
-              // Messages
-              Expanded(
-                child: ListView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
-                  itemCount: _buddyMessages.length + (_isBuddyThinking ? 1 : 0),
-                  itemBuilder: (ctx, i) {
-                    if (i == _buddyMessages.length) {
-                      return const Align(
-                        alignment: Alignment.centerLeft,
-                        child: Text(
-                          'Thinking...',
-                          style: TextStyle(
-                            color: Colors.grey,
-                            fontSize: 12,
-                            fontStyle: FontStyle.italic,
-                          ),
-                        ),
-                      );
-                    }
-                    final msg = _buddyMessages[i];
-                    final isUser = msg['role'] == 'user';
-                    return Align(
-                      alignment: isUser
-                          ? Alignment.centerRight
-                          : Alignment.centerLeft,
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 6),
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isUser
-                              ? const Color(0xFF4B9EFF).withValues(alpha: 0.1)
-                              : Colors.white.withValues(alpha: 0.05),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: isUser
-                                ? const Color(0xFF4B9EFF).withValues(alpha: 0.3)
-                                : Colors.white.withValues(alpha: 0.1),
-                          ),
-                        ),
-                        constraints: BoxConstraints(
-                          maxWidth: MediaQuery.of(ctx).size.width * 0.75,
-                        ),
-                        child: Text(
-                          msg['text']!,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              // Input
-              Padding(
-                padding: const EdgeInsets.all(20),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: _buddyController,
-                        style: const TextStyle(color: Colors.white),
-                        decoration: InputDecoration(
-                          hintText: 'Ask about this document...',
-                          hintStyle: const TextStyle(color: Colors.white38),
-                          filled: true,
-                          fillColor: Colors.white.withValues(alpha: 0.05),
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(25),
-                            borderSide: BorderSide.none,
-                          ),
-                          contentPadding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                          ),
-                        ),
-                        onSubmitted: (_) => _sendBuddyMessage(setSheetState),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    IconButton(
-                      icon: const Icon(Icons.send, color: Color(0xFF4B9EFF)),
-                      onPressed: () => _sendBuddyMessage(setSheetState),
-                    ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
+    DocumentChatBuddySheet.show(
+      context,
+      documentTitle: widget.title,
+      documentContent: widget.content,
     );
-  }
-
-  void _sendBuddyMessage(StateSetter setSheetState) async {
-    final text = _buddyController.text.trim();
-    if (text.isEmpty) return;
-
-    setSheetState(() {
-      _buddyMessages.add({'role': 'user', 'text': text});
-      _buddyController.clear();
-      _isBuddyThinking = true;
-    });
-
-    try {
-      // Use existing AI Service logic (summarized context)
-      // For now, we'll simulate a response based on the document
-      await Future.delayed(const Duration(seconds: 2));
-
-      setSheetState(() {
-        _isBuddyThinking = false;
-        _buddyMessages.add({
-          'role': 'assistant',
-          'text':
-              'Based on the document "${widget.title}", it seems that your question refers to a key section about... [AI would generate real response here]',
-        });
-      });
-    } catch (e) {
-      setSheetState(() => _isBuddyThinking = false);
-    }
   }
 
   void _showSettingsSheet(LanguageProvider lang) {
@@ -1042,68 +868,6 @@ class _ReaderPageState extends State<ReaderPage> {
                       'PDF',
                       style: TextStyle(
                         color: Colors.blue,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Reminder Button
-            GestureDetector(
-              onTap: () async {
-                final time = await showTimePicker(
-                  context: context,
-                  initialTime: TimeOfDay.now(),
-                );
-                if (time == null || !mounted) return;
-                final now = DateTime.now();
-                var scheduledTime = DateTime(
-                  now.year,
-                  now.month,
-                  now.day,
-                  time.hour,
-                  time.minute,
-                );
-                if (scheduledTime.isBefore(now)) {
-                  scheduledTime = scheduledTime.add(const Duration(days: 1));
-                }
-
-                await NotificationService.instance.scheduleReminder(
-                  id: scheduledTime.millisecondsSinceEpoch ~/ 1000,
-                  title: 'Study Reminder: ${widget.title}',
-                  body: 'It is time to dive back into your reading material!',
-                  scheduledTime: scheduledTime,
-                );
-
-                if (!mounted) return;
-                final label = time.format(context);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Reminder set for $label'),
-                  ),
-                );
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 14,
-                  vertical: 7,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.orange.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.access_alarm, color: Colors.orange, size: 13),
-                    SizedBox(width: 5),
-                    Text(
-                      'Remind',
-                      style: TextStyle(
-                        color: Colors.orange,
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),

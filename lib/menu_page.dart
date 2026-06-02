@@ -12,10 +12,11 @@ import 'about_us_page.dart';
 import 'recycle_bin_page.dart';
 import 'statistics_page.dart';
 import 'ask_questions_page.dart';
-import 'saved_assessments_page.dart';
+import 'saved_docs_page.dart';
 import 'analytics_service.dart';
 import 'floating_chat_bot.dart';
 import 'recommendations_page.dart';
+import 'reminders_page.dart';
 import 'services/auth_session.dart';
 
 
@@ -68,19 +69,49 @@ class _MenuPageState extends State<MenuPage> {
     });
 
     try {
-      final user = FirebaseAuth.instance.currentUser;
+      var user = FirebaseAuth.instance.currentUser;
       final prefs = await SharedPreferences.getInstance();
       final savedEmail = prefs.getString('userEmail') ?? '';
-      // 1. No auth user
+      // 1. No auth user — still show saved profile for recognized devices.
       if (user == null) {
-        if (mounted) {
-          setState(() {
-            _hasProfile = false;
-            _isFirebaseAnonymous = true;
-            _loadingProfile = false;
-          });
+        final hasProfile = prefs.getBool('hasProfile') ?? false;
+        final savedUid = prefs.getString('userId')?.trim();
+        final savedName = prefs.getString('userName') ?? '';
+        final explicitGuest = await AuthSession.isExplicitGuestMode();
+        if (hasProfile &&
+            !explicitGuest &&
+            savedUid != null &&
+            savedUid.isNotEmpty) {
+          await AuthSession.awaitAuthenticatedUid(
+            timeout: const Duration(seconds: 6),
+          );
+          user = FirebaseAuth.instance.currentUser;
         }
-        return;
+        if (user == null) {
+          if (hasProfile &&
+              !explicitGuest &&
+              savedUid != null &&
+              savedUid.isNotEmpty) {
+            if (mounted) {
+              setState(() {
+                _username = savedName.isNotEmpty ? savedName : 'Vox User';
+                _email = savedEmail;
+                _hasProfile = true;
+                _isFirebaseAnonymous = false;
+                _loadingProfile = false;
+              });
+            }
+            return;
+          }
+          if (mounted) {
+            setState(() {
+              _hasProfile = false;
+              _isFirebaseAnonymous = true;
+              _loadingProfile = false;
+            });
+          }
+          return;
+        }
       }
 
       final guestUi = await AuthSession.shouldShowGuestUi(user);
@@ -90,8 +121,9 @@ class _MenuPageState extends State<MenuPage> {
       }
 
       // 2. Canonical lookup by UID only (signed-in users).
-      final profileUid =
-          (!user.isAnonymous) ? user.uid : await AuthSession.savedUserId();
+      final profileUid = await AuthSession.awaitAuthenticatedUid(
+        timeout: const Duration(seconds: 6),
+      );
       if (!guestUi && profileUid != null) {
         final uidDoc = await FirebaseFirestore.instance
             .collection('users')
@@ -477,7 +509,7 @@ class _MenuPageState extends State<MenuPage> {
   }
 
   /// Theme toggle row — shows a sun/moon icon with a Switch
-  Widget _buildThemeToggle(BuildContext context) {
+  Widget _buildThemeToggle(BuildContext context, LanguageProvider lang) {
     final themeProvider = context.watch<ThemeProvider>();
     final isDark = themeProvider.isDark;
     return Container(
@@ -498,7 +530,7 @@ class _MenuPageState extends State<MenuPage> {
           const SizedBox(width: 12),
           Expanded(
             child: Text(
-              isDark ? 'Dark Mode' : 'Light Mode',
+              isDark ? lang.t('dark_mode') : lang.t('light_mode'),
               style: TextStyle(
                 fontSize: 14,
                 fontWeight: FontWeight.w600,
@@ -592,7 +624,7 @@ class _MenuPageState extends State<MenuPage> {
                         ),
                         const SizedBox(width: 6),
                         Text(
-                          "Offline â€” showing cached data",
+                          lang.t('offline_cached_data'),
                           style: TextStyle(
                             color: VoxColors.primary(context),
                             fontSize: 11,
@@ -731,8 +763,8 @@ class _MenuPageState extends State<MenuPage> {
                     trailing: lang.selectedLanguage,
                     onTap: () => _showLanguagePicker(context, lang),
                   ),
-                  _sectionLabel(context, 'PREFERENCES'),
-                  _buildThemeToggle(context),
+                  _sectionLabel(context, lang.t('section_preferences')),
+                  _buildThemeToggle(context, lang),
                   _sectionLabel(context, lang.t('section_app')),
                   _buildMenuItem(
                     context,
@@ -743,22 +775,31 @@ class _MenuPageState extends State<MenuPage> {
                       MaterialPageRoute(builder: (_) => const StatisticsPage()),
                     ),
                   ),
+                  _buildMenuItem(
+                    context,
+                    icon: Icons.notifications_active_outlined,
+                    title: lang.t('menu_reminders'),
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RemindersPage()),
+                    ),
+                  ),
                   if (_hasProfile) ...[
                     _buildMenuItem(
                       context,
-                      icon: Icons.bookmarks_outlined,
-                      title: 'Saved Q&A',
+                      icon: Icons.folder_copy_outlined,
+                      title: lang.t('menu_saved_docs'),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                          builder: (_) => const SavedAssessmentsPage(),
+                          builder: (_) => const SavedDocsPage(),
                         ),
                       ),
                     ),
                     _buildMenuItem(
                       context,
                       icon: Icons.lightbulb_outline_rounded,
-                      title: 'Recommendations',
+                      title: lang.t('menu_recommendations'),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
@@ -780,7 +821,7 @@ class _MenuPageState extends State<MenuPage> {
                   _buildMenuItem(
                     context,
                     icon: Icons.question_answer_outlined,
-                    title: 'FAQs',
+                    title: lang.t('menu_faqs'),
                     onTap: () => Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -801,7 +842,7 @@ class _MenuPageState extends State<MenuPage> {
                     _buildMenuItem(
                       context,
                       icon: Icons.delete_sweep_rounded,
-                      title: 'Recycle Bin',
+                      title: lang.t('menu_recycle_bin'),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(

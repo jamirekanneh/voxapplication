@@ -14,7 +14,10 @@ import 'ai_result_page.dart';
 import 'custom_commands_provider.dart';
 import 'theme_provider.dart';
 import 'analytics_service.dart';
+import 'services/app_session.dart';
 import 'services/auth_session.dart';
+import 'services/mic_coordinator.dart';
+import 'widgets/firestore_data_gate.dart';
 
 class VoxHomePage extends StatefulWidget {
   const VoxHomePage({super.key});
@@ -28,10 +31,16 @@ class _VoxHomePageState extends State<VoxHomePage> {
   final stt.SpeechToText _speech = stt.SpeechToText();
   String _searchQuery = '';
   bool _isListening = false;
+  bool _searchMicHandoff = false;
   StreamSubscription<int>? _streakSubscription;
 
-  String _selectedFolder = 'All Files';
-  final List<String> _folders = ['All Files', 'PDFs', 'Documents', 'Scans'];
+  String _selectedFolder = 'folder_all_files';
+  static const List<String> _folderKeys = [
+    'folder_all_files',
+    'folder_pdfs',
+    'folder_documents',
+    'folder_scans',
+  ];
 
   // Multi-select mode
   bool _isSelectionMode = false;
@@ -39,17 +48,28 @@ class _VoxHomePageState extends State<VoxHomePage> {
   List<String> _visibleIds = [];
 
   String? _resolvedUid;
-  bool _isAnonymousUser = true;
-  StreamSubscription<User?>? _authSubscription;
+  bool _isAnonymousUser = false;
+
+  Future<void> _releaseSearchMic() async {
+    if (_searchMicHandoff) return;
+    try {
+      await _speech.stop();
+      await _speech.cancel();
+    } catch (_) {}
+    if (mounted) setState(() => _isListening = false);
+    MicCoordinator.instance.setSearchMicActive(false);
+  }
 
   @override
   void initState() {
     super.initState();
+    final bootUid = AppSession.bootstrapUid;
+    if (bootUid != null) {
+      _resolvedUid = bootUid;
+      _isAnonymousUser = false;
+    }
+    MicCoordinator.instance.registerReleaseHandler(_releaseSearchMic);
     _resolveUser();
-    _authSubscription =
-        FirebaseAuth.instance.authStateChanges().listen((_) {
-      _resolveUser();
-    });
 
     _streakSubscription = AnalyticsService.instance.onStreakMilestone.listen((
       streak,
@@ -61,6 +81,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
     // Wire assistant commands after first frame so context is ready
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      MicCoordinator.instance.setRoute('/home');
       _registerAssistantHandler();
     });
   }
@@ -96,6 +117,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
         case AssistantCommandType.stopAssistant:
           provider.setAssistantMode(false);
+          MicCoordinator.instance.setAssistantMicActive(false);
           _showAssistantFeedback('Assistant off');
           break;
       }
@@ -177,6 +199,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    MicCoordinator.instance.setRoute('/home');
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     if (args != null && args.containsKey('searchQuery')) {
@@ -192,7 +215,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
   @override
   void dispose() {
-    _authSubscription?.cancel();
+    MicCoordinator.instance.unregisterReleaseHandler(_releaseSearchMic);
+    MicCoordinator.instance.setSearchMicActive(false);
     _speech.stop();
     _searchController.dispose();
     _streakSubscription?.cancel();
@@ -203,14 +227,15 @@ class _VoxHomePageState extends State<VoxHomePage> {
   //  RESOLVE USER
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _resolveUser() async {
-    final guestUi = await AuthSession.shouldShowGuestUi();
-    final uid = guestUi ? null : await AuthSession.effectiveUid();
-    if (mounted) {
-      setState(() {
-        _isAnonymousUser = guestUi;
-        _resolvedUid = uid;
-      });
-    }
+    final session = await AuthSession.resolveForApp();
+    if (!mounted) return;
+    final nextGuest = session.guest;
+    final nextUid = nextGuest ? null : (session.uid ?? _resolvedUid);
+    if (nextGuest == _isAnonymousUser && nextUid == _resolvedUid) return;
+    setState(() {
+      _isAnonymousUser = nextGuest;
+      _resolvedUid = nextUid;
+    });
   }
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -400,10 +425,23 @@ class _VoxHomePageState extends State<VoxHomePage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _listen() async {
     if (_isListening) {
-      await _speech.stop();
-      if (mounted) setState(() => _isListening = false);
+      await _releaseSearchMic();
       return;
     }
+
+    if (!MicCoordinator.instance.searchMicMayListen) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.read<LanguageProvider>().t('chatbot_mic_menu_faqs'),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     final status = await Permission.microphone.request();
     if (status != PermissionStatus.granted) {
       if (mounted) {
@@ -419,32 +457,47 @@ class _VoxHomePageState extends State<VoxHomePage> {
     }
     bool available = await _speech.initialize(
       onError: (e) {
+        if (_searchMicHandoff) return;
+        MicCoordinator.instance.setSearchMicActive(false);
         if (mounted) setState(() => _isListening = false);
       },
       onStatus: (s) {
+        if (_searchMicHandoff) return;
         if (s == 'done' || s == 'notListening') {
+          MicCoordinator.instance.setSearchMicActive(false);
           if (mounted) setState(() => _isListening = false);
         }
       },
     );
     if (!available || !mounted) return;
-    final langProvider = context.read<LanguageProvider>();
-    setState(() => _isListening = true);
-    await _speech.listen(
-      localeId: langProvider.sttLocale,
-      listenOptions: stt.SpeechListenOptions(
-        partialResults: true,
-        cancelOnError: false,
-        listenMode: stt.ListenMode.search,
-      ),
-      onResult: (val) {
-        if (!mounted) return;
-        setState(() {
-          _searchQuery = val.recognizedWords.toLowerCase();
-          _searchController.text = val.recognizedWords;
-        });
-      },
-    );
+
+    _searchMicHandoff = true;
+    try {
+      await MicCoordinator.instance.prepareForSearchMic(_releaseSearchMic);
+      if (!mounted) return;
+
+      final langProvider = context.read<LanguageProvider>();
+      setState(() => _isListening = true);
+      await _speech.listen(
+        localeId: langProvider.sttLocale,
+        listenOptions: stt.SpeechListenOptions(
+          partialResults: true,
+          cancelOnError: false,
+          listenMode: stt.ListenMode.search,
+        ),
+        onResult: (val) {
+          if (!mounted) return;
+          setState(() {
+            _searchQuery = val.recognizedWords.toLowerCase();
+            _searchController.text = val.recognizedWords;
+          });
+        },
+        listenFor: const Duration(seconds: 10),
+        pauseFor: const Duration(seconds: 3),
+      );
+    } finally {
+      _searchMicHandoff = false;
+    }
   }
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -731,7 +784,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
                           () => _searchQuery = v.trim().toLowerCase(),
                         ),
                         decoration: InputDecoration(
-                          hintText: lang.t('search_hint'),
+                          hintText: _isListening
+                              ? lang.t('listening_dots')
+                              : lang.t('search_hint'),
                           counterText: '',
                           prefixIcon: Icon(
                             Icons.search,
@@ -770,13 +825,14 @@ class _VoxHomePageState extends State<VoxHomePage> {
                     const SizedBox(width: 12),
                     Consumer<CustomCommandsProvider>(
                       builder: (context, provider, _) => Tooltip(
-                        message: 'Assistant Mode (Voice Activated)',
+                        message: lang.t('assistant_mode_tooltip'),
                         child: GestureDetector(
                           onTap: () {
                             final next = !provider.assistantModeEnabled;
                             provider.setAssistantMode(next);
+                            MicCoordinator.instance.setAssistantMicActive(next);
                             _showAssistantFeedback(
-                              next ? 'Assistant on' : 'Assistant off',
+                              next ? lang.t('assistant_on') : lang.t('assistant_off'),
                             );
                           },
                           child: AnimatedContainer(
@@ -818,7 +874,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                                 ),
                                 const SizedBox(width: 6),
                                 Text(
-                                  'Assistant',
+                                  lang.t('assistant_label'),
                                   style: TextStyle(
                                     color: provider.assistantModeEnabled
                                         ? VoxColors.primary(context)
@@ -911,9 +967,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 height: 32,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
-                  itemCount: _folders.length,
+                  itemCount: _folderKeys.length,
                   itemBuilder: (context, index) {
-                    final folder = _folders[index];
+                    final folder = _folderKeys[index];
                     final isSelected = folder == _selectedFolder;
                     return GestureDetector(
                       onTap: () => setState(() => _selectedFolder = folder),
@@ -937,7 +993,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         ),
                         child: Center(
                           child: Text(
-                            folder,
+                            lang.t(folder),
                             style: TextStyle(
                               color: isSelected
                                   ? Colors.white
@@ -970,11 +1026,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         if (!matchesSearch) return false;
 
                         final t = item.fileType.toLowerCase();
-                        if (_selectedFolder == 'All Files') return true;
-                        if (_selectedFolder == 'PDFs') return t == 'pdf';
-                        if (_selectedFolder == 'Notes') return t == 'note';
-                        if (_selectedFolder == 'Scans') return t == 'scan';
-                        if (_selectedFolder == 'Documents') {
+                        if (_selectedFolder == 'folder_all_files') return true;
+                        if (_selectedFolder == 'folder_pdfs') return t == 'pdf';
+                        if (_selectedFolder == 'folder_scans') return t == 'scan';
+                        if (_selectedFolder == 'folder_documents') {
                           return [
                             'doc',
                             'docx',
@@ -1060,20 +1115,34 @@ class _VoxHomePageState extends State<VoxHomePage> {
                     }
 
                     // â”€â”€ Logged in: Firestore filtered by userId â”€â”€
-                    if (_resolvedUid == null) {
+                    final libraryUid = _resolvedUid;
+                    if (libraryUid == null) {
                       return const Center(child: CircularProgressIndicator());
                     }
 
-                    return StreamBuilder<QuerySnapshot>(
-                      // FIX: removed .orderBy() to avoid requiring a composite
-                      // Firestore index. Docs are sorted client-side below.
-                      stream: FirebaseFirestore.instance
-                          .collection('library')
-                          .where('userId', isEqualTo: _resolvedUid)
-                          .snapshots(),
-                      builder: (context, snapshot) {
+                    return FirestoreDataGate(
+                      userId: libraryUid,
+                      builder: (context) => StreamBuilder<QuerySnapshot>(
+                        key: ValueKey('library_$libraryUid'),
+                        // FIX: removed .orderBy() to avoid requiring a composite
+                        // Firestore index. Docs are sorted client-side below.
+                        stream: FirebaseFirestore.instance
+                            .collection('library')
+                            .where('userId', isEqualTo: libraryUid)
+                            .snapshots(),
+                        builder: (context, snapshot) {
                         if (snapshot.hasError) {
                           debugPrint('ðŸ”´ Firestore error: ${snapshot.error}');
+                          if (firestoreSnapshotDenied(
+                            snapshot.error,
+                            libraryUid,
+                          )) {
+                            return Center(
+                              child: CircularProgressIndicator(
+                                color: VoxColors.primary(context),
+                              ),
+                            );
+                          }
                           final isOffline = snapshot.error.toString().contains(
                             'unavailable',
                           );
@@ -1104,6 +1173,18 @@ class _VoxHomePageState extends State<VoxHomePage> {
                           );
                         }
 
+                        if (snapshot.hasData &&
+                            firestoreSnapshotCacheOnly(
+                              snapshot.data!,
+                              libraryUid,
+                            )) {
+                          return Center(
+                            child: CircularProgressIndicator(
+                              color: VoxColors.primary(context),
+                            ),
+                          );
+                        }
+
                         if (!snapshot.hasData) {
                           return const Center(
                             child: CircularProgressIndicator(),
@@ -1121,11 +1202,10 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
                           if (!name.contains(_searchQuery)) return false;
 
-                          if (_selectedFolder == 'All Files') return true;
-                          if (_selectedFolder == 'PDFs') return type == 'pdf';
-                          if (_selectedFolder == 'Notes') return type == 'note';
-                          if (_selectedFolder == 'Scans') return type == 'scan';
-                          if (_selectedFolder == 'Documents') {
+                          if (_selectedFolder == 'folder_all_files') return true;
+                          if (_selectedFolder == 'folder_pdfs') return type == 'pdf';
+                          if (_selectedFolder == 'folder_scans') return type == 'scan';
+                          if (_selectedFolder == 'folder_documents') {
                             return [
                               'doc',
                               'docx',
@@ -1235,7 +1315,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
                             );
                           },
                         );
-                      },
+                        },
+                      ),
                     );
                   },
                 ),

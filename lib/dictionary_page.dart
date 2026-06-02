@@ -8,6 +8,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'language_provider.dart';
 import 'analytics_service.dart';
 import 'theme_provider.dart';
+import 'services/mic_coordinator.dart';
 
 // â”€â”€ API language codes for dictionaryapi.dev â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const Map<String, String?> _apiLangCode = {
@@ -72,10 +73,53 @@ class _DictionaryPageState extends State<DictionaryPage> {
   bool _loading = false;
   bool _isPlaying = false;
   bool _isListening = false;
+  bool _searchMicHandoff = false;
   String? _audioUrl;
+  bool _consumedRouteQuery = false;
+
+  Future<void> _releaseDictionaryMic() async {
+    if (_searchMicHandoff) return;
+    try {
+      await _speech.stop();
+      await _speech.cancel();
+    } catch (_) {}
+    if (mounted) setState(() => _isListening = false);
+    MicCoordinator.instance.setSearchMicActive(false);
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    MicCoordinator.instance.registerReleaseHandler(_releaseDictionaryMic);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      MicCoordinator.instance.setRoute('/dictionary');
+    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_consumedRouteQuery) return;
+    _consumedRouteQuery = true;
+
+    final args =
+        ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    final query = (args?['searchQuery'] as String?)?.trim() ?? '';
+    if (query.isEmpty) return;
+
+    _searchController.text = query;
+    final lang = context.read<LanguageProvider>();
+    final langCode = _apiLangCode[lang.selectedLanguage];
+    if (langCode == null) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _search(langCode);
+    });
+  }
 
   @override
   void dispose() {
+    MicCoordinator.instance.unregisterReleaseHandler(_releaseDictionaryMic);
+    MicCoordinator.instance.setSearchMicActive(false);
     _searchController.dispose();
     _audioPlayer.dispose();
     _focusNode.dispose();
@@ -88,10 +132,22 @@ class _DictionaryPageState extends State<DictionaryPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _startVoiceSearch(String? langCode) async {
     if (_isListening) {
-      await _speech.stop();
-      if (mounted) setState(() => _isListening = false);
+      await _releaseDictionaryMic();
       final word = _searchController.text.trim();
       if (word.isNotEmpty) _search(langCode);
+      return;
+    }
+
+    if (!MicCoordinator.instance.searchMicMayListen) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            context.read<LanguageProvider>().t('chatbot_mic_menu_faqs'),
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
       return;
     }
 
@@ -111,10 +167,14 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
     final available = await _speech.initialize(
       onError: (e) {
+        if (_searchMicHandoff) return;
+        MicCoordinator.instance.setSearchMicActive(false);
         if (mounted) setState(() => _isListening = false);
       },
       onStatus: (s) {
+        if (_searchMicHandoff) return;
         if (s == 'done' || s == 'notListening') {
+          MicCoordinator.instance.setSearchMicActive(false);
           if (mounted) {
             setState(() => _isListening = false);
             final word = _searchController.text.trim();
@@ -139,29 +199,38 @@ class _DictionaryPageState extends State<DictionaryPage> {
       return;
     }
 
-    setState(() {
-      _isListening = true;
-      _searchController.clear();
-    });
-    final langProvider = context.read<LanguageProvider>();
-    _speech.listen(
-      localeId: langProvider.sttLocale,
-      listenOptions: stt.SpeechListenOptions(
-        partialResults: true,
-        cancelOnError: true,
-        listenMode: stt.ListenMode.search,
-      ),
-      onResult: (val) {
-        final text = val.recognizedWords.trim();
-        if (!mounted) return;
-        setState(() => _searchController.text = text);
-        if (val.finalResult && text.isNotEmpty) {
-          _search(langCode);
-        }
-      },
-      listenFor: const Duration(seconds: 8),
-      pauseFor: const Duration(seconds: 2),
-    );
+    _searchMicHandoff = true;
+    try {
+      await MicCoordinator.instance.prepareForSearchMic(_releaseDictionaryMic);
+      if (!mounted) return;
+
+      setState(() {
+        _isListening = true;
+        _searchController.clear();
+      });
+
+      final langProvider = context.read<LanguageProvider>();
+      await _speech.listen(
+        localeId: langProvider.sttLocale,
+        listenOptions: stt.SpeechListenOptions(
+          partialResults: true,
+          cancelOnError: false,
+          listenMode: stt.ListenMode.search,
+        ),
+        onResult: (val) {
+          final text = val.recognizedWords.trim();
+          if (!mounted) return;
+          setState(() => _searchController.text = text);
+          if (val.finalResult && text.isNotEmpty) {
+            _search(langCode);
+          }
+        },
+        listenFor: const Duration(seconds: 10),
+        pauseFor: const Duration(seconds: 3),
+      );
+    } finally {
+      _searchMicHandoff = false;
+    }
   }
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -679,10 +748,10 @@ class _DictionaryPageState extends State<DictionaryPage> {
                     onSubmitted: unsupported ? null : (_) => _search(langCode),
                     decoration: InputDecoration(
                       hintText: _isListening
-                          ? 'Listening...'
+                          ? lang.t('listening_dots')
                           : unsupported
-                          ? 'Not available in Chinese'
-                          : 'Search any word...',
+                          ? lang.t('dictionary_not_available_chinese')
+                          : lang.t('dictionary_search_hint'),
                       counterText: '',
                       prefixIcon: Icon(Icons.search, size: 20, color: VoxColors.textHint(context)),
                       filled: true,
@@ -764,34 +833,6 @@ class _DictionaryPageState extends State<DictionaryPage> {
             ),
           ),
 
-          // â”€â”€ Listening indicator â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-          if (_isListening)
-            Padding(
-              padding: const EdgeInsets.only(top: 8),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: VoxColors.danger,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Listening in ${lang.selectedLanguage} â€” say a word',
-                    style: TextStyle(
-                      color: VoxColors.textHint(context),
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
           const SizedBox(height: 10),
 
           // â”€â”€ Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -805,8 +846,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
                     children: [
                       const Text('ðŸˆš', style: TextStyle(fontSize: 48)),
                       const SizedBox(height: 16),
-                      const Text(
-                        'Chinese dictionary\nnot available yet',
+                      Text(
+                        lang.t('dictionary_chinese_unavailable_title'),
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           fontSize: 18,
@@ -817,7 +858,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                       ),
                       const SizedBox(height: 10),
                       Text(
-                        'Switch to English, Spanish, French,\nArabic, or Turkish in the Menu.',
+                        lang.t('dictionary_chinese_unavailable_body'),
                         textAlign: TextAlign.center,
                         style: TextStyle(color: Colors.grey[600], fontSize: 13),
                       ),
@@ -862,8 +903,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
                   children: [
                     const Text('📖', style: TextStyle(fontSize: 48)),
                     const SizedBox(height: 12),
-                    const Text(
-                      'VOX Dictionary',
+                    Text(
+                      lang.t('dictionary_vox_title'),
                       style: TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w700,
@@ -872,7 +913,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'General, medical, legal & technical\nall in one search.',
+                      lang.t('dictionary_tagline'),
                       textAlign: TextAlign.center,
                       style: TextStyle(
                         color: Colors.grey[600],
@@ -892,18 +933,18 @@ class _DictionaryPageState extends State<DictionaryPage> {
                           color: Color(0xFF0A0E1A),
                           borderRadius: BorderRadius.circular(30),
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(
+                            const Icon(
                               Icons.mic_none_rounded,
                               color: Colors.white,
                               size: 18,
                             ),
-                            SizedBox(width: 8),
+                            const SizedBox(width: 8),
                             Text(
-                              'Tap to speak',
-                              style: TextStyle(
+                              lang.t('tap_to_speak'),
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w600,
                                 fontSize: 13,

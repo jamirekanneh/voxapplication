@@ -77,6 +77,10 @@ class LanguageProvider extends ChangeNotifier {
     final saved = prefs.getString(_prefKey);
     if (saved != null && languages.contains(saved)) {
       _selectedLanguage = saved;
+    } else {
+      // First launch: default to English (not device locale / cached translation).
+      _selectedLanguage = 'English';
+      await prefs.setString(_prefKey, 'English');
     }
     _isDyslexicFontEnabled = prefs.getBool('isDyslexicFontEnabled') ?? false;
     _isBionicReadingEnabled = prefs.getBool('isBionicReadingEnabled') ?? false;
@@ -212,7 +216,7 @@ class LanguageProvider extends ChangeNotifier {
     _translatingSet.add(key);
     
     try {
-      final toCode = _translatorCodeMap[_selectedLanguage] ?? 'es';
+      final toCode = _translatorCodeMap[_selectedLanguage] ?? 'en';
       final translation = await _translator.translate(englishText, from: 'en', to: toCode);
       
       // Save it to dynamic translation dictionary

@@ -5,6 +5,8 @@ import 'analytics_service.dart';
 import 'custom_commands_provider.dart';
 import 'language_provider.dart';
 import 'main.dart';
+import 'services/mic_coordinator.dart';
+import 'services/reading_voice_commands.dart';
 import 'tts_service.dart';
 import 'voice_assistant_intent.dart';
 
@@ -25,7 +27,7 @@ const Map<String, Map<String, String>> _feedback = {
     'searchNotes': 'Searching notes',
     'openNote': 'Opening note',
     'searchLibrary': 'Searching library',
-    'openAssessments': 'Opening saved Q&A',
+    'openAssessments': 'Opening Saved Docs',
     'assistantMuted': 'Voice assistant muted',
     'noMatch': 'Command not recognized',
     'navigateProfile': 'Opening Profile',
@@ -222,6 +224,7 @@ class CommandDispatcher {
 
       case VoiceAssistantAction.assistantOff:
         await commandsProvider.setAssistantMode(false);
+        MicCoordinator.instance.setAssistantMicActive(false);
         if (!context.mounted) return true;
         if (commandsProvider.voiceFeedbackEnabled) {
           final r = nl.replyEnglish?.trim();
@@ -318,6 +321,39 @@ class CommandDispatcher {
     required TtsService ttsService,
     required LanguageProvider langProvider,
   }) async {
+    final locale = langProvider.ttsLocale;
+
+    // While a document is being read aloud, reading commands take priority.
+    final readingResult = await ReadingVoiceCommands.tryDuringPlayback(
+      spoken: spokenText,
+      tts: ttsService,
+      locale: locale,
+    );
+    if (readingResult.handled) {
+      if (!context.mounted) return true;
+      if (readingResult.dictionaryQuery != null) {
+        globalNavigatorKey.currentState?.pushNamed(
+          '/dictionary',
+          arguments: {'searchQuery': readingResult.dictionaryQuery},
+        );
+      } else if (readingResult.closeReader) {
+        final nav = globalNavigatorKey.currentState;
+        if (nav != null && nav.canPop()) {
+          nav.pop();
+        }
+      }
+      if (readingResult.feedback.isNotEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(readingResult.feedback),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+      return true;
+    }
+
     VoiceAssistantInterpretation? interpreted;
     debugPrint('DISPATCH START: "$spokenText"');
     
@@ -361,12 +397,31 @@ class CommandDispatcher {
     }
 
     final language = langProvider.selectedLanguage;
-    final locale = langProvider.currentLocale;
 
     debugPrint('DISPATCH: Falling back to local matcher');
     
     // HARDCODED FAILSAFES: If the matching engine is struggling, we force-match core navigation.
-    final normalized = spokenText.toLowerCase().trim();
+    final normalized = spokenText
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^\p{L}\p{N}\s]', unicode: true), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    String _extractDictionaryQuery(String text) {
+      const prefixes = [
+        'search dictionary for ',
+        'search dictionary ',
+        'dictionary search ',
+        'find meaning of ',
+        'meaning of ',
+        'define ',
+      ];
+      for (final prefix in prefixes) {
+        if (text.startsWith(prefix)) {
+          return text.substring(prefix.length).trim();
+        }
+      }
+      return '';
+    }
     if (normalized == 'menu' || normalized == 'open menu' || normalized == 'go to menu') {
       debugPrint('FAILSAFE: Force matching Menu');
       await _execute(context, const CustomCommand(id: 'fs_menu', phrase: 'menu', action: CommandActionType.navigateMenu), ttsService, locale);
@@ -379,9 +434,56 @@ class CommandDispatcher {
       debugPrint('FAILSAFE: Force matching Dictionary');
       await _execute(context, const CustomCommand(id: 'fs_dict', phrase: 'dictionary', action: CommandActionType.navigateDictionary), ttsService, locale);
       return true;
-    } else if (normalized == 'notes' || normalized == 'open notes') {
+    } else {
+      final dictQuery = _extractDictionaryQuery(normalized);
+      if (dictQuery.isNotEmpty) {
+        debugPrint('FAILSAFE: Force matching Dictionary search "$dictQuery"');
+        await _execute(
+          context,
+          CustomCommand(
+            id: 'fs_dict_query',
+            phrase: 'dictionary search',
+            action: CommandActionType.navigateDictionary,
+            parameter: dictQuery,
+          ),
+          ttsService,
+          locale,
+        );
+        return true;
+      }
+    }
+    if (normalized == 'notes' || normalized == 'open notes' ||
+        normalized.contains('go to notes') || normalized.contains('notes page')) {
       debugPrint('FAILSAFE: Force matching Notes');
       await _execute(context, const CustomCommand(id: 'fs_notes', phrase: 'notes', action: CommandActionType.navigateNotes), ttsService, locale);
+      return true;
+    } else if (normalized.contains('history') ||
+        normalized == 'open history') {
+      debugPrint('FAILSAFE: Force matching History');
+      await _execute(context, const CustomCommand(id: 'fs_history', phrase: 'history', action: CommandActionType.navigateHistory), ttsService, locale);
+      return true;
+    } else if (normalized.contains('stop') &&
+        (normalized.contains('play') ||
+            normalized.contains('read') ||
+            normalized.contains('speak'))) {
+      debugPrint('FAILSAFE: Force matching Stop');
+      await _execute(context, const CustomCommand(id: 'fs_stop', phrase: 'stop', action: CommandActionType.ttsStop), ttsService, locale);
+      return true;
+    } else if (normalized == 'stop' ||
+        normalized == 'stop reading' ||
+        normalized == 'stop playback') {
+      debugPrint('FAILSAFE: Force matching Stop');
+      await _execute(context, const CustomCommand(id: 'fs_stop2', phrase: 'stop', action: CommandActionType.ttsStop), ttsService, locale);
+      return true;
+    } else if (normalized == 'pause' || normalized == 'pause reading') {
+      debugPrint('FAILSAFE: Force matching Pause');
+      await _execute(context, const CustomCommand(id: 'fs_pause', phrase: 'pause', action: CommandActionType.ttsPause), ttsService, locale);
+      return true;
+    } else if (normalized == 'play' ||
+        normalized == 'resume' ||
+        normalized == 'continue reading') {
+      debugPrint('FAILSAFE: Force matching Play');
+      await _execute(context, const CustomCommand(id: 'fs_play', phrase: 'play', action: CommandActionType.ttsPlay), ttsService, locale);
       return true;
     }
 
@@ -458,7 +560,11 @@ class CommandDispatcher {
         break;
       case CommandActionType.navigateDictionary:
         debugPrint('NAVIGATING: /dictionary (NavState: ${globalNavigatorKey.currentState != null})');
-        globalNavigatorKey.currentState?.pushNamed('/dictionary');
+        final query = (command.parameter ?? '').trim();
+        globalNavigatorKey.currentState?.pushNamed(
+          '/dictionary',
+          arguments: query.isEmpty ? null : {'searchQuery': query},
+        );
         break;
       case CommandActionType.ttsPlay:
         if (!ttsService.isPlaying && ttsService.content != null) {
@@ -498,7 +604,7 @@ class CommandDispatcher {
         );
         break;
       case CommandActionType.openAssessments:
-        globalNavigatorKey.currentState!.pushNamed('/saved_assessments');
+        globalNavigatorKey.currentState!.pushNamed('/saved_docs');
         break;
       case CommandActionType.navigateProfile:
         globalNavigatorKey.currentState!.pushNamed('/profile');

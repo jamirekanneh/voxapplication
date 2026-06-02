@@ -1,9 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'pdf_service.dart';
 import 'ai_service.dart';
+import 'services/saved_docs_service.dart';
 
 class AiResultPage extends StatefulWidget {
   final String documentTitle;
@@ -151,19 +151,8 @@ class _AiResultPageState extends State<AiResultPage> {
     }
   }
 
-  // â”€â”€ Save to Firebase â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<void> _saveAssessment() async {
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null || user.isAnonymous) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please log in to save Q&A.')),
-      );
-      return;
-    }
-
-    if (_flashcards == null || _flashcards!.isEmpty) return;
-
-    final result = await showDialog<String>(
+  Future<String?> _promptSaveTitle(String dialogTitle) async {
+    return showDialog<String>(
       context: context,
       builder: (ctx) {
         final ctrl = TextEditingController(text: widget.documentTitle);
@@ -172,21 +161,25 @@ class _AiResultPageState extends State<AiResultPage> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
-          title: const Text(
-            'Save Q&A',
-            style: TextStyle(color: Colors.white, fontWeight: FontWeight.w900),
+          title: Text(
+            dialogTitle,
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.w900,
+            ),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const Text(
-                'Enter Chapter or Document Name:',
-                style: TextStyle(fontSize: 13, color: Color(0xAA0A0E1A)),
+                'Title for Saved Docs:',
+                style: TextStyle(fontSize: 13, color: Colors.white70),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: ctrl,
+                style: const TextStyle(color: Colors.white),
                 decoration: const InputDecoration(
                   border: OutlineInputBorder(),
                   hintText: 'e.g. Chapter 1 Biology',
@@ -202,7 +195,7 @@ class _AiResultPageState extends State<AiResultPage> {
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0A0E1A),
+                backgroundColor: const Color(0xFF4B9EFF),
                 foregroundColor: Colors.white,
               ),
               child: const Text('Save'),
@@ -211,34 +204,55 @@ class _AiResultPageState extends State<AiResultPage> {
         );
       },
     );
+  }
 
-    if (result == null || result.isEmpty) return;
+  Future<void> _saveToSavedDocs() async {
+    final user = FirebaseAuth.instance.currentUser;
+    if (user == null || user.isAnonymous) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please sign in to save to Saved Docs.')),
+      );
+      return;
+    }
+
+    final isSummary = widget.mode == 'summary';
+    if (isSummary && (_summary == null || _summary!.trim().isEmpty)) return;
+    if (!isSummary && (_flashcards == null || _flashcards!.isEmpty)) return;
+
+    final title = await _promptSaveTitle(
+      isSummary ? 'Save Summary' : 'Save Q&A',
+    );
+    if (title == null || title.isEmpty) return;
 
     setState(() => _loading = true);
-
     try {
-      final data = _flashcards!
-          .map((f) => {'question': f.question, 'answer': f.answer})
-          .toList();
-      await FirebaseFirestore.instance.collection('assessments').add({
-        'userId': user.uid,
-        'userEmail': user.email,
-        'documentTitle': result,
-        'source': widget.source,
-        'createdAt': FieldValue.serverTimestamp(),
-        'questions': data,
-      });
-
+      final ok = isSummary
+          ? await SavedDocsService.saveSummary(
+              title: title,
+              summary: _summary!,
+              source: widget.source,
+            )
+          : await SavedDocsService.saveQa(
+              title: title,
+              questions: _flashcards!
+                  .map((f) => {'question': f.question, 'answer': f.answer})
+                  .toList(),
+              source: widget.source,
+            );
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Saved successfully!')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              ok ? 'Saved to Menu → Saved Docs' : 'Could not save document.',
+            ),
+          ),
+        );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error saving: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error saving: $e')),
+        );
       }
     } finally {
       if (mounted) setState(() => _loading = false);
@@ -665,10 +679,10 @@ class _AiResultPageState extends State<AiResultPage> {
                     _buildSpeakerButton(),
                   const SizedBox(width: 6),
 
-                  // Save button (Q&A only)
-                  if (!_loading && _error == null && !isSummary)
+                  // Save to Firebase (summary + Q&A)
+                  if (!_loading && _error == null)
                     GestureDetector(
-                      onTap: _saveAssessment,
+                      onTap: _saveToSavedDocs,
                       child: Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,

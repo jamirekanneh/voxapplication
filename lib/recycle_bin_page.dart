@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'theme_provider.dart';
+import 'language_provider.dart';
+import 'services/app_session.dart';
+import 'services/auth_session.dart';
+import 'widgets/firestore_data_gate.dart';
 
 class RecycleBinPage extends StatefulWidget {
   const RecycleBinPage({super.key});
@@ -19,83 +22,31 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
   @override
   void initState() {
     super.initState();
+    final bootUid = AppSession.bootstrapUid;
+    if (bootUid != null) {
+      _resolvedUid = bootUid;
+      _isGuest = false;
+      _loading = false;
+    }
     _resolveUser().then((_) {
       if (!_isGuest && _resolvedUid != null) {
         _cleanUpExpiredItems();
+        _purgeLegacyCommands();
       }
     });
   }
 
   Future<void> _resolveUser() async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      if (mounted)
-        setState(() {
-          _isGuest = true;
-          _loading = false;
-        });
-      return;
-    }
-
-    if (!user.isAnonymous) {
-      if (mounted)
-        setState(() {
-          _isGuest = false;
-          _resolvedUid = user.uid;
-          _loading = false;
-        });
-      return;
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    final hasProfile = prefs.getBool('hasProfile') ?? false;
-    if (!hasProfile) {
-      if (mounted)
-        setState(() {
-          _isGuest = true;
-          _loading = false;
-        });
-      return;
-    }
-
-    final uidDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-    if (uidDoc.exists) {
-      if (mounted)
-        setState(() {
-          _isGuest = false;
-          _resolvedUid = user.uid;
-          _loading = false;
-        });
-      return;
-    }
-
-    final savedEmail = prefs.getString('userEmail') ?? '';
-    if (savedEmail.isNotEmpty) {
-      final query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: savedEmail)
-          .limit(1)
-          .get();
-      if (query.docs.isNotEmpty) {
-        if (mounted)
-          setState(() {
-            _isGuest = false;
-            _resolvedUid = query.docs.first.id;
-            _loading = false;
-          });
-        return;
-      }
-    }
-
-    if (mounted)
-      setState(() {
-        _isGuest = true;
-        _loading = false;
-      });
+    final session = await AuthSession.resolveForApp();
+    if (!mounted) return;
+    final nextGuest = session.guest;
+    final nextUid = nextGuest ? null : (session.uid ?? _resolvedUid);
+    if (nextGuest == _isGuest && nextUid == _resolvedUid && !_loading) return;
+    setState(() {
+      _isGuest = nextGuest;
+      _resolvedUid = nextUid;
+      _loading = false;
+    });
   }
 
   CollectionReference get _bin => FirebaseFirestore.instance
@@ -132,19 +83,17 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
         noteData.removeWhere((_, v) => v == null);
         await FirebaseFirestore.instance.collection('notes').add(noteData);
       } else if (sourceCol == 'custom_commands') {
-        // Restore as a custom command
-        final cmdData = {
-          'id': data['commandId'] ?? doc.id,
-          'phrase': data['phrase'] ?? '',
-          'action': data['action'] ?? 'navigateHome',
-          'parameter': data['parameter'],
-          'isEnabled': data['isEnabled'] ?? true,
-          'userId': _resolvedUid,
-        };
-        cmdData.removeWhere((_, v) => v == null);
-        await FirebaseFirestore.instance
-            .collection('custom_commands')
-            .add(cmdData);
+        // Personalized commands were removed — discard legacy bin entries.
+        await _bin.doc(doc.id).delete();
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Removed legacy command "$itemName" from recycle bin.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
       } else {
         // Restore as a library file
         final libData = {
@@ -376,9 +325,25 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     return remaining < 0 ? 0 : remaining;
   }
 
+  Future<void> _purgeLegacyCommands() async {
+    if (_resolvedUid == null) return;
+    try {
+      final snap = await _bin
+          .where('sourceCollection', isEqualTo: 'custom_commands')
+          .get();
+      if (snap.docs.isEmpty) return;
+      final batch = FirebaseFirestore.instance.batch();
+      for (final doc in snap.docs) {
+        batch.delete(doc.reference);
+      }
+      await batch.commit();
+    } catch (e) {
+      debugPrint('Failed to purge legacy commands from recycle bin: $e');
+    }
+  }
+
   IconData _iconForType(String? fileType, String? sourceCol) {
     if (sourceCol == 'notes') return Icons.note_alt_outlined;
-    if (sourceCol == 'custom_commands') return Icons.mic_none_rounded;
     switch (fileType?.toLowerCase()) {
       case 'pdf':
         return Icons.picture_as_pdf_outlined;
@@ -400,14 +365,30 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
 
   Color _colorForType(String? sourceCol) {
     if (sourceCol == 'notes') return VoxColors.primary(context);
-    if (sourceCol == 'custom_commands') return const Color(0xFF9B59B6);
     return VoxColors.primary(context);
   }
 
-  String _typeLabel(String? fileType, String? sourceCol) {
-    if (sourceCol == 'notes') return 'Note';
-    if (sourceCol == 'custom_commands') return 'Command';
-    return (fileType ?? 'file').toUpperCase();
+  String _typeLabel(String? fileType, String? sourceCol, LanguageProvider lang) {
+    if (sourceCol == 'notes') return lang.t('file_type_note');
+    switch (fileType?.toLowerCase()) {
+      case 'pdf':
+        return lang.t('file_type_pdf');
+      case 'doc':
+        return lang.t('file_type_doc');
+      case 'docx':
+        return lang.t('file_type_docx');
+      case 'ppt':
+        return lang.t('file_type_ppt');
+      case 'pptx':
+        return lang.t('file_type_pptx');
+      case 'txt':
+      case 'md':
+        return lang.t('file_type_txt');
+      case 'scan':
+        return lang.t('file_type_scan');
+      default:
+        return lang.t('file_type_file');
+    }
   }
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -480,6 +461,8 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>();
+
     if (_loading) {
       return Scaffold(
         backgroundColor: VoxColors.bg(context),
@@ -492,13 +475,47 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
       );
     }
 
-    // â”€â”€ Guest Guard â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    if (!_isGuest && _resolvedUid == null) {
+      return Scaffold(
+        backgroundColor: VoxColors.bg(context),
+        appBar: AppBar(
+          title: Text(
+            lang.t('recycle_bin_title'),
+            style: TextStyle(
+              color: VoxColors.onBg(context),
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          iconTheme: IconThemeData(color: VoxColors.onBg(context)),
+        ),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: VoxColors.primary(context)),
+              const SizedBox(height: 16),
+              Text(
+                lang.t('welcome_back'),
+                style: TextStyle(
+                  color: VoxColors.textSecondary(context),
+                  fontSize: 14,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Explicit guest only (Continue Anyway) — not for recognized devices.
     if (_isGuest) {
       return Scaffold(
         backgroundColor: VoxColors.bg(context),
         appBar: AppBar(
           title: Text(
-            'Recycle Bin',
+            lang.t('recycle_bin_title'),
             style: TextStyle(
               color: VoxColors.onBg(context),
               fontWeight: FontWeight.bold,
@@ -529,7 +546,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                 ),
                 const SizedBox(height: 24),
                 Text(
-                  'Sign in to use Recycle Bin',
+                  lang.t('recycle_bin_sign_in_title'),
                   style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
@@ -540,7 +557,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'The Recycle Bin is for registered users only. Guest data is removed when you leave the app. Create an account to unlock 30-day recovery.',
+                  lang.t('recycle_bin_sign_in_body'),
                   style: TextStyle(
                     fontSize: 13,
                     color: VoxColors.textSecondary(context),
@@ -561,12 +578,12 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
     );
 
     return DefaultTabController(
-      length: 4,
+      length: 3,
       child: Scaffold(
         backgroundColor: VoxColors.bg(context),
         appBar: AppBar(
           title: Text(
-            'Recycle Bin',
+            lang.t('recycle_bin_title'),
             style: TextStyle(
               color: VoxColors.onBg(context),
               fontWeight: FontWeight.bold,
@@ -585,15 +602,18 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
               fontWeight: FontWeight.w700,
               fontSize: 13,
             ),
-            tabs: const [
-              Tab(text: 'Notes'),
-              Tab(text: 'Recordings'),
-              Tab(text: 'Uploads'),
-              Tab(text: 'Commands'),
+            tabs: [
+              Tab(text: lang.t('recycle_bin_tab_notes')),
+              Tab(text: lang.t('recycle_bin_tab_recordings')),
+              Tab(text: lang.t('recycle_bin_tab_uploads')),
             ],
           ),
         ),
-        body: StreamBuilder<QuerySnapshot>(
+        body: FirestoreDataGate(
+          userId: _resolvedUid!,
+          loadingMessage: lang.t('recycle_bin_title'),
+          builder: (context) => StreamBuilder<QuerySnapshot>(
+          key: ValueKey('recycle_bin_$_resolvedUid'),
           stream: _bin
               .where('deletedAt', isGreaterThan: thirtyDaysAgo)
               .orderBy('deletedAt', descending: true)
@@ -603,6 +623,13 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
               return const Center(child: CircularProgressIndicator());
             }
             if (snapshot.hasError) {
+              if (firestoreSnapshotDenied(snapshot.error, _resolvedUid!)) {
+                return Center(
+                  child: CircularProgressIndicator(
+                    color: VoxColors.primary(context),
+                  ),
+                );
+              }
               return Center(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -653,11 +680,6 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
             final uploadsDocs = docs.where((d) {
               final val = d.data() as Map<String, dynamic>;
               return val['sourceCollection'] == 'library';
-            }).toList();
-
-            final commandsDocs = docs.where((d) {
-              final val = d.data() as Map<String, dynamic>;
-              return val['sourceCollection'] == 'custom_commands';
             }).toList();
 
             return Column(
@@ -716,7 +738,6 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                       _buildList(notesDocs),
                       _buildList(recordingsDocs),
                       _buildList(uploadsDocs),
-                      _buildList(commandsDocs),
                     ],
                   ),
                 ),
@@ -724,11 +745,13 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
             );
           },
         ),
+        ),
       ),
     );
   }
 
   Widget _buildList(List<DocumentSnapshot> docs) {
+    final lang = context.watch<LanguageProvider>();
     if (docs.isEmpty) {
       return Center(
         child: Column(
@@ -776,7 +799,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
         final daysLeft = _daysRemaining(data['deletedAt']);
         final typeColor = _colorForType(sourceCol);
         final typeIcon = _iconForType(fileType, sourceCol);
-        final typeLabel = _typeLabel(fileType, sourceCol);
+        final typeLabel = _typeLabel(fileType, sourceCol, lang);
 
         return Container(
           margin: const EdgeInsets.only(bottom: 12),

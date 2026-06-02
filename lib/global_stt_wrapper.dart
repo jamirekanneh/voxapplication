@@ -65,26 +65,31 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
 
   void _onMicPriorityChanged() {
     if (!mounted) return;
-    if (!MicCoordinator.instance.assistantMayListen && _isHardwareListening) {
+    if (MicCoordinator.instance.searchMicActive) return;
+
+    final provider = context.read<CustomCommandsProvider>();
+    if (MicCoordinator.instance.assistantMayListen &&
+        provider.assistantModeEnabled &&
+        !_isHardwareListening) {
+      unawaited(_startListening(manual: true));
+      return;
+    }
+
+    if (!MicCoordinator.instance.assistantMicActive && _isHardwareListening) {
       unawaited(_releaseMicForRecording());
     }
   }
 
   void _onProviderChange() {
     if (!mounted) return;
+    if (MicCoordinator.instance.searchMicActive) return;
     final assistantEnabled =
         context.read<CustomCommandsProvider>().assistantModeEnabled;
-    if (assistantEnabled &&
-        MicCoordinator.instance.assistantMayListen &&
-        !_isHardwareListening) {
-      _startListening(manual: false);
-    } else if (!assistantEnabled && !_showListeningUI && _isHardwareListening) {
-      // If toggled off while passively listening, stop hardware
-      _speech.stop();
-    } else if (assistantEnabled &&
-        !MicCoordinator.instance.assistantMayListen &&
-        _isHardwareListening) {
-      unawaited(_releaseMicForRecording());
+    if (!assistantEnabled) {
+      MicCoordinator.instance.setAssistantMicActive(false);
+      if (_isHardwareListening) {
+        unawaited(_releaseMicForRecording());
+      }
     }
   }
 
@@ -134,12 +139,11 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     final status = await Permission.microphone.request();
     if (status != PermissionStatus.granted) return;
 
-    if (!_speechAvailable || _isHardwareListening) return;
-
-    final langProvider = context.read<LanguageProvider>();
-    final tts = context.read<TtsService>();
-    if (tts.isPlaying) {
-      await tts.togglePause(langProvider.currentLocale);
+    if (!_speechAvailable) return;
+    if (_isHardwareListening) {
+      await _speech.stop();
+      await _speech.cancel();
+      if (mounted) _updateListening(hardware: false, ui: false);
     }
 
     // Force cancel any stuck session before starting
@@ -148,17 +152,24 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
 
     if (!mounted) return;
 
+    final langProvider = context.read<LanguageProvider>();
+
     _updateListening(hardware: true, ui: manual);
     setState(() {
       _lastWords = '';
     });
+
+    MicCoordinator.instance.unregisterReleaseHandler(_releaseMicForRecording);
+    await MicCoordinator.instance.releaseAll();
+    if (!mounted) return;
+    MicCoordinator.instance.registerReleaseHandler(_releaseMicForRecording);
 
     await _speech.listen(
       onResult: (result) {
         debugPrint('STT RESULT: "${result.recognizedWords}"');
         if (mounted) setState(() => _lastWords = result.recognizedWords);
       },
-      localeId: langProvider.currentLocale,
+      localeId: langProvider.sttLocale,
       listenFor: const Duration(seconds: 8),
       pauseFor: const Duration(seconds: 2),
       listenOptions: stt.SpeechListenOptions(
@@ -201,52 +212,37 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     }
 
     final commandsProvider = context.read<CustomCommandsProvider>();
-    if (!commandsProvider.isLoaded) return;
+    if (!commandsProvider.isLoaded) {
+      _checkAutoRestart();
+      return;
+    }
 
-    // RE-ATTACH/INTENT-BASED WAKING: 
-    // If the STT clipped the wake-word, we check if the command is a high-confidence local match.
-    final matchedFailsafe = (spokenText == 'menu' || spokenText == 'notes' || 
-                             spokenText == 'dictionary' || spokenText == 'home' ||
-                             spokenText.contains('open menu') || spokenText.contains('go to menu') ||
-                             spokenText.contains('profile') || spokenText.contains('language') ||
-                             spokenText.contains('commands') || spokenText.contains('statistics') ||
-                             spokenText.contains('about') || spokenText.contains('contact') ||
-                             spokenText.contains('faq') || spokenText.contains('recommendation') ||
-                             spokenText.contains('recycle bin') || spokenText.contains('history'));
+    final assistantOn = commandsProvider.assistantModeEnabled;
 
-    // Passive Wake Word Engine
-    if (commandsProvider.assistantModeEnabled && !_showListeningUI) {
-      if (!hasWakeWord && !matchedFailsafe) {
-        debugPrint('PASSIVE MODE: Ignoring - no wake word or failsafe detected in "$spokenText"');
-        _checkAutoRestart();
-        return; 
+    // Wake word only (e.g. "Hey Vox") — prompt and keep listening.
+    if (spokenText.isEmpty && hasWakeWord) {
+      debugPrint('WAKE WORD ONLY: Activating UI and acknowledging...');
+      _updateListening(hardware: true, ui: true);
+      if (commandsProvider.voiceFeedbackEnabled) {
+        final ttsService = context.read<TtsService>();
+        final locale = context.read<LanguageProvider>().currentLocale;
+        ttsService.play('', 'Hey! I am listening.', locale);
       }
-      
-      if (spokenText.isEmpty && hasWakeWord) {
-        // Said "Vox" and paused. Acknowledge and activate UI.
-        debugPrint('WAKE WORD ONLY: Activating UI and acknowledging...');
-        _updateListening(hardware: true, ui: true);
-        
-        if (commandsProvider.voiceFeedbackEnabled) {
-          final ttsService = context.read<TtsService>();
-          final locale = context.read<LanguageProvider>().currentLocale;
-          ttsService.play('', 'Hey! I am listening.', locale);
-        }
-        
-        _startListening(manual: true);
-        return;
-      }
-      
-      if (matchedFailsafe && !hasWakeWord) {
-        debugPrint('PASSIVE MODE: Intent-based wake triggered by: "$spokenText"');
-      }
-    } else {
-      // Active UI Engine
-      if (spokenText.isEmpty) {
-        debugPrint('ACTIVE MODE: Ignoring empty speech');
-        _checkAutoRestart();
-        return;
-      }
+      _startListening(manual: true);
+      return;
+    }
+
+    // Assistant off and not manually activated (double-tap) — ignore.
+    if (!assistantOn && !_showListeningUI) {
+      debugPrint('IGNORE: Assistant off and no manual listen UI');
+      _checkAutoRestart();
+      return;
+    }
+
+    if (spokenText.isEmpty) {
+      debugPrint('IGNORE: Empty speech');
+      _checkAutoRestart();
+      return;
     }
 
     final ttsService = context.read<TtsService>();
@@ -281,19 +277,19 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
 
   void _checkAutoRestart() {
     if (!mounted) return;
+    if (MicCoordinator.instance.searchMicActive) return;
+    if (!MicCoordinator.instance.assistantMicActive) return;
     if (!MicCoordinator.instance.assistantMayListen) return;
     final assistantEnabled =
         context.read<CustomCommandsProvider>().assistantModeEnabled;
     if (assistantEnabled && !_isHardwareListening) {
       Future.delayed(const Duration(milliseconds: 500), () async {
         if (!mounted) return;
-        final stillEnabled =
-            context.read<CustomCommandsProvider>().assistantModeEnabled;
-        if (stillEnabled &&
+        if (MicCoordinator.instance.assistantMicActive &&
             MicCoordinator.instance.assistantMayListen &&
             !_isHardwareListening) {
           await _initSpeech();
-          if (mounted) _startListening(manual: false); // Auto restart hidden
+          if (mounted) _startListening(manual: true);
         }
       });
     }
@@ -305,12 +301,21 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
       label: 'Double tap anywhere to activate voice commands',
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onDoubleTap: _speechAvailable ? () => _startListening(manual: true) : null,
+        onDoubleTap: _speechAvailable
+            ? () {
+                final provider = context.read<CustomCommandsProvider>();
+                if (!provider.assistantModeEnabled) {
+                  provider.setAssistantMode(true);
+                }
+                MicCoordinator.instance.setAssistantMicActive(true);
+                _startListening(manual: true);
+              }
+            : null,
         child: Stack(
           children: [
             widget.child,
 
-            if (_showListeningUI)
+            if (_showListeningUI && !MicCoordinator.instance.searchMicActive)
               Positioned(
                 bottom: 100,
                 left: 0,

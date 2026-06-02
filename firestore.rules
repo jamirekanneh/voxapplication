@@ -45,6 +45,12 @@ service cloud.firestore {
         && request.auth.uid == request.resource.data.userId;
     }
 
+    // Device registry: link physical device to last signed-in user (cold start).
+    match /devices/{deviceId} {
+      allow read: if true;
+      allow create, update: if request.auth != null;
+    }
+
     // Analytics: only developers can read aggregated data
     match /analytics/{document=**} {
       allow read: if request.auth != null && request.auth.token.email in [

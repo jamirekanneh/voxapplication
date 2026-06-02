@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'auth_session.dart';
+import 'auth_restore.dart';
 import 'device_linked_user.dart';
 
 enum LaunchDestination { home, profile }
@@ -18,8 +19,26 @@ class AppSession {
   static const Duration _firestoreTimeout = Duration(seconds: 10);
   static const Duration _authTimeout = Duration(seconds: 12);
 
-  /// Last user linked on this device (set when user signs in on this phone).
+  /// Last user linked on this device (set when device is recognized).
   static DeviceLinkedUser? lastRestoredDeviceUser;
+
+  /// Firebase Auth matches the device-linked user (required for Firestore reads).
+  static bool get firestoreReadyForDevice {
+    final linked = lastRestoredDeviceUser;
+    if (linked == null) return false;
+    return AuthSession.canQueryFirestore(linked.userId);
+  }
+
+  /// UID ready immediately after splash bootstrap — avoids list flash/spinner.
+  static String? get bootstrapUid {
+    final linked = lastRestoredDeviceUser;
+    if (linked != null && linked.userId.isNotEmpty) {
+      return linked.userId;
+    }
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && !user.isAnonymous) return user.uid;
+    return null;
+  }
 
   static Future<T?> _timeout<T>(
     Future<T?> future,
@@ -62,26 +81,182 @@ class AppSession {
     return null;
   }
 
-  static Future<DeviceLinkedUser?> getDeviceLinkedUser() async {
+  static Future<DeviceLinkedUser?> getDeviceLinkedUser({int attempts = 3}) async {
     final id = await deviceId();
     if (id == null || id.isEmpty) return null;
 
-    final doc = await _timeout(
-      FirebaseFirestore.instance.collection('devices').doc(id).get(),
-      _firestoreTimeout,
-    );
+    for (var i = 0; i < attempts; i++) {
+      final doc = await _timeout(
+        FirebaseFirestore.instance.collection('devices').doc(id).get(),
+        _firestoreTimeout,
+      );
 
-    if (doc == null || !doc.exists) return null;
+      if (doc != null && doc.exists) {
+        final data = doc.data() ?? {};
+        final uid = (data['lastUserId'] as String?)?.trim();
+        if (uid != null && uid.isNotEmpty) {
+          return DeviceLinkedUser(
+            userId: uid,
+            email: (data['lastUserEmail'] as String?)?.trim(),
+            username: (data['lastUserName'] as String?)?.trim(),
+          );
+        }
+        return null;
+      }
 
-    final data = doc.data() ?? {};
-    final uid = (data['lastUserId'] as String?)?.trim();
-    if (uid == null || uid.isEmpty) return null;
+      if (i < attempts - 1) {
+        await Future<void>.delayed(Duration(milliseconds: 350 * (i + 1)));
+      }
+    }
+    return null;
+  }
+
+  /// True when this phone is linked to an account (device doc or saved prefs).
+  static Future<bool> isDeviceRecognized() async {
+    if (await AuthSession.isExplicitGuestMode()) return false;
+    if (await AuthSession.savedUserId() != null) return true;
+    final prefs = await SharedPreferences.getInstance();
+    final uid = prefs.getString('userId')?.trim();
+    if ((prefs.getBool('hasProfile') ?? false) &&
+        uid != null &&
+        uid.isNotEmpty) {
+      return true;
+    }
+    final linked = await getDeviceLinkedUser(attempts: 2);
+    return linked != null;
+  }
+
+  /// Loads username + email from device doc, prefs, and `users/{uid}` when auth allows.
+  static Future<DeviceLinkedUser> enrichLinkedUser(DeviceLinkedUser linked) async {
+    var username = linked.username?.trim() ?? '';
+    var email = linked.email?.trim() ?? '';
+
+    final prefs = await SharedPreferences.getInstance();
+    if (username.isEmpty) {
+      username = prefs.getString('userName')?.trim() ?? '';
+    }
+    if (email.isEmpty) {
+      email = prefs.getString('userEmail')?.trim() ?? '';
+    }
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.uid == linked.userId) {
+      if (username.isEmpty && (user.displayName?.isNotEmpty ?? false)) {
+        username = user.displayName!.trim();
+      }
+      if (email.isEmpty && (user.email?.isNotEmpty ?? false)) {
+        email = user.email!.trim();
+      }
+      try {
+        final doc = await _timeout(
+          FirebaseFirestore.instance.collection('users').doc(linked.userId).get(),
+          _firestoreTimeout,
+        );
+        if (doc != null && doc.exists) {
+          final data = doc.data() ?? {};
+          if (username.isEmpty) {
+            username = (data['username'] as String? ?? '').trim();
+          }
+          if (email.isEmpty) {
+            email = (data['email'] as String? ?? '').trim();
+          }
+        }
+      } catch (e) {
+        debugPrint('AppSession enrichLinkedUser: $e');
+      }
+    }
 
     return DeviceLinkedUser(
-      userId: uid,
-      email: data['lastUserEmail'] as String?,
-      username: data['lastUserName'] as String?,
+      userId: linked.userId,
+      email: email.isEmpty ? null : email,
+      username: username.isEmpty ? null : username,
     );
+  }
+
+  /// Device ID → userId + name/email in prefs; sync `devices` doc; restore auth silently.
+  static Future<DeviceLinkedUser?> recognizeAndPrepareDevice() async {
+    if (await AuthSession.isExplicitGuestMode()) return null;
+
+    DeviceLinkedUser? linked = await getDeviceLinkedUser(attempts: 3);
+    final savedUid = await AuthSession.savedUserId();
+    if (linked == null && savedUid != null) {
+      linked = DeviceLinkedUser(userId: savedUid);
+    }
+    if (linked == null) {
+      final prefs = await SharedPreferences.getInstance();
+      final uid = prefs.getString('userId')?.trim();
+      if ((prefs.getBool('hasProfile') ?? false) &&
+          uid != null &&
+          uid.isNotEmpty) {
+        linked = DeviceLinkedUser(userId: uid);
+      }
+    }
+    if (linked == null) return null;
+
+    linked = await enrichLinkedUser(linked);
+    await AuthSession.restoreFromDevice(linked);
+    lastRestoredDeviceUser = linked;
+
+    await AuthSession.clearConflictingAuthSession();
+    await AuthSession.waitForAuthReady(timeout: _authTimeout);
+    await AuthRestore.restoreForSavedUser(
+      linked.userId,
+      timeout: _authTimeout + const Duration(seconds: 8),
+    );
+
+    linked = await enrichLinkedUser(linked);
+    await AuthSession.restoreFromDevice(linked);
+    lastRestoredDeviceUser = linked;
+
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && !user.isAnonymous) {
+      await AuthSession.markSignedIn(user);
+    }
+
+    await markSetupComplete(userId: linked.userId);
+    debugPrint(
+      'AppSession: device recognized uid=${linked.userId} '
+      'name=${linked.username} email=${linked.email}',
+    );
+    return linked;
+  }
+
+  /// Display name for welcome snackbar after device recognition.
+  static Future<String?> welcomeDisplayName() async {
+    final linked = lastRestoredDeviceUser;
+    if (linked?.username?.isNotEmpty ?? false) return linked!.username;
+
+    final prefs = await SharedPreferences.getInstance();
+    final fromPrefs = prefs.getString('userName')?.trim();
+    if (fromPrefs != null && fromPrefs.isNotEmpty) return fromPrefs;
+
+    final user = FirebaseAuth.instance.currentUser;
+    final fromAuth = user?.displayName?.trim();
+    if (fromAuth != null && fromAuth.isNotEmpty) return fromAuth;
+
+    return null;
+  }
+
+  /// Restore prefs from device/saved UID, then wait for Firebase Auth persistence.
+  static Future<bool> restoreLocalAndAwaitAuth({
+    required DeviceLinkedUser linked,
+    Duration authWait = const Duration(seconds: 12),
+  }) async {
+    final enriched = await enrichLinkedUser(linked);
+    await AuthSession.restoreFromDevice(enriched);
+    lastRestoredDeviceUser = enriched;
+    await AuthSession.clearConflictingAuthSession();
+    await AuthSession.waitForAuthReady(timeout: authWait);
+    var user = FirebaseAuth.instance.currentUser;
+    if (user != null && user.isAnonymous && user.uid == enriched.userId) {
+      return true;
+    }
+    if (user != null && !user.isAnonymous) {
+      await AuthSession.markSignedIn(user);
+      await markSetupComplete(userId: user.uid);
+      return true;
+    }
+    return false;
   }
 
   static Future<void> markSetupComplete({String? userId}) async {
@@ -103,6 +278,17 @@ class AppSession {
       await prefs.setString('userId', userId);
       email = prefs.getString('userEmail');
       username = prefs.getString('userName');
+    }
+
+    final linked = lastRestoredDeviceUser;
+    if (linked != null && linked.userId == userId) {
+      if ((username == null || username.isEmpty) &&
+          linked.username?.isNotEmpty == true) {
+        username = linked.username;
+      }
+      if ((email == null || email.isEmpty) && linked.email?.isNotEmpty == true) {
+        email = linked.email;
+      }
     }
 
     final id = await deviceId();
@@ -144,7 +330,7 @@ class AppSession {
     );
   }
 
-  /// Local prefs + device doc lookup. Prefer home when this phone was used before.
+  /// Returning phone → Home. New phone → Profile setup only.
   static Future<LaunchDestination> resolveLaunchDestination() async {
     lastRestoredDeviceUser = null;
 
@@ -152,49 +338,34 @@ class AppSession {
       return LaunchDestination.home;
     }
 
-    // Fast path: prefs survive reinstall/cold start faster than Firebase Auth.
-    final savedUid = await AuthSession.savedUserId();
-    if (savedUid != null) {
-      final linked = DeviceLinkedUser(userId: savedUid);
-      await AuthSession.restoreFromDevice(linked);
-      lastRestoredDeviceUser = linked;
-      unawaited(
-        AuthSession.waitForSignedInUser(timeout: _authTimeout).then((user) {
-          if (user != null) markSetupComplete(userId: user.uid);
-        }),
+    // 1. Device registry + prefs (primary path for returning users).
+    final prepared = await recognizeAndPrepareDevice();
+    if (prepared != null) {
+      return LaunchDestination.home;
+    }
+
+    // 2. Firebase Auth session already restored.
+    await AuthSession.waitForAuthReady(timeout: _authTimeout);
+    var user = FirebaseAuth.instance.currentUser;
+    if (user != null && !user.isAnonymous) {
+      await AuthSession.markSignedIn(user);
+      await markSetupComplete(userId: user.uid);
+      lastRestoredDeviceUser = DeviceLinkedUser(
+        userId: user.uid,
+        email: user.email,
+        username: user.displayName,
       );
       return LaunchDestination.home;
     }
 
-    final prefs = await SharedPreferences.getInstance();
-    if (prefs.getBool('hasProfile') == true) {
-      final uid = prefs.getString('userId')?.trim();
-      if (uid != null && uid.isNotEmpty) {
-        final linked = DeviceLinkedUser(userId: uid);
-        await AuthSession.restoreFromDevice(linked);
-        lastRestoredDeviceUser = linked;
-        return LaunchDestination.home;
-      }
-    }
-
-    // Device record in Firestore (same phone, prefs may have been cleared).
-    final linked = await getDeviceLinkedUser();
-    if (linked != null) {
-      await AuthSession.restoreFromDevice(linked);
-      lastRestoredDeviceUser = linked;
-      unawaited(
-        AuthSession.waitForSignedInUser(timeout: _authTimeout).then((user) {
-          if (user != null) markSetupComplete(userId: user.uid);
-        }),
+    user = await AuthSession.waitForSignedInUser(timeout: _authTimeout);
+    if (user != null && !user.isAnonymous) {
+      await markSetupComplete(userId: user.uid);
+      lastRestoredDeviceUser = DeviceLinkedUser(
+        userId: user.uid,
+        email: user.email,
+        username: user.displayName,
       );
-      return LaunchDestination.home;
-    }
-
-    final signedIn = await AuthSession.waitForSignedInUser(
-      timeout: _authTimeout,
-    );
-    if (signedIn != null) {
-      await markSetupComplete(userId: signedIn.uid);
       return LaunchDestination.home;
     }
 
@@ -202,23 +373,33 @@ class AppSession {
     return LaunchDestination.profile;
   }
 
-  /// Used when splash routing times out — never send known devices to profile.
+  /// Splash timeout fallback — never send a known device to profile.
   static Future<LaunchDestination> resolveLaunchFallback() async {
     if (await AuthSession.isExplicitGuestMode()) {
       return LaunchDestination.home;
     }
-    final savedUid = await AuthSession.savedUserId();
-    if (savedUid != null) {
-      await AuthSession.restoreFromDevice(DeviceLinkedUser(userId: savedUid));
-      lastRestoredDeviceUser = DeviceLinkedUser(userId: savedUid);
+
+    final prepared = await recognizeAndPrepareDevice();
+    if (prepared != null) return LaunchDestination.home;
+
+    await AuthSession.waitForAuthReady(timeout: const Duration(seconds: 5));
+    final user = FirebaseAuth.instance.currentUser;
+    if (user != null && !user.isAnonymous) {
+      await AuthSession.markSignedIn(user);
       return LaunchDestination.home;
     }
-    final linked = await getDeviceLinkedUser();
+
+    if (await AuthSession.savedUserId() != null) {
+      return LaunchDestination.home;
+    }
+
+    final linked = await getDeviceLinkedUser(attempts: 2);
     if (linked != null) {
       await AuthSession.restoreFromDevice(linked);
       lastRestoredDeviceUser = linked;
       return LaunchDestination.home;
     }
+
     return LaunchDestination.profile;
   }
 }

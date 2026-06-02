@@ -1,10 +1,13 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:provider/provider.dart';
-import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'custom_commands_provider.dart';
+import 'services/app_session.dart';
+import 'services/auth_session.dart';
 import 'theme_provider.dart';
 
 class CustomCommandsPage extends StatefulWidget {
@@ -21,6 +24,12 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
   @override
   void initState() {
     super.initState();
+    final bootUid = AppSession.bootstrapUid;
+    if (bootUid != null) {
+      _resolvedUid = bootUid;
+      _isAnonymousUser = false;
+      _loadCommandsForUser(bootUid);
+    }
     _resolveUser();
   }
 
@@ -28,85 +37,18 @@ class _CustomCommandsPageState extends State<CustomCommandsPage> {
   //  RESOLVE USER â€” identical logic to VoxHomePage
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _resolveUser() async {
-    final user = FirebaseAuth.instance.currentUser;
-
-    if (user == null) {
-      if (mounted) {
-        setState(() {
-          _isAnonymousUser = true;
-          _resolvedUid = null;
-        });
-      }
-      return;
-    }
-
-    if (!user.isAnonymous) {
-      if (mounted) {
-        setState(() {
-          _isAnonymousUser = false;
-          _resolvedUid = user.uid;
-        });
-      }
-      _loadCommandsForUser(user.uid);
-      return;
-    }
-
-    final prefs = await SharedPreferences.getInstance();
-    final hasProfile = prefs.getBool('hasProfile') ?? false;
-
-    if (!hasProfile) {
-      if (mounted) {
-        setState(() {
-          _isAnonymousUser = true;
-          _resolvedUid = null;
-        });
-      }
-      return;
-    }
-
-    final uidDoc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
-
-    if (uidDoc.exists) {
-      if (mounted) {
-        setState(() {
-          _isAnonymousUser = false;
-          _resolvedUid = user.uid;
-        });
-      }
-      _loadCommandsForUser(user.uid);
-      return;
-    }
-
-    // Fallback: look up by saved email (same as VoxHomePage)
-    final savedEmail = prefs.getString('userEmail') ?? '';
-    if (savedEmail.isNotEmpty) {
-      final query = await FirebaseFirestore.instance
-          .collection('users')
-          .where('email', isEqualTo: savedEmail)
-          .limit(1)
-          .get();
-
-      if (query.docs.isNotEmpty) {
-        final docUid = query.docs.first.id;
-        if (mounted) {
-          setState(() {
-            _isAnonymousUser = false;
-            _resolvedUid = docUid;
-          });
-        }
-        _loadCommandsForUser(docUid);
-        return;
-      }
-    }
-
-    if (mounted) {
-      setState(() {
-        _isAnonymousUser = true;
-        _resolvedUid = null;
-      });
+    final session = await AuthSession.resolveForApp();
+    if (!mounted) return;
+    final nextGuest = session.guest;
+    final nextUid = nextGuest ? null : (session.uid ?? _resolvedUid);
+    final uidChanged = nextUid != _resolvedUid;
+    if (nextGuest == _isAnonymousUser && !uidChanged) return;
+    setState(() {
+      _isAnonymousUser = nextGuest;
+      _resolvedUid = nextUid;
+    });
+    if (nextUid != null && uidChanged) {
+      await _loadCommandsForUser(nextUid);
     }
   }
 

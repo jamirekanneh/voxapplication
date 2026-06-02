@@ -309,16 +309,32 @@ class AiService {
   /// Assistant for generic questions.
   static Future<String> askAssistant(String userMessage) {
     const fallbackSystem =
-        'You are Vox Assistant, an AI helper for the Vox app. '
-        'You must give accurate answers based on these facts about the app: '
-        '1) Sign In: The app uses passwordless Magic Link via email. '
-        '2) Dictionary: Allows searching terms with General, Medical, and Technical dictionaries. '
-        '3) Notes/Library: Users can upload documents (PDF/DOCX/Text/Scans). TTS can read them aloud. '
-        '4) AI Study Buddy: Inside the reader, users can tap "Study Buddy" to chat with the document and ask questions about the text. '
-        '5) Accessibility & Focus: Inside the reader settings (gear icon), users can toggle OpenDyslexic font and Bionic Reading focus mode. '
-        '6) Reading Goals: Users can set a daily reading target in the Statistics page and track their Learning Streak. '
-        '7) Voice Commands: Global hands-free control via STT. '
-        'Keep answers friendly, concise, and do not invent features not listed here.';
+        'You are Vox Assistant, an AI helper for the Vox mobile app. '
+        'Answer only from these facts. Be friendly, concise, and do not invent features.\n\n'
+        'NAVIGATION: Home (library/uploaded files), Notes (voice notes + transcripts), '
+        'Dictionary, Menu, Upload (+ center button), History.\n\n'
+        'SIGN IN: Passwordless magic link by email. Known devices can open Home quickly; '
+        'guest mode stores data locally only.\n\n'
+        'HOME: Library of uploaded PDFs/DOCX/scans with folders and text search. '
+        'Tap the mic in the search bar for voice search (pauses the hands-free Assistant). '
+        'Enable Assistant on Home for navigation commands like "open notes" or "open dictionary". '
+        'Double-tap anywhere for voice commands when Assistant is on.\n\n'
+        'NOTES: Record voice notes, auto-transcribe, edit transcripts, play audio, '
+        'TTS read-aloud, Summarize, Q&A Generator, and Study Buddy chat about the transcript. '
+        'Save transcripts to Saved Docs when signed in.\n\n'
+        'DICTIONARY: General, Medical, and Technical lookups; type or use the search-bar mic. '
+        'Voice commands can open dictionary with a search term.\n\n'
+        'READER: Open a file from Home to read with TTS. Study Buddy asks questions about the document. '
+        'Summarize and Q&A Generator. OpenDyslexic and Bionic Reading in reader settings.\n\n'
+        'MENU: Profile, Language, Theme, Statistics (XP, levels, achievements, reading streaks), '
+        'Reminders (schedule phone notifications to study a library file or note), '
+        'Saved Docs (cloud summaries, Q&A sets, saved note transcripts with search and export), '
+        'Recommendations, About, FAQs (this chat), Contact, Recycle Bin (restore deleted notes, '
+        'recordings, uploads), Logout.\n\n'
+        'FAQs PAGE & MENU CHATBOT: Floating "?" button opens Vox Assistant for app help.\n\n'
+        'RECYCLE BIN: Restore deleted notes, recordings, and uploads—not voice commands.\n\n'
+        'STATISTICS: Track usage, daily reading goals, streaks, gamification; syncs when signed in.\n\n'
+        'LANGUAGES: English, Spanish, French, Arabic, Turkish, Chinese (dictionary limited for Chinese).';
 
     final nlpUrl = dotenv.env['NLP_API_URL']?.trim() ?? '';
     if (nlpUrl.isNotEmpty) {
@@ -392,6 +408,50 @@ class AiService {
   /// Provides guidance on how to use the Vox app.
   static Future<String> helpUser(String userQuery) {
     return askAssistant(userQuery);
+  }
+
+  /// Answers questions about a specific document or note transcript.
+  static Future<String> askAboutDocument({
+    required String documentText,
+    required String userMessage,
+    String? documentTitle,
+    List<Map<String, String>>? conversationHistory,
+  }) {
+    final text = _prepareDocumentText(documentText);
+    final title = (documentTitle?.trim().isNotEmpty ?? false)
+        ? documentTitle!.trim()
+        : 'Document';
+    const docMax = 10000;
+    final docBody = text.length > docMax
+        ? '${text.substring(0, docMax)}\n\n[Document truncated for length...]'
+        : text;
+
+    final history = StringBuffer();
+    if (conversationHistory != null && conversationHistory.isNotEmpty) {
+      history.writeln('\nPrevious conversation:');
+      for (final msg in conversationHistory) {
+        final role = msg['role'] == 'user' ? 'User' : 'Assistant';
+        final content = (msg['content'] ?? '').trim();
+        if (content.isNotEmpty) {
+          history.writeln('$role: $content');
+        }
+      }
+      history.writeln();
+    }
+
+    const system =
+        'You are Vox Study Buddy, a helpful reading assistant. '
+        'Answer questions using ONLY the provided document text. '
+        'If the answer is not in the document, say so clearly and briefly. '
+        'Keep answers concise, friendly, and accurate. Plain text only.';
+
+    final prompt =
+        'Document title: $title\n\n'
+        'Document text:\n"""$docBody"""\n'
+        '${history.toString()}'
+        'User question:\n"""${userMessage.trim()}"""';
+
+    return _callLlm(system, prompt, temperature: 0.35, maxTokens: 2048);
   }
 }
 
