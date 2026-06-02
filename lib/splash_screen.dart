@@ -11,8 +11,8 @@ import 'services/app_bootstrap.dart';
 import 'services/app_session.dart';
 import 'services/auth_session.dart';
 
-/// Minimum time the branded splash (VOX + tagline + INITIALIZING) stays visible.
-const Duration _kMinBrandingDuration = Duration(milliseconds: 4200);
+/// Brief branded splash — long enough to read, not a fixed 4+ second wait.
+const Duration _kMinBrandingDuration = Duration(milliseconds: 1800);
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -33,7 +33,7 @@ class _SplashScreenState extends State<SplashScreen>
     super.initState();
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 1500),
+      duration: const Duration(milliseconds: 1000),
     );
     _fadeAnimation = Tween<double>(
       begin: 0.0,
@@ -42,10 +42,9 @@ class _SplashScreenState extends State<SplashScreen>
     _scaleAnimation = Tween<double>(
       begin: 0.8,
       end: 1.0,
-    ).animate(CurvedAnimation(parent: _controller, curve: Curves.bounceInOut));
+    ).animate(CurvedAnimation(parent: _controller, curve: Curves.easeInOut));
     _controller.forward();
 
-    // First frame: drop native logo-only splash so our full UI shows.
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _brandingStarted = DateTime.now();
       FlutterNativeSplash.remove();
@@ -61,26 +60,26 @@ class _SplashScreenState extends State<SplashScreen>
     }
   }
 
-  Future<void> _runLaunchSequence() async {
+  Future<_LaunchResult> _resolveLaunch() async {
     final deviceKnown = await AppSession.isDeviceRecognized();
-    Widget nextScreen =
-        deviceKnown ? const VoxHomePage() : const UserProfilePage(isEditingMode: false);
+    var nextScreen = deviceKnown
+        ? const VoxHomePage()
+        : const UserProfilePage(isEditingMode: false);
     String? welcomeMessage;
 
-    // Device recognition + services while branded splash is on screen.
-    await AppBootstrap.run();
-
     try {
-      if (!mounted) return;
-
       LaunchDestination destination;
       try {
         destination = await AppSession.resolveLaunchDestination().timeout(
-          const Duration(seconds: 20),
+          const Duration(seconds: 8),
         );
       } on TimeoutException {
         debugPrint('Splash: launch routing timed out, using fallback.');
         destination = await AppSession.resolveLaunchFallback();
+      }
+
+      if (!mounted) {
+        return _LaunchResult(screen: nextScreen, welcomeMessage: null);
       }
 
       final lang = context.read<LanguageProvider>();
@@ -121,14 +120,25 @@ class _SplashScreenState extends State<SplashScreen>
       }
     }
 
-    await _ensureMinBrandingTime();
+    return _LaunchResult(screen: nextScreen, welcomeMessage: welcomeMessage);
+  }
+
+  Future<void> _runLaunchSequence() async {
+    final result = await Future.wait([
+      _ensureMinBrandingTime(),
+      _resolveLaunch(),
+    ]);
+    final launch = result[1] as _LaunchResult;
+
     if (!mounted) return;
 
-    if (welcomeMessage != null) {
+    AppBootstrap.runDeferred();
+
+    if (launch.welcomeMessage != null) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            welcomeMessage,
+            launch.welcomeMessage!,
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
           backgroundColor: const Color(0xFF4B9EFF),
@@ -141,10 +151,10 @@ class _SplashScreenState extends State<SplashScreen>
     Navigator.pushReplacement(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => nextScreen,
+        pageBuilder: (context, animation, secondaryAnimation) => launch.screen,
         transitionsBuilder: (context, animation, secondaryAnimation, child) =>
             FadeTransition(opacity: animation, child: child),
-        transitionDuration: const Duration(milliseconds: 400),
+        transitionDuration: const Duration(milliseconds: 300),
       ),
     );
   }
@@ -297,4 +307,11 @@ class _SplashScreenState extends State<SplashScreen>
       ),
     );
   }
+}
+
+class _LaunchResult {
+  const _LaunchResult({required this.screen, this.welcomeMessage});
+
+  final Widget screen;
+  final String? welcomeMessage;
 }

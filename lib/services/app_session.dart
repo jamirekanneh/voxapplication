@@ -18,6 +18,8 @@ class AppSession {
 
   static const Duration _firestoreTimeout = Duration(seconds: 10);
   static const Duration _authTimeout = Duration(seconds: 12);
+  /// Max wait on splash — full auth restore continues in the background.
+  static const Duration splashAuthTimeout = Duration(seconds: 5);
 
   /// Last user linked on this device (set when device is recognized).
   static DeviceLinkedUser? lastRestoredDeviceUser;
@@ -174,7 +176,9 @@ class AppSession {
   }
 
   /// Device ID → userId + name/email in prefs; sync `devices` doc; restore auth silently.
-  static Future<DeviceLinkedUser?> recognizeAndPrepareDevice() async {
+  static Future<DeviceLinkedUser?> recognizeAndPrepareDevice({
+    Duration authTimeout = _authTimeout,
+  }) async {
     if (await AuthSession.isExplicitGuestMode()) return null;
 
     DeviceLinkedUser? linked = await getDeviceLinkedUser(attempts: 3);
@@ -198,10 +202,10 @@ class AppSession {
     lastRestoredDeviceUser = linked;
 
     await AuthSession.clearConflictingAuthSession();
-    await AuthSession.waitForAuthReady(timeout: _authTimeout);
+    await AuthSession.waitForAuthReady(timeout: authTimeout);
     await AuthRestore.restoreForSavedUser(
       linked.userId,
-      timeout: _authTimeout + const Duration(seconds: 8),
+      timeout: authTimeout,
     );
 
     linked = await enrichLinkedUser(linked);
@@ -332,20 +336,20 @@ class AppSession {
 
   /// Returning phone → Home. New phone → Profile setup only.
   static Future<LaunchDestination> resolveLaunchDestination() async {
-    lastRestoredDeviceUser = null;
-
     if (await AuthSession.isExplicitGuestMode()) {
       return LaunchDestination.home;
     }
 
     // 1. Device registry + prefs (primary path for returning users).
-    final prepared = await recognizeAndPrepareDevice();
+    final prepared = await recognizeAndPrepareDevice(
+      authTimeout: splashAuthTimeout,
+    );
     if (prepared != null) {
       return LaunchDestination.home;
     }
 
     // 2. Firebase Auth session already restored.
-    await AuthSession.waitForAuthReady(timeout: _authTimeout);
+    await AuthSession.waitForAuthReady(timeout: splashAuthTimeout);
     var user = FirebaseAuth.instance.currentUser;
     if (user != null && !user.isAnonymous) {
       await AuthSession.markSignedIn(user);
@@ -358,7 +362,7 @@ class AppSession {
       return LaunchDestination.home;
     }
 
-    user = await AuthSession.waitForSignedInUser(timeout: _authTimeout);
+    user = await AuthSession.waitForSignedInUser(timeout: splashAuthTimeout);
     if (user != null && !user.isAnonymous) {
       await markSetupComplete(userId: user.uid);
       lastRestoredDeviceUser = DeviceLinkedUser(

@@ -1,29 +1,36 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../analytics_service.dart';
 import '../notification_service.dart';
 import 'auth_session.dart';
 import 'auth_restore.dart';
-import 'app_session.dart';
 import 'reminders_service.dart';
 import 'transcription_queue.dart';
 
-/// Heavy startup work — run while the Flutter splash UI is visible.
+/// Startup work split so splash can finish quickly.
 class AppBootstrap {
   AppBootstrap._();
 
-  static bool _done = false;
+  static bool _deferredDone = false;
+  static bool _deferredRunning = false;
 
-  static Future<void> run() async {
-    if (_done) return;
+  /// Non-blocking follow-up after the first screen is shown.
+  static void runDeferred() {
+    if (_deferredDone || _deferredRunning) return;
+    _deferredRunning = true;
+    unawaited(_runDeferred());
+  }
+
+  static Future<void> _runDeferred() async {
     try {
       if (!await AuthSession.isExplicitGuestMode()) {
-        await AppSession.recognizeAndPrepareDevice();
         final saved = await AuthSession.savedUserId();
-        if (saved != null) {
+        if (saved != null && !AuthSession.canQueryFirestore(saved)) {
           await AuthRestore.restoreForSavedUser(
             saved,
-            timeout: const Duration(seconds: 30),
+            timeout: const Duration(seconds: 20),
           );
         }
       }
@@ -44,7 +51,8 @@ class AppBootstrap {
     } catch (e, st) {
       debugPrint('AppBootstrap error: $e\n$st');
     } finally {
-      _done = true;
+      _deferredDone = true;
+      _deferredRunning = false;
     }
   }
 }

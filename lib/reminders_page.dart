@@ -216,7 +216,7 @@ class _RemindersPageState extends State<RemindersPage> {
       }
     }
 
-    await RemindersService.instance.updateReminderSchedule(
+    final scheduledOk = await RemindersService.instance.updateReminderSchedule(
       id: reminder.id,
       scheduledAt: scheduled,
     );
@@ -224,7 +224,13 @@ class _RemindersPageState extends State<RemindersPage> {
     await _reload();
     if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(lang.t('reminder_updated'))),
+      SnackBar(
+        content: Text(
+          scheduledOk
+              ? lang.t('reminder_updated')
+              : lang.t('reminder_schedule_failed'),
+        ),
+      ),
     );
   }
 
@@ -293,7 +299,7 @@ class _RemindersPageState extends State<RemindersPage> {
     );
     if (repeatDaily == null || !mounted) return;
 
-    await RemindersService.instance.addReminder(
+    final result = await RemindersService.instance.addReminder(
       targetId: picked.id,
       targetTitle: picked.title,
       targetType: picked.type,
@@ -304,6 +310,12 @@ class _RemindersPageState extends State<RemindersPage> {
     await _reload();
     await _refreshPermissionStatus();
     if (!mounted) return;
+    if (!result.scheduled) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(lang.t('reminder_schedule_failed'))),
+      );
+      return;
+    }
     final label = TimeOfDay.fromDateTime(scheduled).format(context);
     final status = _permissionStatus ??
         await NotificationService.instance.checkReminderPermissions();

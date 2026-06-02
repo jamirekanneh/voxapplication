@@ -256,6 +256,8 @@ class AppStrings {
     'reminder_deleted': 'Reminder deleted.',
     'edit_reminder_time': 'Edit reminder time',
     'reminder_updated': 'Reminder updated.',
+    'reminder_schedule_failed':
+        'Could not schedule this reminder. Check notification and alarm permissions.',
     'notification_permission_title': 'Allow notifications',
     'notification_permission_body':
         'Vox needs notification permission to show study reminders in your notification bar and on the lock screen.',

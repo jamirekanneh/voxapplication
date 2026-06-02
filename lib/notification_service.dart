@@ -221,7 +221,7 @@ class NotificationService {
     );
   }
 
-  Future<void> scheduleStudyReminder({
+  Future<bool> scheduleStudyReminder({
     required int id,
     required String title,
     required String body,
@@ -231,16 +231,30 @@ class NotificationService {
     final status = await checkReminderPermissions();
     if (!status.canShowNotifications) {
       debugPrint('NotificationService: notifications disabled, skip $id');
-      return;
+      return false;
     }
 
     final tz.TZDateTime when = repeatDaily
         ? _nextInstanceOfTime(scheduledTime.hour, scheduledTime.minute)
-        : tz.TZDateTime.from(scheduledTime, tz.local);
+        : tz.TZDateTime(
+            tz.local,
+            scheduledTime.year,
+            scheduledTime.month,
+            scheduledTime.day,
+            scheduledTime.hour,
+            scheduledTime.minute,
+            scheduledTime.second,
+          );
 
     if (!repeatDaily && when.isBefore(tz.TZDateTime.now(tz.local))) {
-      debugPrint('NotificationService: skipped past reminder $id');
-      return;
+      debugPrint('NotificationService: skipped past reminder $id ($when)');
+      return false;
+    }
+
+    if (!status.exactAlarmsGranted) {
+      debugPrint(
+        'NotificationService: exact alarms off — reminder $id may be delayed',
+      );
     }
 
     const androidDetails = AndroidNotificationDetails(
@@ -278,9 +292,10 @@ class NotificationService {
       debugPrint(
         'NotificationService: scheduled $id at $when (exact=${status.exactAlarmsGranted})',
       );
+      return true;
     } catch (e, st) {
       debugPrint('NotificationService: schedule failed for $id: $e\n$st');
-      rethrow;
+      return false;
     }
   }
 

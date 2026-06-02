@@ -620,6 +620,180 @@ class _AiResultPageState extends State<AiResultPage> {
     );
   }
 
+  Widget _buildTopBarActions({required bool isSummary}) {
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        children: [
+          _buildAutoReadToggle(),
+          const SizedBox(width: 8),
+          if (isSummary) _buildSpeakerButton(compact: true),
+          if (isSummary) const SizedBox(width: 8),
+          GestureDetector(
+            onTap: _saveToSavedDocs,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF4B9EFF).withValues(alpha: 0.12),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: const Color(0xFF4B9EFF).withValues(alpha: 0.3),
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.bookmark_add_outlined,
+                    size: 16,
+                    color: Color(0xFF4B9EFF),
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'Save',
+                    style: TextStyle(
+                      color: Color(0xFF4B9EFF),
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: () {
+              if (isSummary && _summary != null) {
+                PdfService.exportSummaryPdf(
+                  context,
+                  widget.documentTitle,
+                  _summary!,
+                );
+              } else if (!isSummary && _flashcards != null) {
+                final qList = _flashcards!
+                    .map(
+                      (f) => {
+                        'question': f.question,
+                        'answer': f.answer,
+                      },
+                    )
+                    .toList();
+                PdfService.exportAssessmentPdf(
+                  context,
+                  widget.documentTitle,
+                  qList,
+                );
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white.withValues(alpha: 0.06),
+                borderRadius: BorderRadius.circular(10),
+                border: Border.all(
+                  color: Colors.white.withValues(alpha: 0.08),
+                ),
+              ),
+              child: const Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.picture_as_pdf_outlined,
+                    size: 16,
+                    color: Colors.blue,
+                  ),
+                  SizedBox(width: 4),
+                  Text(
+                    'PDF',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopBar({required bool isSummary, required String title}) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              GestureDetector(
+                onTap: () {
+                  _stopSpeaking();
+                  Navigator.pop(context);
+                },
+                child: const Icon(
+                  Icons.keyboard_arrow_down,
+                  size: 32,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w900,
+                        fontSize: 17,
+                        color: Colors.white,
+                      ),
+                    ),
+                    Text(
+                      widget.documentTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: Colors.white.withValues(alpha: 0.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (!_loading)
+                GestureDetector(
+                  onTap: _fetch,
+                  child: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.06),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(
+                      Icons.refresh,
+                      size: 20,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+          if (!_loading && _error == null) ...[
+            const SizedBox(height: 10),
+            _buildTopBarActions(isSummary: isSummary),
+          ],
+        ],
+      ),
+    );
+  }
+
   // â”€â”€ Build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
@@ -631,174 +805,7 @@ class _AiResultPageState extends State<AiResultPage> {
       body: SafeArea(
         child: Column(
           children: [
-            // Top bar
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () {
-                      _stopSpeaking();
-                      Navigator.pop(context);
-                    },
-                    child: const Icon(
-                      Icons.keyboard_arrow_down,
-                      size: 32,
-                      color: Colors.white,
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w900,
-                            fontSize: 17,
-                            color: Colors.white,
-                          ),
-                        ),
-                        Text(
-                          widget.documentTitle,
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: Colors.white.withValues(alpha: 0.5),
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Auto-read toggle
-                  if (!_loading && _error == null) _buildAutoReadToggle(),
-                  const SizedBox(width: 6),
-                  // Speaker button (summary only â€” flashcard has its own)
-                  if (!_loading && _error == null && isSummary)
-                    _buildSpeakerButton(),
-                  const SizedBox(width: 6),
-
-                  // Save to Firebase (summary + Q&A)
-                  if (!_loading && _error == null)
-                    GestureDetector(
-                      onTap: _saveToSavedDocs,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF4B9EFF).withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: const Color(0xFF4B9EFF).withValues(alpha: 0.3),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.bookmark_add_outlined,
-                              size: 16,
-                              color: Color(0xFF4B9EFF),
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'Save',
-                              style: TextStyle(
-                                color: Color(0xFF4B9EFF),
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  const SizedBox(width: 6),
-
-                  // Download PDF button
-                  if (!_loading && _error == null)
-                    GestureDetector(
-                      onTap: () {
-                        if (isSummary && _summary != null) {
-                          PdfService.exportSummaryPdf(
-                            context,
-                            widget.documentTitle,
-                            _summary!,
-                          );
-                        } else if (!isSummary && _flashcards != null) {
-                          final qList = _flashcards!
-                              .map(
-                                (f) => {
-                                  'question': f.question,
-                                  'answer': f.answer,
-                                },
-                              )
-                              .toList();
-                          PdfService.exportAssessmentPdf(
-                            context,
-                            widget.documentTitle,
-                            qList,
-                          );
-                        }
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.08),
-                          ),
-                        ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(
-                              Icons.picture_as_pdf_outlined,
-                              size: 16,
-                              color: Colors.blue,
-                            ),
-                            SizedBox(width: 4),
-                            Text(
-                              'PDF',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  const SizedBox(width: 6),
-
-                  // Retry
-                  if (!_loading)
-                    GestureDetector(
-                      onTap: _fetch,
-                      child: Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.06),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(
-                          Icons.refresh,
-                          size: 20,
-                          color: Colors.white70,
-                        ),
-                      ),
-                    ),
-                ],
-              ),
-            ),
+            _buildTopBar(isSummary: isSummary, title: title),
 
             const Divider(height: 1, color: Colors.white10),
 

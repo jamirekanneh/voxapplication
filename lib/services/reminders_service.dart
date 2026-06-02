@@ -37,7 +37,7 @@ class RemindersService {
     await prefs.setString(_storageKey, encoded);
   }
 
-  Future<StudyReminder> addReminder({
+  Future<({StudyReminder reminder, bool scheduled})> addReminder({
     required String targetId,
     required String targetTitle,
     required StudyReminderTargetType targetType,
@@ -58,8 +58,8 @@ class RemindersService {
 
     final all = await loadReminders()..add(reminder);
     await _saveAll(all);
-    await _scheduleNotification(reminder);
-    return reminder;
+    final scheduled = await _scheduleNotification(reminder);
+    return (reminder: reminder, scheduled: scheduled);
   }
 
   Future<void> deleteReminder(String id) async {
@@ -78,20 +78,20 @@ class RemindersService {
     await _saveAll(all);
   }
 
-  Future<void> updateReminderSchedule({
+  Future<bool> updateReminderSchedule({
     required String id,
     required DateTime scheduledAt,
   }) async {
     final all = await loadReminders();
     final index = all.indexWhere((r) => r.id == id);
-    if (index == -1) return;
+    if (index == -1) return false;
 
     final existing = all[index];
     final updated = existing.copyWith(scheduledAt: scheduledAt);
     all[index] = updated;
     await _saveAll(all);
     await NotificationService.instance.cancelReminder(existing.notificationId);
-    await _scheduleNotification(updated);
+    return _scheduleNotification(updated);
   }
 
   Future<void> rescheduleAll() async {
@@ -107,10 +107,10 @@ class RemindersService {
     }
   }
 
-  Future<void> _scheduleNotification(StudyReminder reminder) async {
+  Future<bool> _scheduleNotification(StudyReminder reminder) async {
     final typeLabel =
         reminder.targetType == StudyReminderTargetType.note ? 'note' : 'file';
-    await NotificationService.instance.scheduleStudyReminder(
+    return NotificationService.instance.scheduleStudyReminder(
       id: reminder.notificationId,
       title: 'Study reminder: ${reminder.targetTitle}',
       body: 'Time to review your $typeLabel "${reminder.targetTitle}".',
