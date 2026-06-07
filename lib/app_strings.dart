@@ -249,6 +249,7 @@ class AppStrings {
     'type_message': 'Type a message...',
     'keep': 'Keep',
     'listening_dots': 'Listening...',
+    'search_voice_listening': 'Speak to search...',
     'ask_something': 'Ask something...',
     'stop_voice_output': 'Stop Voice Output',
     'add_reminder': 'Add Reminder',
@@ -373,7 +374,8 @@ class AppStrings {
     'upload_tip_lighting': 'Good lighting improves accuracy',
     'upload_tip_frame': 'Fill the frame with the text and hold camera steady',
     'upload_tip_multipage': 'Multi-page mode merges all pages into one document',
-    'upload_supported_types_label': 'Supported: PDF, DOCX, DOC, TXT, PPT, PPTX, XLS, XLSX, EPUB, and more',
+    'upload_supported_types_label':
+        'Supported: PDF, Word, PowerPoint, Excel, photos (JPG/PNG), TXT, and more',
   };
 
   static const Map<String, String> _es = {
@@ -555,6 +557,7 @@ class AppStrings {
     'type_message': 'Escribe un mensaje...',
     'keep': 'Conservar',
     'listening_dots': 'Escuchando...',
+    'search_voice_listening': 'Habla para buscar...',
     'ask_something': 'Pregunta algo...',
     'stop_voice_output': 'Detener voz',
   };
@@ -738,6 +741,7 @@ class AppStrings {
     'type_message': 'Tapez un message...',
     'keep': 'Garder',
     'listening_dots': 'Écoute...',
+    'search_voice_listening': 'Parlez pour chercher...',
     'ask_something': 'Posez une question...',
     'stop_voice_output': 'Arrêter la voix',
   };
@@ -912,6 +916,7 @@ class AppStrings {
     'type_message': 'اكتب رسالة...',
     'keep': 'إبقاء',
     'listening_dots': 'جارٍ الاستماع...',
+    'search_voice_listening': 'تحدث للبحث...',
     'ask_something': 'اسأل شيئاً...',
     'stop_voice_output': 'إيقاف الصوت',
   };
@@ -1092,6 +1097,7 @@ class AppStrings {
     'type_message': 'Bir mesaj yazın...',
     'keep': 'Sakla',
     'listening_dots': 'Dinleniyor...',
+    'search_voice_listening': 'Aramak için konuşun...',
     'ask_something': 'Bir şey sorun...',
     'stop_voice_output': 'Sesi durdur',
   };
@@ -1252,6 +1258,7 @@ class AppStrings {
     'type_message': '输入消息...',
     'keep': '保留',
     'listening_dots': '正在聆听...',
+    'search_voice_listening': '说话即可搜索...',
     'ask_something': '问点什么...',
     'stop_voice_output': '停止语音',
   };

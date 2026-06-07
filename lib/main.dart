@@ -33,11 +33,10 @@ import 'recycle_bin_page.dart';
 import 'reminders_page.dart';
 import 'history_page.dart';
 import 'services/mic_route_observer.dart';
+import 'services/app_route_observer.dart';
 import 'services/auth_session.dart';
 import 'services/app_session.dart';
-
-final GlobalKey<NavigatorState> globalNavigatorKey =
-    GlobalKey<NavigatorState>();
+import 'navigation_keys.dart';
 
 class MyApp extends StatefulWidget {
   const MyApp({super.key});
@@ -131,7 +130,8 @@ class _MyAppState extends State<MyApp> {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       navigatorKey: globalNavigatorKey,
-      navigatorObservers: [MicRouteObserver()],
+      scaffoldMessengerKey: rootScaffoldMessengerKey,
+      navigatorObservers: [MicRouteObserver(), appRouteObserver],
       themeMode: themeProvider.themeMode,
       theme: AppTheme.light,
       darkTheme: AppTheme.dark,

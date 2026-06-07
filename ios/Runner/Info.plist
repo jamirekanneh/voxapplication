@@ -56,7 +56,11 @@
 				</array>
 			</dict>
 		</array>
-		<key>UIStatusBarHidden</key>
-		<false/>
+	<key>UIStatusBarHidden</key>
+	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Vox uses the microphone for hands-free read-aloud voice commands and voice notes.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Vox uses speech recognition for hands-free read-aloud controls while you listen to documents.</string>
 	</dict>
 </plist>

@@ -20,6 +20,7 @@ import 'services/app_session.dart';
 import 'services/auth_session.dart';
 import 'widgets/firestore_data_gate.dart';
 import 'services/mic_coordinator.dart';
+import 'services/app_speech_service.dart';
 import 'analytics_service.dart';
 import 'services/saved_docs_service.dart';
 import 'document_chat_buddy_sheet.dart';
@@ -40,7 +41,9 @@ class NotesPage extends StatefulWidget {
 }
 
 class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  static const _dictationOwner = 'notes_dictation';
+  static const _recordingSttOwner = 'notes_recording_stt';
+
   bool _isSaving = false;
   bool _isEditing = false;
   String? _editingId;
@@ -86,10 +89,36 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   final Set<String> _selectedNoteIds = {};
   List<String> _visibleNoteIds = [];
 
+  Future<void> _releaseNotesMic() async {
+    await AppSpeechService.instance.stop();
+    _recordingSttActive = false;
+    _recordingTimer?.cancel();
+    _maxDurationTimer?.cancel();
+    await _amplitudeSub?.cancel();
+    _amplitudeSub = null;
+    if (_recordingState == RecordingState.recording) {
+      await _audioRecorder.stop().catchError((_) => null);
+    }
+    if (mounted) {
+      setState(() {
+        _isTitleDictating = false;
+        _isTranscriptDictating = false;
+        if (_recordingState == RecordingState.recording) {
+          _recordingState = RecordingState.idle;
+        }
+      });
+    }
+    MicCoordinator.instance.setNotesRecordingActive(false);
+  }
+
   @override
   void initState() {
     super.initState();
-    MicCoordinator.instance.setRoute('/notes');
+    MicCoordinator.instance.registerReleaseHandler(_releaseNotesMic);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      MicCoordinator.instance.syncRouteIfCurrent(context, '/notes');
+    });
     final bootUid = AppSession.bootstrapUid;
     if (bootUid != null) {
       _resolvedUid = bootUid;
@@ -115,12 +144,14 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    MicCoordinator.instance.setRoute('/notes');
+    MicCoordinator.instance.syncRouteIfCurrent(context, '/notes');
   }
 
   @override
   void dispose() {
-    _speech.stop();
+    MicCoordinator.instance.unregisterReleaseHandler(_releaseNotesMic);
+    MicCoordinator.instance.setNotesRecordingActive(false);
+    AppSpeechService.instance.stop();
     _audioRecorder.dispose();
     _audioPlayer.dispose();
     _titleController.dispose();
@@ -224,6 +255,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   Future<void> _toggleDictation(bool isTitle) async {
     if (!mounted) return;
     if (_recordingState == RecordingState.recording) return;
+    MicCoordinator.instance.syncRouteIfCurrent(context, '/notes');
+    await MicCoordinator.instance.yieldFromAssistant();
     if (!MicCoordinator.instance.notesMayUseMic) {
       final lang = context.read<LanguageProvider>();
       ScaffoldMessenger.of(context).showSnackBar(
@@ -239,7 +272,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     if (!granted) return;
 
     if (isTitle ? _isTitleDictating : _isTranscriptDictating) {
-      await _speech.stop();
+      await AppSpeechService.instance.stop();
       setState(() {
         if (isTitle) {
           _isTitleDictating = false;
@@ -250,8 +283,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       return;
     }
 
-    if (_speech.isListening) {
-      await _speech.stop();
+    if (AppSpeechService.instance.isListening) {
+      await AppSpeechService.instance.stop();
       setState(() {
         _isTitleDictating = false;
         _isTranscriptDictating = false;
@@ -266,7 +299,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       }
     });
 
-    bool available = await _speech.initialize(
+    bool available = await AppSpeechService.instance.ensureInitialized(
+      owner: _dictationOwner,
       onError: (e) {
         if (mounted) {
           setState(() {
@@ -304,7 +338,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         : _transcriptController.text;
     final prefix = existingText.isNotEmpty ? '$existingText ' : '';
 
-    _speech.listen(
+    await AppSpeechService.instance.listen(
+      owner: _dictationOwner,
       localeId: langProvider.sttLocale,
       listenOptions: stt.SpeechListenOptions(
         partialResults: true,
@@ -354,7 +389,8 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
 
   Future<bool> _ensureSpeechReadyForRecording() async {
     if (_speechReadyForRecording) return true;
-    _speechReadyForRecording = await _speech.initialize(
+    _speechReadyForRecording = await AppSpeechService.instance.ensureInitialized(
+      owner: _recordingSttOwner,
       onError: (e) {
         debugPrint('Recording STT error: $e');
         if (_recordingState == RecordingState.recording && mounted) {
@@ -375,22 +411,25 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   Future<void> _scheduleRecordingSttRestart() async {
     await Future<void>.delayed(const Duration(milliseconds: 400));
     if (!mounted || _recordingState != RecordingState.recording) return;
-    if (_speech.isListening) return;
+    if (AppSpeechService.instance.isListening) return;
     await _startRecordingStt(context.read<LanguageProvider>());
   }
 
   Future<void> _startRecordingStt(LanguageProvider lang) async {
     if (_recordingState != RecordingState.recording) return;
+    if (!MicCoordinator.instance.notesRecordingActive) return;
+
     final ready = await _ensureSpeechReadyForRecording();
-    if (!ready) return;
+    if (!ready || !mounted) return;
+    if (_recordingState != RecordingState.recording) return;
 
     try {
-      await _speech.stop();
-      await _speech.cancel();
+      await AppSpeechService.instance.stop();
       if (_recordingState != RecordingState.recording) return;
 
       _recordingSttActive = true;
-      await _speech.listen(
+      await AppSpeechService.instance.listen(
+        owner: _recordingSttOwner,
         localeId: lang.sttLocale,
         listenOptions: stt.SpeechListenOptions(
           partialResults: true,
@@ -427,7 +466,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   Future<String> _stopRecordingStt() async {
     _recordingSttActive = false;
     try {
-      await _speech.stop();
+      await AppSpeechService.instance.stop();
     } catch (_) {}
     final text = _combinedRecordingSttText();
     _recordingSttCommitted = text;
@@ -436,6 +475,15 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
   }
 
   Future<void> _startRecording() async {
+    MicCoordinator.instance.syncRouteIfCurrent(context, '/notes');
+    await MicCoordinator.instance.yieldFromAssistant();
+
+    // Pause read-aloud first so notes recording can take the mic.
+    final tts = context.read<TtsService>();
+    if (tts.isVisible && tts.isPlaying) {
+      await tts.togglePause(context.read<LanguageProvider>().ttsLocale);
+    }
+
     final rawTitle = _titleController.text.trim();
     if (rawTitle.isEmpty) {
       final lang = context.read<LanguageProvider>();
@@ -449,8 +497,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       );
       try {
         unawaited(
-          context.read<TtsService>().play(
-                'Voice Notes',
+          context.read<TtsService>().speakBrief(
                 lang.t('title_before_record'),
                 lang.ttsLocale,
               ),
@@ -461,9 +508,15 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
 
     if (!MicCoordinator.instance.notesMayUseMic) {
       final lang = context.read<LanguageProvider>();
+      final mic = MicCoordinator.instance;
+      final message = mic.readAloudMicReserved
+          ? 'Pause read-aloud before recording a voice note.'
+          : mic.assistantMicActive
+              ? 'Voice assistant is using the microphone. Tap record again or turn off the assistant.'
+              : lang.t('recording_notes_only');
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(lang.t('recording_notes_only')),
+          content: Text(message),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -478,9 +531,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     try {
       if (!mounted) return;
       FocusScope.of(context).unfocus();
-      await _speech.stop();
-      await _speech.cancel();
-      await context.read<TtsService>().stop();
+      await AppSpeechService.instance.stop();
 
       _recordingSttCommitted = '';
       _recordingSttPartial = '';
@@ -588,8 +639,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     _maxDurationTimer?.cancel();
     await _amplitudeSub?.cancel();
     _amplitudeSub = null;
-    await _speech.stop();
-    await _speech.cancel();
+    await AppSpeechService.instance.stop();
 
     if (!mounted) {
       MicCoordinator.instance.setNotesRecordingActive(false);
@@ -820,8 +870,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     _recordingSttCommitted = '';
     _recordingSttPartial = '';
     _recordingSttActive = false;
-    _speech.stop();
-    _speech.cancel();
+    AppSpeechService.instance.stop();
     _audioRecorder.stop();
     setState(() {
       _recordingState = RecordingState.idle;
@@ -1699,15 +1748,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           });
         }
 
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (!GroqService.isTranscriptPending(sheetContent)) {
-            localPlayer.stop();
-            _audioPlayer.stop();
-            tts.play(title, sheetContent, lang.ttsLocale);
-            isSpeaking = true;
-          }
-        });
-
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
             return Container(
@@ -1763,15 +1803,19 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                               color: isSpeaking
                                   ? const Color(0xFF4B9EFF)
                                   : Color(0x8A0A0E1A),
-                              onTap: () {
+                              onTap: () async {
                                 if (sheetContent.trim().isEmpty) return;
                                 if (isSpeaking) {
-                                  tts.stop();
+                                  await tts.togglePause(lang.ttsLocale);
                                   setSheetState(() => isSpeaking = false);
                                 } else {
                                   localPlayer.stop();
                                   _audioPlayer.stop();
-                                  tts.play(title, sheetContent, lang.ttsLocale);
+                                  await tts.play(
+                                    title,
+                                    sheetContent,
+                                    lang.ttsLocale,
+                                  );
                                   setSheetState(() => isSpeaking = true);
                                 }
                               },
@@ -1811,8 +1855,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                               color: isEditingTranscript
                                   ? const Color(0xFF4B9EFF)
                                   : Color(0x8A0A0E1A),
-                              onTap: () {
-                                tts.stop();
+                              onTap: () async {
+                                if (isSpeaking) {
+                                  await tts.togglePause(lang.ttsLocale);
+                                  setSheetState(() => isSpeaking = false);
+                                }
                                 setSheetState(() {
                                   isEditingTranscript = !isEditingTranscript;
                                   sheetTranscriptController.text = sheetContent;
@@ -1892,7 +1939,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                     icon: Icons.summarize_outlined,
                                     dark: true,
                                     onTap: () {
-                                      tts.stop();
                                       Navigator.pop(ctx);
                                       Navigator.push(
                                         context,
@@ -1913,7 +1959,6 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                     icon: Icons.style_outlined,
                                     dark: false,
                                     onTap: () async {
-                                      tts.stop();
                                       final nav = Navigator.of(context);
                                       final count =
                                           await _pickCardCount(context);
@@ -1939,8 +1984,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                     label: lang.t('study_buddy'),
                                     icon: Icons.psychology,
                                     dark: true,
-                                    onTap: () {
-                                      tts.stop();
+                                    onTap: () async {
+                                      if (isSpeaking) {
+                                        await tts.togglePause(lang.ttsLocale);
+                                        setSheetState(() => isSpeaking = false);
+                                      }
                                       localPlayer.stop();
                                       _audioPlayer.stop();
                                       _openChatBuddy(title, sheetContent);
@@ -2010,8 +2058,12 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                           icon: isEditingTranscript
                                               ? Icons.close
                                               : Icons.edit_note,
-                                          onTap: () {
-                                            tts.stop();
+                                          onTap: () async {
+                                            if (isSpeaking) {
+                                              await tts.togglePause(
+                                                lang.ttsLocale,
+                                              );
+                                            }
                                             setSheetState(() {
                                               isSpeaking = false;
                                               isEditingTranscript =
@@ -2160,7 +2212,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                 audioPath: audioPath,
                                 beforePlay: () async {
                                   if (isSpeaking) {
-                                    tts.stop();
+                                    await tts.togglePause(lang.ttsLocale);
                                     if (ctx.mounted) {
                                       setSheetState(() => isSpeaking = false);
                                     }
@@ -2188,8 +2240,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           },
         );
       },
-    ).whenComplete(() {
-      tts.stop();
+    ).whenComplete(() async {
+      if (isSpeaking) {
+        await tts.togglePause(lang.ttsLocale);
+      }
       localPlayer.stop();
       localPlayer.dispose();
       sheetTranscriptController.dispose();

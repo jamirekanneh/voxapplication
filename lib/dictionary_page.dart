@@ -9,6 +9,7 @@ import 'language_provider.dart';
 import 'analytics_service.dart';
 import 'theme_provider.dart';
 import 'services/mic_coordinator.dart';
+import 'services/app_speech_service.dart';
 
 // â”€â”€ API language codes for dictionaryapi.dev â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 const Map<String, String?> _apiLangCode = {
@@ -62,10 +63,11 @@ class DictionaryPage extends StatefulWidget {
 }
 
 class _DictionaryPageState extends State<DictionaryPage> {
+  static const _searchOwner = 'dictionary_search';
+
   final TextEditingController _searchController = TextEditingController();
   final AudioPlayer _audioPlayer = AudioPlayer();
   final FocusNode _focusNode = FocusNode();
-  final stt.SpeechToText _speech = stt.SpeechToText();
 
   Map<String, dynamic>? _result;
   _ResultSource _resultSource = _ResultSource.general;
@@ -79,10 +81,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
   Future<void> _releaseDictionaryMic() async {
     if (_searchMicHandoff) return;
-    try {
-      await _speech.stop();
-      await _speech.cancel();
-    } catch (_) {}
+    await AppSpeechService.instance.stop();
     if (mounted) setState(() => _isListening = false);
     MicCoordinator.instance.setSearchMicActive(false);
   }
@@ -92,7 +91,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
     super.initState();
     MicCoordinator.instance.registerReleaseHandler(_releaseDictionaryMic);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      MicCoordinator.instance.setRoute('/dictionary');
+      if (!mounted) return;
+      MicCoordinator.instance.syncRouteIfCurrent(context, '/dictionary');
     });
   }
 
@@ -123,7 +123,9 @@ class _DictionaryPageState extends State<DictionaryPage> {
     _searchController.dispose();
     _audioPlayer.dispose();
     _focusNode.dispose();
-    _speech.stop();
+    if (AppSpeechService.instance.activeOwner == _searchOwner) {
+      AppSpeechService.instance.stop();
+    }
     super.dispose();
   }
 
@@ -137,6 +139,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
       if (word.isNotEmpty) _search(langCode);
       return;
     }
+
+    await MicCoordinator.instance.yieldFromAssistant();
 
     if (!MicCoordinator.instance.searchMicMayListen) {
       if (!mounted) return;
@@ -165,7 +169,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
       return;
     }
 
-    final available = await _speech.initialize(
+    final available = await AppSpeechService.instance.ensureInitialized(
+      owner: _searchOwner,
       onError: (e) {
         if (_searchMicHandoff) return;
         MicCoordinator.instance.setSearchMicActive(false);
@@ -210,7 +215,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
       });
 
       final langProvider = context.read<LanguageProvider>();
-      await _speech.listen(
+      await AppSpeechService.instance.listen(
+        owner: _searchOwner,
         localeId: langProvider.sttLocale,
         listenOptions: stt.SpeechListenOptions(
           partialResults: true,
@@ -748,7 +754,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
                     onSubmitted: unsupported ? null : (_) => _search(langCode),
                     decoration: InputDecoration(
                       hintText: _isListening
-                          ? lang.t('listening_dots')
+                          ? lang.t('search_voice_listening')
                           : unsupported
                           ? lang.t('dictionary_not_available_chinese')
                           : lang.t('dictionary_search_hint'),

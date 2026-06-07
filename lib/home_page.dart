@@ -8,7 +8,6 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'language_provider.dart';
 import 'tts_service.dart';
 import 'reader_page.dart';
-import 'mini_player_bar.dart';
 import 'temp_library_provider.dart';
 import 'ai_result_page.dart';
 import 'custom_commands_provider.dart';
@@ -17,6 +16,7 @@ import 'analytics_service.dart';
 import 'services/app_session.dart';
 import 'services/auth_session.dart';
 import 'services/mic_coordinator.dart';
+import 'services/app_speech_service.dart';
 import 'widgets/firestore_data_gate.dart';
 
 class VoxHomePage extends StatefulWidget {
@@ -27,8 +27,9 @@ class VoxHomePage extends StatefulWidget {
 }
 
 class _VoxHomePageState extends State<VoxHomePage> {
+  static const _searchOwner = 'home_search';
+
   final TextEditingController _searchController = TextEditingController();
-  final stt.SpeechToText _speech = stt.SpeechToText();
   String _searchQuery = '';
   bool _isListening = false;
   bool _searchMicHandoff = false;
@@ -52,10 +53,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
   Future<void> _releaseSearchMic() async {
     if (_searchMicHandoff) return;
-    try {
-      await _speech.stop();
-      await _speech.cancel();
-    } catch (_) {}
+    await AppSpeechService.instance.stop();
     if (mounted) setState(() => _isListening = false);
     MicCoordinator.instance.setSearchMicActive(false);
   }
@@ -81,7 +79,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
     // Wire assistant commands after first frame so context is ready
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      MicCoordinator.instance.setRoute('/home');
+      if (!mounted) return;
+      MicCoordinator.instance.syncRouteIfCurrent(context, '/home');
       _registerAssistantHandler();
     });
   }
@@ -170,7 +169,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
             ),
             const SizedBox(height: 8),
             Text(
-              'You hit a $streak Day Reading Streak!',
+              streak >= 30
+                  ? 'You earned the Monthly Master badge!'
+                  : 'You hit a $streak-day reading streak!',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 16, color: VoxColors.onBg(context)),
             ),
@@ -199,7 +200,6 @@ class _VoxHomePageState extends State<VoxHomePage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    MicCoordinator.instance.setRoute('/home');
     final args =
         ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
     if (args != null && args.containsKey('searchQuery')) {
@@ -217,7 +217,9 @@ class _VoxHomePageState extends State<VoxHomePage> {
   void dispose() {
     MicCoordinator.instance.unregisterReleaseHandler(_releaseSearchMic);
     MicCoordinator.instance.setSearchMicActive(false);
-    _speech.stop();
+    if (AppSpeechService.instance.activeOwner == _searchOwner) {
+      AppSpeechService.instance.stop();
+    }
     _searchController.dispose();
     _streakSubscription?.cancel();
     super.dispose();
@@ -429,6 +431,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
       return;
     }
 
+    await MicCoordinator.instance.yieldFromAssistant();
+
     if (!MicCoordinator.instance.searchMicMayListen) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
@@ -455,7 +459,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
       }
       return;
     }
-    bool available = await _speech.initialize(
+    bool available = await AppSpeechService.instance.ensureInitialized(
+      owner: _searchOwner,
       onError: (e) {
         if (_searchMicHandoff) return;
         MicCoordinator.instance.setSearchMicActive(false);
@@ -478,7 +483,8 @@ class _VoxHomePageState extends State<VoxHomePage> {
 
       final langProvider = context.read<LanguageProvider>();
       setState(() => _isListening = true);
-      await _speech.listen(
+      await AppSpeechService.instance.listen(
+        owner: _searchOwner,
         localeId: langProvider.sttLocale,
         listenOptions: stt.SpeechListenOptions(
           partialResults: true,
@@ -758,22 +764,18 @@ class _VoxHomePageState extends State<VoxHomePage> {
                 const SizedBox(height: 8),
               ] else ...[
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Row(
-                      children: [
-                        Text(
-                          "Vox",
-                          style: TextStyle(
-                            fontSize: 36,
-                            fontWeight: FontWeight.w900,
-                            color: VoxColors.onBg(context),
-                            letterSpacing: 2,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                      ],
+                    Text(
+                      "Vox",
+                      style: TextStyle(
+                        fontSize: 36,
+                        fontWeight: FontWeight.w900,
+                        color: VoxColors.onBg(context),
+                        letterSpacing: 2,
+                      ),
                     ),
+                    const Spacer(),
                     SizedBox(
                       width: 180,
                       height: 38,
@@ -785,7 +787,7 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         ),
                         decoration: InputDecoration(
                           hintText: _isListening
-                              ? lang.t('listening_dots')
+                              ? lang.t('search_voice_listening')
                               : lang.t('search_hint'),
                           counterText: '',
                           prefixIcon: Icon(
@@ -822,84 +824,97 @@ class _VoxHomePageState extends State<VoxHomePage> {
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 8),
                     Consumer<CustomCommandsProvider>(
-                      builder: (context, provider, _) => Tooltip(
-                        message: lang.t('assistant_mode_tooltip'),
-                        child: GestureDetector(
-                          onTap: () {
-                            final next = !provider.assistantModeEnabled;
-                            provider.setAssistantMode(next);
-                            MicCoordinator.instance.setAssistantMicActive(next);
-                            _showAssistantFeedback(
-                              next ? lang.t('assistant_on') : lang.t('assistant_off'),
-                            );
-                          },
-                          child: AnimatedContainer(
-                            duration: const Duration(milliseconds: 300),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 6,
-                            ),
-                            decoration: BoxDecoration(
-                              color: provider.assistantModeEnabled
-                                  ? VoxColors.primary(
-                                      context,
-                                    ).withValues(alpha: 0.15)
-                                  : VoxColors.onBg(
-                                      context,
-                                    ).withValues(alpha: 0.05),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: provider.assistantModeEnabled
-                                    ? VoxColors.primary(context)
-                                    : VoxColors.onBg(
-                                        context,
-                                      ).withValues(alpha: 0.1),
+                      builder: (context, provider, _) {
+                        final on = provider.assistantModeEnabled;
+                        final primary = VoxColors.primary(context);
+                        return Tooltip(
+                          message: lang.t('assistant_mode_tooltip'),
+                          child: GestureDetector(
+                            onTap: () {
+                              final next = !on;
+                              provider.setAssistantMode(next);
+                              MicCoordinator.instance.setAssistantMicActive(next);
+                              _showAssistantFeedback(
+                                next
+                                    ? lang.t('assistant_on')
+                                    : lang.t('assistant_off'),
+                              );
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 300),
+                              height: 32,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
                               ),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Icon(
-                                  provider.isListening
-                                      ? Icons.graphic_eq_rounded
-                                      : provider.assistantModeEnabled
-                                      ? Icons.mic_rounded
-                                      : Icons.mic_none_rounded,
-                                  color: provider.assistantModeEnabled
-                                      ? VoxColors.primary(context)
-                                      : VoxColors.textSecondary(context),
-                                  size: 14,
+                              alignment: Alignment.center,
+                              decoration: BoxDecoration(
+                                color: on
+                                    ? primary.withValues(alpha: 0.15)
+                                    : VoxColors.onBg(context)
+                                        .withValues(alpha: 0.05),
+                                borderRadius: BorderRadius.circular(20),
+                                border: Border.all(
+                                  color: on
+                                      ? primary
+                                      : VoxColors.onBg(context)
+                                          .withValues(alpha: 0.1),
                                 ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  lang.t('assistant_label'),
-                                  style: TextStyle(
-                                    color: provider.assistantModeEnabled
-                                        ? VoxColors.primary(context)
-                                        : VoxColors.textSecondary(context),
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: 0.5,
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  SizedBox(
+                                    width: 14,
+                                    height: 14,
+                                    child: Icon(
+                                      provider.isListening
+                                          ? Icons.graphic_eq_rounded
+                                          : on
+                                              ? Icons.mic_rounded
+                                              : Icons.mic_none_rounded,
+                                      color: on
+                                          ? primary
+                                          : VoxColors.textSecondary(context),
+                                      size: 14,
+                                    ),
                                   ),
-                                ),
-                                if (provider.assistantModeEnabled) ...[
                                   const SizedBox(width: 6),
-                                  Container(
+                                  Text(
+                                    lang.t('assistant_label'),
+                                    style: TextStyle(
+                                      color: on
+                                          ? primary
+                                          : VoxColors.textSecondary(context),
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: 0.5,
+                                      height: 1,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  SizedBox(
                                     width: 6,
                                     height: 6,
-                                    decoration: BoxDecoration(
-                                      color: VoxColors.primary(context),
-                                      shape: BoxShape.circle,
+                                    child: AnimatedOpacity(
+                                      opacity: on ? 1 : 0,
+                                      duration:
+                                          const Duration(milliseconds: 200),
+                                      child: DecoratedBox(
+                                        decoration: BoxDecoration(
+                                          color: primary,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
                                     ),
                                   ),
                                 ],
-                              ],
+                              ),
                             ),
                           ),
-                        ),
-                      ),
+                        );
+                      },
                     ),
                   ],
                 ),
@@ -1321,7 +1336,6 @@ class _VoxHomePageState extends State<VoxHomePage> {
                   },
                 ),
               ),
-              const MiniPlayerBar(),
             ],
           ),
         ),

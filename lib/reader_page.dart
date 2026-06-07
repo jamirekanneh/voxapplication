@@ -1,7 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:speech_to_text/speech_to_text.dart' as stt;
-import 'package:permission_handler/permission_handler.dart';
 import 'tts_service.dart';
 import 'language_provider.dart';
 import 'ai_result_page.dart';
@@ -10,8 +8,8 @@ import 'analytics_service.dart';
 import 'pdf_service.dart';
 import 'document_chat_buddy_sheet.dart';
 import 'services/mic_coordinator.dart';
+import 'services/app_route_observer.dart';
 import 'services/reading_voice_commands.dart';
-import 'main.dart';
 
 class ReaderPage extends StatefulWidget {
   final String title;
@@ -29,35 +27,15 @@ class ReaderPage extends StatefulWidget {
   State<ReaderPage> createState() => _ReaderPageState();
 }
 
-class _ReaderPageState extends State<ReaderPage> {
+class _ReaderPageState extends State<ReaderPage> with RouteAware {
   final ScrollController _scrollController = ScrollController();
-  final stt.SpeechToText _speech = stt.SpeechToText();
 
   bool _showSpeedPanel = false;
-  bool _showCommandsPanel = true;
-  bool _speechReady = false;
-  bool _isListening = false;
   bool _autoSpeed = false;
-  String _commandFeedback = '';
-
   // Pinned highlight — set when user says "highlight text"
   bool _hasPinnedHighlight = false;
   int _pinnedStart = 0;
   int _pinnedEnd = 0;
-
-  bool _alwaysOnEnabled = false;
-  bool _commandProcessing = false;
-
-  Future<void> _releaseReaderMic() async {
-    try {
-      await _speech.stop();
-      await _speech.cancel();
-    } catch (_) {}
-    if (mounted) setState(() => _isListening = false);
-  }
-
-  // Debounce timer to prevent restart loops
-  DateTime _lastRestartTime = DateTime.now();
 
   static const List<double> _speedPresets = [
     0.4,
@@ -69,28 +47,14 @@ class _ReaderPageState extends State<ReaderPage> {
     1.5,
   ];
 
-  static const _commandList = [
-    ['▶', 'play / resume', 'Resume reading'],
-    ['⏸', 'pause / wait', 'Pause reading'],
-    ['⏭', 'forward / skip', 'Skip +10 seconds'],
-    ['⏮', 'back / rewind', 'Go back -10 seconds'],
-    ['⚡', 'faster / speed up', 'Increase speed'],
-    ['🐢', 'slower / slow down', 'Decrease speed'],
-    ['🔄', 'restart / beginning', 'Start from beginning'],
-    ['🛑', 'close document', 'Stop and close reader'],
-    ['📖', 'define [word]', 'Pause and open Dictionary'],
-    ['🖍️', 'highlight / mark', 'Highlight last sentence'],
-  ];
-
   @override
   void initState() {
     super.initState();
-    MicCoordinator.instance.registerReleaseHandler(_releaseReaderMic);
     MicCoordinator.instance.setReaderVoiceActive(true);
-
-    final tts = context.read<TtsService>();
+    ReadingVoiceCommands.onHighlightSentence = _pinCurrentSentence;
 
     // Clean content for reading (strip XML tags if detected in docx/xml)
+    final tts = context.read<TtsService>();
     final cleaned = widget.content
         .replaceAll(RegExp(r'<[^>]*>'), ' ')
         .replaceAll(RegExp(r'\s+'), ' ')
@@ -106,8 +70,50 @@ class _ReaderPageState extends State<ReaderPage> {
 
     // Track file read operation
     AnalyticsService.instance.recordFileOperation('read');
+  }
 
-    _initSpeech();
+  void _pinCurrentSentence(TtsService tts) {
+    if (!mounted) return;
+    setState(() {
+      _hasPinnedHighlight = true;
+      _pinnedStart = tts.sentenceStart;
+      _pinnedEnd = tts.sentenceEnd;
+    });
+    _scrollToHighlight();
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute) {
+      appRouteObserver.subscribe(this, route);
+    }
+  }
+
+  void _setGlobalMiniPlayerSuppressed(bool suppress) {
+    context.read<TtsService>().setSuppressGlobalMiniPlayer(suppress);
+  }
+
+  @override
+  void didPush() {
+    _setGlobalMiniPlayerSuppressed(true);
+  }
+
+  @override
+  void didPopNext() {
+    _setGlobalMiniPlayerSuppressed(true);
+  }
+
+  @override
+  void didPushNext() {
+    // Another route covers the reader — show global mini player on that page.
+    _setGlobalMiniPlayerSuppressed(false);
+  }
+
+  @override
+  void didPop() {
+    _setGlobalMiniPlayerSuppressed(false);
   }
 
   void _onTtsUpdate() {
@@ -115,237 +121,21 @@ class _ReaderPageState extends State<ReaderPage> {
     final tts = context.read<TtsService>();
     if (tts.isPlaying) {
       _scrollToHighlight();
-    } else if (_alwaysOnEnabled && !_isListening && !_commandProcessing) {
-      _scheduleRestart();
     }
   }
 
   @override
   void dispose() {
-    MicCoordinator.instance.unregisterReleaseHandler(_releaseReaderMic);
+    appRouteObserver.unsubscribe(this);
+    if (ReadingVoiceCommands.onHighlightSentence == _pinCurrentSentence) {
+      ReadingVoiceCommands.onHighlightSentence = null;
+    }
     MicCoordinator.instance.setReaderVoiceActive(false);
-    context.read<TtsService>().removeListener(_onTtsUpdate);
-    _speech.stop();
+    final tts = context.read<TtsService>();
+    tts.setSuppressGlobalMiniPlayer(false);
+    tts.removeListener(_onTtsUpdate);
     _scrollController.dispose();
     super.dispose();
-  }
-
-  // ── Init STT ──────────────────────────────────────────
-  Future<void> _initSpeech() async {
-    final status = await Permission.microphone.request();
-    if (!status.isGranted) return;
-
-    final ok = await _speech.initialize(
-      onError: (e) {
-        if (!mounted) return;
-        setState(() => _isListening = false);
-        // Auto-restart on error if always-on is enabled, with debounce
-        if (_alwaysOnEnabled && !_commandProcessing) {
-          _scheduleRestart();
-        }
-      },
-      onStatus: (s) {
-        if (!mounted) return;
-        debugPrint('STT Status: $s');
-        if (s == 'done' || s == 'notListening') {
-          setState(() => _isListening = false);
-          // Auto-restart continuous listening
-          if (_alwaysOnEnabled && !_commandProcessing) {
-            _scheduleRestart();
-          }
-        }
-      },
-    );
-
-    if (mounted) {
-      setState(() => _speechReady = ok);
-      if (ok && _alwaysOnEnabled) {
-        await Future.delayed(const Duration(milliseconds: 300));
-        _startAlwaysOnListening();
-      }
-    }
-  }
-
-  /// Debounced restart — prevents tight restart loops
-  void _scheduleRestart() {
-    if (!mounted || !_alwaysOnEnabled || _commandProcessing || _isListening) {
-      return;
-    }
-
-    final now = DateTime.now();
-    // Minimum 500ms between restarts to avoid loops
-    final msSinceLast = now.difference(_lastRestartTime).inMilliseconds;
-    final delay = msSinceLast < 500 ? 505 - msSinceLast : 100;
-    
-    Future.delayed(Duration(milliseconds: delay), () {
-      if (mounted && _alwaysOnEnabled && !_commandProcessing && !_isListening) {
-        _startAlwaysOnListening();
-      }
-    });
-  }
-
-  // ── Continuous listening (always-on) ──────────────────
-  Future<void> _startAlwaysOnListening() async {
-    if (!mounted || !_speechReady || _isListening || _commandProcessing) return;
-    final tts = context.read<TtsService>();
-    if (tts.isPlaying) return;
-    _lastRestartTime = DateTime.now();
-
-    try {
-      if (_speech.isListening) {
-        await _speech.cancel();
-        await Future.delayed(const Duration(milliseconds: 100));
-      }
-
-      final langProvider = context.read<LanguageProvider>();
-      final tts = context.read<TtsService>();
-      if (tts.isPlaying) {
-        await tts.togglePause(langProvider.ttsLocale);
-      }
-
-      setState(() => _isListening = true);
-
-      await _speech.listen(
-        localeId: langProvider.sttLocale,
-        // 60s window — engine auto-chunks; onStatus 'done' restarts it
-        listenFor: const Duration(seconds: 60),
-        // Wait 2.5s of silence before considering the utterance done
-        pauseFor: const Duration(seconds: 2, milliseconds: 500),
-        listenOptions: stt.SpeechListenOptions(
-          partialResults: true,
-          cancelOnError: false,
-          listenMode: stt.ListenMode.confirmation,
-        ),
-        onResult: (result) {
-          if (!mounted || _commandProcessing) return;
-
-          final words = result.recognizedWords.toLowerCase().trim();
-          if (words.isEmpty) return;
-
-          // Only act on final results or clear partial matches
-          final isFinal = result.finalResult;
-          final hasMatch = _matchesAnyCommand(words);
-
-          if (hasMatch && (isFinal || _isHighConfidence(words))) {
-            _commandProcessing = true;
-            // Stop listening while processing to avoid hearing our own TTS or command echo
-            _speech.stop().then((_) {
-              if (mounted) setState(() => _isListening = false);
-            });
-
-            final tts = context.read<TtsService>();
-            final locale = context.read<LanguageProvider>().ttsLocale;
-            final wasPlaying = tts.isPlaying;
-
-            Future.delayed(const Duration(milliseconds: 100), () {
-              _executeCommand(words, tts, locale);
-            });
-          }
-        },
-      );
-    } catch (e) {
-      debugPrint('STT listen error: $e');
-      if (mounted) {
-        setState(() => _isListening = false);
-        if (_alwaysOnEnabled && !_commandProcessing) _scheduleRestart();
-      }
-    }
-  }
-
-  bool _matchesAnyCommand(String words) {
-    if (ReadingVoiceCommands.looksLikeReadingCommand(words)) return true;
-    return _has(words, ['highlight', 'mark', 'highlight that', 'mark text']);
-  }
-
-  /// High-confidence = very short utterance that's clearly a command keyword
-  bool _isHighConfidence(String words) {
-    const highConf = [
-      'play',
-      'pause',
-      'stop',
-      'forward',
-      'back',
-      'faster',
-      'slower',
-      'restart',
-      'highlight',
-      'mark',
-    ];
-    final parts = words.split(' ');
-    return parts.length <= 3 && highConf.any((k) => words.contains(k));
-  }
-
-  // ── Toggle always-on listening ────────────────────────
-  void _toggleAlwaysOn() {
-    setState(() => _alwaysOnEnabled = !_alwaysOnEnabled);
-    if (_alwaysOnEnabled) {
-      final tts = context.read<TtsService>();
-      if (!tts.isPlaying) {
-        _startAlwaysOnListening();
-      }
-    } else {
-      _speech.stop();
-      setState(() => _isListening = false);
-    }
-  }
-
-  Future<void> _executeCommand(
-    String words,
-    TtsService tts,
-    String locale,
-  ) async {
-    if (!mounted) return;
-
-    final result = await ReadingVoiceCommands.execute(
-      spoken: words,
-      tts: tts,
-      locale: locale,
-    );
-
-    String feedback = result.handled ? result.feedback : '❓ Not recognised';
-    VoidCallback? action;
-
-    if (result.dictionaryQuery != null) {
-      action = () {
-        globalNavigatorKey.currentState?.pushNamed(
-          '/dictionary',
-          arguments: {'searchQuery': result.dictionaryQuery},
-        );
-      };
-    } else if (result.closeReader) {
-      action = () {
-        if (mounted) Navigator.pop(context);
-      };
-    } else if (!result.handled &&
-        _has(words, [
-          'highlight',
-          'mark',
-          'highlight that',
-          'mark text',
-        ])) {
-      feedback = '🖍️ Sentence highlighted';
-      action = () {
-        setState(() {
-          _hasPinnedHighlight = true;
-          _pinnedStart = tts.sentenceStart;
-          _pinnedEnd = tts.sentenceEnd;
-        });
-      };
-    }
-
-    if (!mounted) return;
-    setState(() {
-      _isListening = false;
-      _commandFeedback = feedback;
-    });
-
-    action?.call();
-    _scrollToHighlight();
-
-    _commandProcessing = false;
-    if (_alwaysOnEnabled) {
-      _scheduleRestart();
-    }
   }
 
   void _scrollToHighlight() {
@@ -365,9 +155,6 @@ class _ReaderPageState extends State<ReaderPage> {
       curve: Curves.easeInOut,
     );
   }
-
-  bool _has(String words, List<String> keywords) =>
-      keywords.any((k) => words.contains(k));
 
   // ── Open AI page ──────────────────────────────
   void _openAiPage(String mode) async {
@@ -894,186 +681,6 @@ class _ReaderPageState extends State<ReaderPage> {
     );
   }
 
-  // ── Commands panel ───────────────────────────────────
-  Widget _buildCommandsPanel() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-      padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
-      decoration: BoxDecoration(
-        color: const Color(0xFF161B2E),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.mic, color: Color(0xFF4B9EFF), size: 14),
-              const SizedBox(width: 6),
-              const Text(
-                'Voice Commands',
-                style: TextStyle(
-                  color: Color(0xFF4B9EFF),
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                ),
-              ),
-              const Spacer(),
-              GestureDetector(
-                onTap: () => setState(() => _showCommandsPanel = false),
-                child: Icon(Icons.close, color: Colors.grey[500], size: 16),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          ..._commandList.map(
-            (c) => Padding(
-              padding: const EdgeInsets.only(bottom: 4),
-              child: Row(
-                children: [
-                  Text('${c[0]}  ', style: const TextStyle(fontSize: 12)),
-                  Expanded(
-                    child: Text(
-                      c[1],
-                      style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                  Text(
-                    c[2],
-                    style: TextStyle(color: Colors.grey[500], fontSize: 10),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // ── Mic bar ───────────────────────────────────────────
-  Widget _buildMicBar() {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: _isListening
-            ? Color(0xFF4B9EFF).withValues(alpha: 0.1)
-            : Colors.white.withValues(alpha: 0.04),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: _isListening
-              ? const Color(0xFF4B9EFF)
-              : Colors.white.withValues(alpha: 0.08),
-          width: 1.5,
-        ),
-      ),
-      child: Row(
-        children: [
-          AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 40,
-            height: 40,
-            decoration: BoxDecoration(
-              color: _isListening
-                  ? Colors.green
-                  : (_alwaysOnEnabled ? Colors.grey[700] : Colors.grey[400]),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              _isListening ? Icons.graphic_eq : Icons.mic,
-              color: Colors.white,
-              size: 20,
-            ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  _isListening
-                      ? 'Listening for commands...'
-                      : (_alwaysOnEnabled
-                            ? 'Voice commands active'
-                            : 'Voice commands off'),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12,
-                  ),
-                ),
-                if (_commandFeedback.isNotEmpty) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    _commandFeedback,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 11),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ],
-            ),
-          ),
-          // Always-on toggle
-          GestureDetector(
-            onTap: _toggleAlwaysOn,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: _alwaysOnEnabled ? Colors.green : Colors.grey[300],
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _alwaysOnEnabled ? Icons.mic : Icons.mic_off,
-                    color: Colors.white,
-                    size: 13,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _alwaysOnEnabled ? 'ON' : 'OFF',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          // Toggle commands panel
-          GestureDetector(
-            onTap: () =>
-                setState(() => _showCommandsPanel = !_showCommandsPanel),
-            child: Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: Colors.grey[300],
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Icon(
-                _showCommandsPanel
-                    ? Icons.keyboard_arrow_down
-                    : Icons.help_outline,
-                color: Colors.grey[700],
-                size: 16,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
   // ── Speed panel ───────────────────────────────────────
   Widget _buildSpeedPanel(TtsService tts, String locale) {
     final rate = tts.speechRate;
@@ -1245,8 +852,12 @@ class _ReaderPageState extends State<ReaderPage> {
             ),
           ),
           GestureDetector(
-            onTap: () => tts.seekBackward(10, locale),
-            child: Icon(Icons.replay_10, color: Colors.grey[300], size: 34),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => tts.skipBackward(10, locale),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(Icons.replay_10, color: Colors.grey[300], size: 34),
+            ),
           ),
           GestureDetector(
             onTap: () {
@@ -1270,8 +881,12 @@ class _ReaderPageState extends State<ReaderPage> {
             ),
           ),
           GestureDetector(
-            onTap: () => tts.seekForward(10, locale),
-            child: Icon(Icons.forward_10, color: Colors.grey[300], size: 34),
+            behavior: HitTestBehavior.opaque,
+            onTap: () => tts.skipForward(10, locale),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: Icon(Icons.forward_10, color: Colors.grey[300], size: 34),
+            ),
           ),
           // Speed badge
           GestureDetector(
@@ -1384,12 +999,6 @@ class _ReaderPageState extends State<ReaderPage> {
 
             // ── AI Tools bar (always visible) ──────────
             _buildAiBar(),
-
-            // Commands panel (collapsible)
-            if (_showCommandsPanel) _buildCommandsPanel(),
-
-            // Mic bar
-            _buildMicBar(),
 
             // Speed panel (animated)
             AnimatedSwitcher(

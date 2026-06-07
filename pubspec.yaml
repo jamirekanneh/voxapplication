@@ -1,7 +1,7 @@
 name: voxapplication
 description: "A new Flutter project."
 publish_to: "none"
-version: 0.1.0+1
+version: 0.1.2+3
 
 environment:
   sdk: ^3.9.2
@@ -69,6 +69,9 @@ dependencies:
   # Runtime dependency so Android 12+ splash can be dismissed via FlutterNativeSplash.remove()
   flutter_native_splash: ^2.4.4
   flutter_timezone: ^5.1.0
+  audio_session: ^0.2.3
+  sherpa_onnx: ^1.13.2
+  path: ^1.9.0
 
 dev_dependencies:
   flutter_test:
@@ -105,3 +108,4 @@ flutter:
     - assets/images/Google_Logo.png
     - assets/images/chatbot_logo.png
     - assets/images/vox_logo.png
+    - assets/sherpa/keywords.txt

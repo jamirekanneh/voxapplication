@@ -6,6 +6,7 @@ import 'ai_service.dart';
 import 'language_provider.dart';
 import 'services/groq_service.dart';
 import 'services/mic_coordinator.dart';
+import 'services/app_speech_service.dart';
 import 'tts_service.dart';
 
 /// Chat sheet for asking questions about a document or note transcript.
@@ -58,9 +59,10 @@ class DocumentChatBuddySheet extends StatefulWidget {
 
 class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
     with SingleTickerProviderStateMixin {
+  static const _owner = 'study_buddy';
+
   final TextEditingController _controller = TextEditingController();
   final ScrollController _scrollController = ScrollController();
-  final stt.SpeechToText _speech = stt.SpeechToText();
   late AnimationController _pulseController;
 
   bool _isListening = false;
@@ -69,9 +71,9 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
   final List<Map<String, String>> _messages = [];
 
   Future<void> _releaseMic() async {
-    try {
-      await _speech.stop();
-    } catch (_) {}
+    if (AppSpeechService.instance.activeOwner == _owner) {
+      await AppSpeechService.instance.stop();
+    }
     if (mounted) setState(() => _isListening = false);
     MicCoordinator.instance.setChatbotListening(false);
   }
@@ -91,7 +93,9 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
     MicCoordinator.instance.unregisterReleaseHandler(_releaseMic);
     MicCoordinator.instance.setChatbotListening(false);
     _pulseController.dispose();
-    _speech.stop();
+    if (AppSpeechService.instance.activeOwner == _owner) {
+      AppSpeechService.instance.stop();
+    }
     _controller.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -110,6 +114,7 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
 
   Future<void> _listen() async {
     if (!_isListening) {
+      await MicCoordinator.instance.yieldFromAssistant();
       if (!MicCoordinator.instance.chatbotMayListen) {
         if (!mounted) return;
         ScaffoldMessenger.of(context).showSnackBar(
@@ -123,7 +128,8 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
         return;
       }
 
-      final available = await _speech.initialize(
+      final available = await AppSpeechService.instance.ensureInitialized(
+        owner: _owner,
         onStatus: (status) {
           if (status == 'done' || status == 'notListening') {
             if (mounted) setState(() => _isListening = false);
@@ -145,7 +151,8 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
       MicCoordinator.instance.registerReleaseHandler(_releaseMic);
       MicCoordinator.instance.setChatbotListening(true);
       setState(() => _isListening = true);
-      _speech.listen(
+      await AppSpeechService.instance.listen(
+        owner: _owner,
         listenOptions: stt.SpeechListenOptions(
           partialResults: true,
           listenMode: stt.ListenMode.dictation,
@@ -204,7 +211,7 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
         final tts = context.read<TtsService>();
         Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted) {
-            tts.play(widget.documentTitle, response, locale);
+            tts.speakBrief(response, locale);
           }
         });
       }
@@ -226,7 +233,11 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
 
-    return Padding(
+    return GestureDetector(
+      behavior: HitTestBehavior.translucent,
+      onDoubleTap: () =>
+          MicCoordinator.instance.activateAssistant(manual: true),
+      child: Padding(
       padding: EdgeInsets.only(
         bottom: MediaQuery.of(context).viewInsets.bottom,
       ),
@@ -427,9 +438,7 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
                       controller: _controller,
                       style: const TextStyle(color: Colors.white),
                       decoration: InputDecoration(
-                        hintText: _isListening
-                            ? lang.t('listening_dots')
-                            : lang.t('ask_about_document'),
+                        hintText: lang.t('ask_about_document'),
                         hintStyle: TextStyle(
                           color: Colors.white.withValues(alpha: 0.3),
                         ),
@@ -464,6 +473,7 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
           ],
         ),
       ),
+    ),
     );
   }
 }

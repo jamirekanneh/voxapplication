@@ -37,6 +37,14 @@ class _AskQuestionsPageState extends State<AskQuestionsPage> {
           'Absolutely! Visit the Commands section in the Menu to view our rich library of voice commands. You can also customize them manually to better fit your workflow.',
     },
     {
+      'q': 'Can I use voice commands while the app reads aloud?',
+      'a':
+          'Yes. Open any document and start read-aloud — the mic listens for pause, play, continue, stop, forward, and back. '
+          'For the most reliable hands-free experience, use wired or Bluetooth earphones: TTS plays in your ears and the microphone hears only you, not the speaker. '
+          'If voice control is missed or read-aloud sounds too quiet on the phone speaker alone, plug in earphones and try again. '
+          'You can also tap pause on screen, then say continue or play to resume.',
+    },
+    {
       'q': 'How do voice commands work?',
       'a':
           'On Home, turn on Assistant for hands-free control, or double-tap anywhere when Assistant is enabled. Say phrases like "open notes", "open dictionary", or "open saved docs". Custom commands are in Menu. The search-bar mic on Home and Dictionary is separate—it filters your library or looks up words and temporarily pauses the Assistant.',

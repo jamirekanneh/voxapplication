@@ -6,6 +6,8 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'theme_provider.dart';
 import 'language_provider.dart';
+import 'services/mic_coordinator.dart';
+import 'services/app_speech_service.dart';
 
 class RecommendationsPage extends StatefulWidget {
   const RecommendationsPage({super.key});
@@ -20,7 +22,8 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   int _rating = 0;
   bool _isSending = false;
 
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  static const _owner = 'recommendations';
+
   bool _isListening = false;
   bool _speechAvailable = false;
 
@@ -36,18 +39,20 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
   Future<void> _initSpeech() async {
     final status = await Permission.microphone.request();
     if (!status.isGranted) return;
-    final ok = await _speech.initialize();
+    final ok = await AppSpeechService.instance.ensureInitialized(owner: _owner);
     if (mounted) setState(() => _speechAvailable = ok);
   }
 
   Future<void> _toggleVoice() async {
     if (!_speechAvailable) return;
+    await MicCoordinator.instance.yieldFromAssistant();
     if (_isListening) {
-      await _speech.stop();
+      await AppSpeechService.instance.stop();
       if (mounted) setState(() => _isListening = false);
     } else {
       setState(() => _isListening = true);
-      await _speech.listen(
+      await AppSpeechService.instance.listen(
+        owner: _owner,
         listenOptions: stt.SpeechListenOptions(
           listenMode: stt.ListenMode.dictation,
         ),
@@ -66,7 +71,7 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
   @override
   void dispose() {
-    _speech.stop();
+    AppSpeechService.instance.stop();
     _controller.dispose();
     super.dispose();
   }

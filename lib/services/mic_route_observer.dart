@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
 
+import 'package:provider/provider.dart';
+
+import '../navigation_keys.dart';
+import '../tts_service.dart';
 import 'mic_coordinator.dart';
 
 /// Updates [MicCoordinator] when the user navigates between main routes.
@@ -9,6 +13,18 @@ class MicRouteObserver extends NavigatorObserver {
     final name = route.settings.name;
     if (name != null && name.isNotEmpty) {
       MicCoordinator.instance.setRoute(name);
+      _ensureMiniPlayerVisibleOnNamedRoute();
+    }
+  }
+
+  /// Reader hides the global bar while it is the top route; any named route on
+  /// top means the user left the reader UI and should see pause/skip controls.
+  void _ensureMiniPlayerVisibleOnNamedRoute() {
+    final ctx = globalNavigatorKey.currentContext;
+    if (ctx == null) return;
+    final tts = ctx.read<TtsService>();
+    if (tts.isVisible) {
+      tts.setSuppressGlobalMiniPlayer(false);
     }
   }
 

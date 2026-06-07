@@ -9,6 +9,10 @@ import 'command_dispatcher.dart';
 import 'tts_service.dart';
 import 'language_provider.dart';
 import 'services/mic_coordinator.dart';
+import 'services/reading_voice_listener.dart';
+import 'services/read_aloud_ui.dart';
+import 'services/app_speech_service.dart';
+import 'mini_player_bar.dart';
 
 // ─────────────────────────────────────────────
 //  GLOBAL STT WRAPPER
@@ -26,7 +30,8 @@ class GlobalSttWrapper extends StatefulWidget {
 
 class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     with SingleTickerProviderStateMixin {
-  final stt.SpeechToText _speech = stt.SpeechToText();
+  static const _owner = 'assistant';
+
   bool _isHardwareListening = false;
   bool _showListeningUI = false;
   bool _speechAvailable = false;
@@ -34,16 +39,19 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
 
   late AnimationController _pulseController;
   late Animation<double> _pulseAnimation;
+  late ReadingVoiceListener _readingVoiceListener;
 
   Future<void> _releaseMicForRecording() async {
     _updateListening(hardware: false, ui: false);
-    await _speech.stop();
-    await _speech.cancel();
+    if (AppSpeechService.instance.activeOwner == _owner) {
+      await AppSpeechService.instance.stop();
+    }
   }
 
   @override
   void initState() {
     super.initState();
+    MicCoordinator.instance.requestAssistantListen = _activateAssistant;
     MicCoordinator.instance.registerReleaseHandler(_releaseMicForRecording);
     MicCoordinator.instance.addListener(_onMicPriorityChanged);
     _initSpeech();
@@ -57,15 +65,27 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
 
-    // Listen for assistant mode toggle
+    _readingVoiceListener = ReadingVoiceListener(hostState: this);
+    unawaited(_readingVoiceListener.init());
+
+    // Listen for assistant mode toggle + read-aloud voice controls
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<CustomCommandsProvider>().addListener(_onProviderChange);
+      context.read<TtsService>().addListener(_onTtsChanged);
     });
+  }
+
+  void _onTtsChanged() {
+    if (!mounted) return;
+    _readingVoiceListener.onTtsChanged();
   }
 
   void _onMicPriorityChanged() {
     if (!mounted) return;
+    _readingVoiceListener.onMicChanged();
     if (MicCoordinator.instance.searchMicActive) return;
+    // Don't fight read-aloud voice for the shared mic.
+    if (MicCoordinator.instance.globalReadingVoiceActive) return;
 
     final provider = context.read<CustomCommandsProvider>();
     if (MicCoordinator.instance.assistantMayListen &&
@@ -95,14 +115,47 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
 
   @override
   void dispose() {
+    if (MicCoordinator.instance.requestAssistantListen == _activateAssistant) {
+      MicCoordinator.instance.requestAssistantListen = null;
+    }
     MicCoordinator.instance.removeListener(_onMicPriorityChanged);
     MicCoordinator.instance.unregisterReleaseHandler(_releaseMicForRecording);
+    try {
+      context.read<TtsService>().removeListener(_onTtsChanged);
+    } catch (_) {}
+    _readingVoiceListener.dispose();
     _pulseController.dispose();
     super.dispose();
   }
 
+  Future<void> _activateAssistant({bool manual = true}) async {
+    if (!MicCoordinator.instance.assistantMayActivate) {
+      if (manual && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Assistant is unavailable while read-aloud is active. '
+              'Say pause or stop, or use the mini player.',
+            ),
+            behavior: SnackBarBehavior.floating,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+      return;
+    }
+    if (!_speechAvailable) return;
+    final provider = context.read<CustomCommandsProvider>();
+    if (!provider.assistantModeEnabled) {
+      provider.setAssistantMode(true);
+    }
+    MicCoordinator.instance.setAssistantMicActive(true);
+    await _startListening(manual: manual);
+  }
+
   Future<void> _initSpeech() async {
-    _speechAvailable = await _speech.initialize(
+    _speechAvailable = await AppSpeechService.instance.ensureInitialized(
+      owner: _owner,
       onError: (e) {
         if (mounted) _updateListening(hardware: false, ui: false);
         _checkAutoRestart();
@@ -120,14 +173,9 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
   Future<void> _startListening({bool manual = false}) async {
     if (!MicCoordinator.instance.assistantMayListen) {
       if (manual && mounted) {
-        final route = MicCoordinator.instance.currentRoute ?? 'this screen';
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-              route == '/home'
-                  ? 'Assistant microphone is busy.'
-                  : 'Voice assistant is only active on the Home screen.',
-            ),
+          const SnackBar(
+            content: Text('Assistant microphone is busy.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -140,15 +188,11 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     if (status != PermissionStatus.granted) return;
 
     if (!_speechAvailable) return;
-    if (_isHardwareListening) {
-      await _speech.stop();
-      await _speech.cancel();
+    if (_isHardwareListening &&
+        AppSpeechService.instance.activeOwner == _owner) {
+      await AppSpeechService.instance.stop();
       if (mounted) _updateListening(hardware: false, ui: false);
     }
-
-    // Force cancel any stuck session before starting
-    await _speech.stop();
-    await _speech.cancel();
 
     if (!mounted) return;
 
@@ -160,11 +204,14 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     });
 
     MicCoordinator.instance.unregisterReleaseHandler(_releaseMicForRecording);
-    await MicCoordinator.instance.releaseAll();
+    await MicCoordinator.instance.releaseAll(
+      keepReadingVoice: MicCoordinator.instance.globalReadingVoiceActive,
+    );
     if (!mounted) return;
     MicCoordinator.instance.registerReleaseHandler(_releaseMicForRecording);
 
-    await _speech.listen(
+    final started = await AppSpeechService.instance.handoffListen(
+      owner: _owner,
       onResult: (result) {
         debugPrint('STT RESULT: "${result.recognizedWords}"');
         if (mounted) setState(() => _lastWords = result.recognizedWords);
@@ -176,7 +223,20 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
         partialResults: true,
         cancelOnError: false,
       ),
+      onStatus: (status) {
+        if (status == 'done' || status == 'notListening') {
+          if (mounted) _updateListening(hardware: false, ui: false);
+          _handleResult();
+        }
+      },
+      onError: (e) {
+        if (mounted) _updateListening(hardware: false, ui: false);
+        _checkAutoRestart();
+      },
     );
+    if (!started && mounted) {
+      _updateListening(hardware: false, ui: false);
+    }
   }
 
   Future<void> _handleResult() async {
@@ -226,7 +286,7 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
       if (commandsProvider.voiceFeedbackEnabled) {
         final ttsService = context.read<TtsService>();
         final locale = context.read<LanguageProvider>().currentLocale;
-        ttsService.play('', 'Hey! I am listening.', locale);
+        ttsService.speakBrief('Hey! I am listening.', locale);
       }
       _startListening(manual: true);
       return;
@@ -268,18 +328,21 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
 
   void _updateListening({required bool hardware, required bool ui}) {
     if (!mounted) return;
+    final showAssistantUi =
+        hardware && ui && MicCoordinator.instance.assistantMicActive;
     setState(() {
       _isHardwareListening = hardware;
-      _showListeningUI = hardware && ui;
+      _showListeningUI = showAssistantUi;
     });
-    context.read<CustomCommandsProvider>().setListening(_showListeningUI);
+    context.read<CustomCommandsProvider>().setListening(showAssistantUi);
   }
 
   void _checkAutoRestart() {
     if (!mounted) return;
     if (MicCoordinator.instance.searchMicActive) return;
-    if (!MicCoordinator.instance.assistantMicActive) return;
+    if (MicCoordinator.instance.globalReadingVoiceActive) return;
     if (!MicCoordinator.instance.assistantMayListen) return;
+    if (!MicCoordinator.instance.assistantMicActive) return;
     final assistantEnabled =
         context.read<CustomCommandsProvider>().assistantModeEnabled;
     if (assistantEnabled && !_isHardwareListening) {
@@ -295,29 +358,76 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     }
   }
 
+  /// Bottom offset so the mini player clears the tab bar + center-docked upload FAB.
+  double _miniPlayerBottomInset(BuildContext context) {
+    final name = MicCoordinator.instance.currentRoute;
+    const routesWithDockedFab = {
+      '/home',
+      '/notes',
+      '/dictionary',
+      '/menu',
+    };
+    if (name != null && routesWithDockedFab.contains(name)) {
+      // BottomAppBar (65) + half the center-docked FAB + small gap.
+      const barHeight = 65.0;
+      const fabSize = 56.0;
+      const gap = 10.0;
+      return barHeight + (fabSize * 0.5) + gap;
+    }
+    return 12;
+  }
+
+  double _voiceTipBottom(TtsService tts, double miniPlayerBottom) {
+    if (tts.showGlobalMiniPlayer) {
+      return miniPlayerBottom + 76;
+    }
+    if (tts.suppressGlobalMiniPlayer) {
+      return 150;
+    }
+    return 96;
+  }
+
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: MicCoordinator.instance,
+      builder: (context, _) {
+        return _buildWithTts(context);
+      },
+    );
+  }
+
+  Widget _buildWithTts(BuildContext context) {
+    final tts = context.watch<TtsService>();
+    final miniPlayerBottom = _miniPlayerBottomInset(context);
+    final listeningBottom = tts.showGlobalMiniPlayer
+        ? miniPlayerBottom + 72.0
+        : 100.0;
+
     return Semantics(
       label: 'Double tap anywhere to activate voice commands',
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
-        onDoubleTap: _speechAvailable
-            ? () {
-                final provider = context.read<CustomCommandsProvider>();
-                if (!provider.assistantModeEnabled) {
-                  provider.setAssistantMode(true);
-                }
-                MicCoordinator.instance.setAssistantMicActive(true);
-                _startListening(manual: true);
-              }
-            : null,
+        onDoubleTap: _speechAvailable ? () => _activateAssistant(manual: true) : null,
         child: Stack(
           children: [
             widget.child,
 
-            if (_showListeningUI && !MicCoordinator.instance.searchMicActive)
+            if (tts.showGlobalMiniPlayer)
               Positioned(
-                bottom: 100,
+                left: 8,
+                right: 8,
+                bottom: miniPlayerBottom,
+                child: SafeArea(
+                  top: false,
+                  child: const MiniPlayerBar(),
+                ),
+              ),
+
+            if (_showListeningUI &&
+                MicCoordinator.instance.assistantMicActive)
+              Positioned(
+                bottom: listeningBottom,
                 left: 0,
                 right: 0,
                 child: Center(
@@ -370,6 +480,22 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
                   ),
                 ),
               ),
+
+            ValueListenableBuilder<bool>(
+              valueListenable: ReadAloudUi.voiceTipVisible,
+              builder: (context, visible, _) {
+                if (!visible) return const SizedBox.shrink();
+                return ValueListenableBuilder<String>(
+                  valueListenable: ReadAloudUi.voiceTipMessage,
+                  builder: (context, message, _) {
+                    return ReadingVoiceTipBanner(
+                      bottom: _voiceTipBottom(tts, miniPlayerBottom),
+                      message: message,
+                    );
+                  },
+                );
+              },
+            ),
           ],
         ),
       ),

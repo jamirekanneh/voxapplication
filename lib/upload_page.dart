@@ -12,6 +12,7 @@ import 'package:permission_handler/permission_handler.dart';
 import 'package:archive/archive.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
+import 'package:path_provider/path_provider.dart';
 import 'dart:typed_data';
 import 'theme_provider.dart';
 import 'temp_library_provider.dart';
@@ -20,6 +21,8 @@ import 'tts_service.dart';
 import 'reader_page.dart';
 import 'analytics_service.dart';
 import 'services/auth_session.dart';
+import 'services/mic_coordinator.dart';
+import 'services/document_text_extractor.dart';
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});
@@ -109,6 +112,7 @@ class _UploadPageState extends State<UploadPage> {
     required String fileType,
     required String fileContent,
   }) async {
+    await MicCoordinator.instance.yieldFromAssistant();
     if (_resolvedIsGuest) {
       setState(() => _statusMessage = 'Adding to temporary library...');
       final tempProvider = context.read<TempLibraryProvider>();
@@ -122,13 +126,32 @@ class _UploadPageState extends State<UploadPage> {
       );
     } else {
       setState(() => _statusMessage = 'Saving to library...');
-      await FirebaseFirestore.instance.collection('library').add({
-        'fileName': fileName,
-        'fileType': fileType,
-        'userId': _resolvedUid,
-        'content': fileContent,
-        'timestamp': FieldValue.serverTimestamp(),
-      });
+      try {
+        const firestoreMaxChars = 900000;
+        final storedContent = fileContent.length > firestoreMaxChars
+            ? '${fileContent.substring(0, firestoreMaxChars)}\n\n[Document truncated for cloud storage — full text is available while reading now.]'
+            : fileContent;
+        await FirebaseFirestore.instance.collection('library').add({
+          'fileName': fileName,
+          'fileType': fileType,
+          'userId': _resolvedUid,
+          'content': storedContent,
+          'timestamp': FieldValue.serverTimestamp(),
+        });
+      } catch (e) {
+        debugPrint('Firestore library save failed: $e');
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Could not save "$fileName" to cloud (${e.toString().split('\n').first}). Reading locally.',
+              ),
+              backgroundColor: VoxColors.surface(context),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
     }
 
     // Track file upload operation
@@ -200,10 +223,23 @@ class _UploadPageState extends State<UploadPage> {
       // Presentations
       'ppt': 50 * 1024 * 1024,    // 50MB
       'pptx': 50 * 1024 * 1024,   // 50MB
+      'pptm': 50 * 1024 * 1024,   // 50MB
+      'potx': 50 * 1024 * 1024,   // 50MB
+      'ppsx': 50 * 1024 * 1024,   // 50MB
+      'pps': 50 * 1024 * 1024,    // 50MB
+      'pot': 50 * 1024 * 1024,    // 50MB
 
       // Spreadsheets
       'xls': 25 * 1024 * 1024,    // 25MB
       'xlsx': 25 * 1024 * 1024,   // 25MB
+
+      // Images (OCR)
+      'jpg': 25 * 1024 * 1024,
+      'jpeg': 25 * 1024 * 1024,
+      'png': 25 * 1024 * 1024,
+      'webp': 25 * 1024 * 1024,
+      'heic': 25 * 1024 * 1024,
+      'bmp': 25 * 1024 * 1024,
 
       // Other
       'epub': 25 * 1024 * 1024,   // 25MB
@@ -264,12 +300,34 @@ class _UploadPageState extends State<UploadPage> {
   Future<void> _pickAnyFile() async {
     await _requestPermissionsIfNeeded();
     await _resolveUser();
+    await MicCoordinator.instance.yieldFromAssistant();
 
     FilePickerResult? result = await FilePicker.pickFiles(
       type: FileType.any,
-      withData: true,
+      allowMultiple: true,
+      withData: false,
     );
-    if (result == null) return;
+    if (result == null || result.files.isEmpty) return;
+
+    if (result.files.length > 1 &&
+        result.files.every((f) => _isImageExtension(_fileExtension(f)))) {
+      await _readUploadedImages(result.files);
+      return;
+    }
+
+    if (result.files.length > 1) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Select one document at a time, or select multiple photos only.',
+            ),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() {
       _isUploading = true;
@@ -278,7 +336,7 @@ class _UploadPageState extends State<UploadPage> {
 
     final file = result.files.first;
     final String fileName = file.name;
-    final String extension = (file.extension ?? 'file').toLowerCase();
+    final String extension = _fileExtension(file);
 
     Uint8List? fileBytes = file.bytes;
     if (fileBytes == null && file.path != null) {
@@ -287,6 +345,22 @@ class _UploadPageState extends State<UploadPage> {
       } catch (e) {
         debugPrint('File read error: $e');
       }
+    }
+
+    if (fileBytes == null || fileBytes.isEmpty) {
+      setState(() => _isUploading = false);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text(
+              'Could not read this file. Try again or use a smaller file.',
+            ),
+            backgroundColor: VoxColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
     }
 
     // Enhanced file validation
@@ -314,21 +388,29 @@ class _UploadPageState extends State<UploadPage> {
     try {
       if (extension == 'txt' && fileBytes != null) {
         fileContent = utf8.decode(fileBytes, allowMalformed: true);
-      } else if (extension == 'pdf' && fileBytes != null) {
+      } else if (extension == 'pdf') {
         setState(() => _statusMessage = 'Extracting PDF text...');
         fileContent = await _extractPdfText(fileBytes);
-      } else if ((extension == 'ppt' || extension == 'pptx') &&
-          fileBytes != null) {
-        setState(() => _statusMessage = 'Extracting presentation text...');
-        fileContent = extension == 'pptx'
-            ? _extractPptxTextFromZip(fileBytes)
-            : _extractPlainText(fileBytes);
+      } else if (_isImageExtension(extension)) {
+        setState(() => _statusMessage = 'Reading text from image...');
+        fileContent = await _extractTextFromImage(
+          bytes: fileBytes,
+          filePath: file.path,
+          fileName: fileName,
+        );
+      } else if (_isPresentationExtension(extension)) {
+        setState(() => _statusMessage = 'Extracting slide text (ignoring images)...');
+        fileContent = _extractPresentationText(fileBytes, extension);
+        if (fileContent.isEmpty) {
+          fileContent = _extractXmlBasedText(fileBytes);
+        }
       } else if ((extension == 'docx' || extension == 'doc') &&
           fileBytes != null) {
-        setState(() => _statusMessage = 'Extracting document text...');
-        fileContent = extension == 'docx'
-            ? _extractDocxTextFromZip(fileBytes)
-            : _extractPlainText(fileBytes);
+        setState(() => _statusMessage = 'Extracting text (ignoring images)...');
+        fileContent = DocumentTextExtractor.extractDoc(
+          fileBytes,
+          extension: extension,
+        );
       } else if ((extension == 'md' ||
               extension == 'rtf' ||
               extension == 'csv' ||
@@ -350,8 +432,17 @@ class _UploadPageState extends State<UploadPage> {
 
       fileContent = fileContent.trim().replaceAll(RegExp(r'\n{3,}'), '\n\n');
       debugPrint(
-        'ðŸ“„ Extracted ${fileContent.length} chars from $fileName ($extension)',
+        'Extracted ${fileContent.length} chars from $fileName ($extension)',
       );
+
+      if (fileContent.isEmpty) {
+        setState(() => _isUploading = false);
+        await _alertImageOnlyUpload(
+          fileName: fileName,
+          extension: extension,
+        );
+        return;
+      }
 
       await _saveAndOpenReader(
         fileName: fileName,
@@ -379,6 +470,7 @@ class _UploadPageState extends State<UploadPage> {
   Future<void> _scanDocument() async {
     await _requestPermissionsIfNeeded();
     await _resolveUser();
+    await MicCoordinator.instance.yieldFromAssistant();
 
     // Check then request camera permission
     PermissionStatus camStatus = await Permission.camera.status;
@@ -579,17 +671,10 @@ class _UploadPageState extends State<UploadPage> {
 
       if (scanned.isEmpty) {
         setState(() => _isUploading = false);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text(
-              'No text detected. Try better lighting or hold the camera steadier.',
-            ),
-            backgroundColor: VoxColors.danger,
-            behavior: SnackBarBehavior.floating,
-          ),
-          );
-        }
+        await _alertImageOnlyUpload(
+          fileName: 'scan',
+          extension: 'scan',
+        );
         return;
       }
 
@@ -680,25 +765,187 @@ class _UploadPageState extends State<UploadPage> {
     );
   }
 
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  TEXT EXTRACTORS
-  // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  String _fileExtension(PlatformFile file) {
+    final fromPicker = file.extension?.toLowerCase();
+    if (fromPicker != null && fromPicker.isNotEmpty) return fromPicker;
+    final name = file.name;
+    if (name.contains('.')) return name.split('.').last.toLowerCase();
+    return 'file';
+  }
 
-  Future<String> _extractPdfText(List<int> bytes) async {
+  bool _isImageExtension(String extension) =>
+      const {'jpg', 'jpeg', 'png', 'webp', 'heic', 'bmp'}.contains(extension);
+
+  /// Text + spoken alert when an upload has no readable text (image-only).
+  Future<void> _alertImageOnlyUpload({
+    required String fileName,
+    required String extension,
+  }) async {
+    if (!mounted) return;
+
+    final isPhoto =
+        _isImageExtension(extension) || extension == 'scan' || extension == 'jpg';
+    final screenMessage = isPhoto
+        ? 'This upload only contains images — no text was found to read. '
+            'Try Scan Document with good lighting, or a clearer photo.'
+        : 'This upload only contains images — no readable text in "$fileName". '
+            'Embedded pictures are ignored. Add typed text in Word or PowerPoint, '
+            'or use Scan Document for photo pages.';
+    const voiceMessage =
+        'This upload only contains images. No text to read aloud.';
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(screenMessage),
+        backgroundColor: VoxColors.danger,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 7),
+      ),
+    );
+    SemanticsService.announce(voiceMessage, TextDirection.ltr);
+
     try {
-      final PdfDocument document = PdfDocument(inputBytes: bytes);
-      final PdfTextExtractor extractor = PdfTextExtractor(document);
-      final StringBuffer buffer = StringBuffer();
-      for (int i = 0; i < document.pages.count; i++) {
-        buffer.writeln(
-          extractor.extractText(startPageIndex: i, endPageIndex: i),
+      final locale = context.read<LanguageProvider>().ttsLocale;
+      await context.read<TtsService>().speakBrief(voiceMessage, locale);
+    } catch (e) {
+      debugPrint('Image-only upload alert TTS failed: $e');
+    }
+  }
+
+  Future<String> _extractTextFromImage({
+    required Uint8List bytes,
+    String? filePath,
+    required String fileName,
+  }) async {
+    File? tempFile;
+    try {
+      String path = filePath ?? '';
+      if (path.isEmpty) {
+        final dir = await getTemporaryDirectory();
+        final ext = _fileExtension(
+          PlatformFile(name: fileName, size: bytes.length, bytes: bytes),
+        );
+        tempFile = File(
+          '${dir.path}/ocr_${DateTime.now().millisecondsSinceEpoch}.$ext',
+        );
+        await tempFile.writeAsBytes(bytes);
+        path = tempFile.path;
+      }
+
+      final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
+      final result = await recognizer.processImage(InputImage.fromFilePath(path));
+      recognizer.close();
+      return result.text.trim();
+    } catch (e) {
+      debugPrint('Image OCR error: $e');
+      return '';
+    } finally {
+      try {
+        tempFile?.deleteSync();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _readUploadedImages(List<PlatformFile> files) async {
+    setState(() {
+      _isUploading = true;
+      _statusMessage = files.length == 1
+          ? 'Reading text from image...'
+          : 'Reading image 1 of ${files.length}...';
+    });
+
+    try {
+      final buffer = StringBuffer();
+      for (var i = 0; i < files.length; i++) {
+        final file = files[i];
+        if (files.length > 1 && mounted) {
+          setState(
+            () => _statusMessage = 'Reading image ${i + 1} of ${files.length}...',
+          );
+        }
+
+        Uint8List? bytes = file.bytes;
+        if ((bytes == null || bytes.isEmpty) && file.path != null) {
+          bytes = await File(file.path!).readAsBytes();
+        }
+        if (bytes == null || bytes.isEmpty) continue;
+
+        final ext = _fileExtension(file);
+        if (!_isValidFile(file, ext)) continue;
+
+        final text = await _extractTextFromImage(
+          bytes: bytes,
+          filePath: file.path,
+          fileName: file.name,
+        );
+        if (text.isNotEmpty) {
+          if (buffer.isNotEmpty) buffer.write('\n\n');
+          buffer.write(text);
+        }
+      }
+
+      final combined = buffer.toString().trim().replaceAll(RegExp(r'\n{3,}'), '\n\n');
+      if (combined.isEmpty) {
+        setState(() => _isUploading = false);
+        await _alertImageOnlyUpload(
+          fileName: files.length == 1 ? files.first.name : 'photos',
+          extension: _fileExtension(files.first),
+        );
+        return;
+      }
+
+      final label = files.length == 1
+          ? files.first.name
+          : 'Photos (${files.length})';
+      await _saveAndOpenReader(
+        fileName: label,
+        fileType: _fileExtension(files.first),
+        fileContent: combined,
+      );
+    } catch (e) {
+      debugPrint('Image upload read error: $e');
+      if (mounted) {
+        setState(() => _isUploading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Could not read image(s). Please try again.'),
+            backgroundColor: VoxColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
         );
       }
-      document.dispose();
-      return buffer.toString();
+    }
+  }
+
+  // ────────────────────────────────────────────────────────────
+  //  TEXT EXTRACTORS
+  // ────────────────────────────────────────────────────────────
+
+  Future<String> _extractPdfText(List<int> bytes) async {
+    PdfDocument? document;
+    try {
+      document = PdfDocument(inputBytes: bytes);
+      final extractor = PdfTextExtractor(document);
+      final buffer = StringBuffer();
+      for (int i = 0; i < document.pages.count; i++) {
+        final pageText = extractor.extractText(
+          startPageIndex: i,
+          endPageIndex: i,
+        );
+        if (pageText.trim().isNotEmpty) {
+          buffer.writeln(pageText);
+        }
+      }
+      var result = buffer.toString().trim();
+      if (result.isEmpty) {
+        result = extractor.extractText().trim();
+      }
+      return result;
     } catch (e) {
       debugPrint('PDF extraction error: $e');
       return '';
+    } finally {
+      document?.dispose();
     }
   }
 
@@ -734,35 +981,222 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
+  bool _isPresentationExtension(String extension) =>
+      const {'ppt', 'pptx', 'pptm', 'potx', 'ppsx', 'pps', 'pot', 'odp'}
+          .contains(extension);
+
+  bool _isZipBytes(List<int> bytes) =>
+      bytes.length >= 4 && bytes[0] == 0x50 && bytes[1] == 0x4B;
+
+  String _normalizeArchivePath(String path) =>
+      path.replaceAll('\\', '/').toLowerCase();
+
+  int _slideNumberFromPath(String path) {
+    final match = RegExp(r'slide(\d+)').firstMatch(path);
+    return int.tryParse(match?.group(1) ?? '0') ?? 0;
+  }
+
+  String _decodeXmlText(String raw) {
+    var text = raw;
+    text = text.replaceAllMapped(RegExp(r'&#x([0-9a-fA-F]+);'), (m) {
+      final code = int.tryParse(m.group(1)!, radix: 16);
+      return code != null ? String.fromCharCode(code) : m.group(0)!;
+    });
+    text = text.replaceAllMapped(RegExp(r'&#(\d+);'), (m) {
+      final code = int.tryParse(m.group(1)!);
+      return code != null ? String.fromCharCode(code) : m.group(0)!;
+    });
+    text = text
+        .replaceAll(RegExp(r'<[^>]+>'), ' ')
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&apos;', "'")
+        .replaceAll('&#39;', "'")
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return text;
+  }
+
+  void _appendUniqueText(StringBuffer buffer, Set<String> seen, String text) {
+    final cleaned = _decodeXmlText(text);
+    if (cleaned.length < 2) return;
+    if (seen.add(cleaned)) {
+      buffer.writeln(cleaned);
+    }
+  }
+
+  List<int>? _archiveEntryBytes(ArchiveFile file) {
+    try {
+      final raw = file.content;
+      if (raw != null && raw.isNotEmpty) return raw as List<int>;
+    } catch (_) {}
+    return null;
+  }
+
+  int _presentationXmlPriority(String path) {
+    if (RegExp(r'ppt/slides/slide\d+\.xml').hasMatch(path)) {
+      return _slideNumberFromPath(path);
+    }
+    if (path.contains('ppt/notesslides/')) return 1000 + _slideNumberFromPath(path);
+    if (path.contains('ppt/slidelayouts/')) return 2000;
+    if (path.contains('ppt/slidemasters/')) return 3000;
+    if (path.contains('ppt/')) return 4000;
+    return 5000;
+  }
+
+  void _extractTextFromPresentationXml(
+    String xml,
+    StringBuffer buffer,
+    Set<String> seen,
+  ) {
+    final patterns = [
+      RegExp(r'<a:t[^>]*>(.*?)</a:t>', dotAll: true),
+      RegExp(r'<a14:t[^>]*>(.*?)</a14:t>', dotAll: true),
+      RegExp(r'<p:t[^>]*>(.*?)</p:t>', dotAll: true),
+      RegExp(r'<dsp:t[^>]*>(.*?)</dsp:t>', dotAll: true),
+      RegExp(r'<w:t[^>]*>(.*?)</w:t>', dotAll: true),
+      RegExp(r'<text:p[^>]*>(.*?)</text:p>', dotAll: true),
+      RegExp(r'<text:span[^>]*>(.*?)</text:span>', dotAll: true),
+      // DrawingML / legacy runs without namespace prefix in inner XML
+      RegExp(r'<(?:(?:a|p|a14|p14):)?t[^>]*>(.*?)</(?:(?:a|p|a14|p14):)?t>', dotAll: true),
+    ];
+    for (final pattern in patterns) {
+      for (final match in pattern.allMatches(xml)) {
+        _appendUniqueText(buffer, seen, match.group(1) ?? '');
+      }
+    }
+  }
+
   String _extractPptxTextFromZip(List<int> bytes) {
     try {
-      final archive = ZipDecoder().decodeBytes(bytes);
+      final archive = ZipDecoder().decodeBytes(bytes, verify: false);
       final buffer = StringBuffer();
-      final slideRegex = RegExp(r'^ppt/slides/slide\d+\.xml$');
-      final slideFiles =
-          archive.files.where((f) => slideRegex.hasMatch(f.name)).toList()
-            ..sort((a, b) => a.name.compareTo(b.name));
-      final textRegex = RegExp(r'<a:t[^>]*>(.*?)<\/a:t>', dotAll: true);
-      for (final slideFile in slideFiles) {
-        final xml = utf8.decode(
-          slideFile.content as List<int>,
-          allowMalformed: true,
+      final seen = <String>{};
+
+      final xmlFiles = archive.files
+          .where((f) {
+            if (!f.isFile) return false;
+            final path = _normalizeArchivePath(f.name);
+            return path.endsWith('.xml') &&
+                (path.contains('ppt/') || path == 'content.xml');
+          })
+          .toList()
+        ..sort(
+          (a, b) => _presentationXmlPriority(_normalizeArchivePath(a.name))
+              .compareTo(_presentationXmlPriority(_normalizeArchivePath(b.name))),
         );
-        String prev = '';
-        for (final m in textRegex.allMatches(xml)) {
-          final text = m.group(1)?.trim() ?? '';
-          if (text.isNotEmpty && text != prev) {
-            buffer.write('$text ');
-            prev = text;
-          }
-        }
-        buffer.write('\n');
+
+      for (final file in xmlFiles) {
+        final entryBytes = _archiveEntryBytes(file);
+        if (entryBytes == null || entryBytes.isEmpty) continue;
+        final xml = utf8.decode(entryBytes, allowMalformed: true);
+        _extractTextFromPresentationXml(xml, buffer, seen);
       }
+
+      debugPrint(
+        'PPTX: scanned ${xmlFiles.length} XML parts, ${seen.length} text runs',
+      );
       return buffer.toString().trim();
     } catch (e) {
       debugPrint('PPTX ZIP extraction error: $e');
       return '';
     }
+  }
+
+  String _extractOdpText(List<int> bytes) {
+    try {
+      final archive = ZipDecoder().decodeBytes(bytes, verify: false);
+      final buffer = StringBuffer();
+      final seen = <String>{};
+
+      ArchiveFile? contentFile;
+      for (final f in archive.files) {
+        if (!f.isFile) continue;
+        final path = _normalizeArchivePath(f.name);
+        if (path == 'content.xml' || path.endsWith('/content.xml')) {
+          contentFile = f;
+          break;
+        }
+      }
+      if (contentFile == null) return '';
+
+      final entryBytes = _archiveEntryBytes(contentFile);
+      if (entryBytes == null) return '';
+
+      final xml = utf8.decode(entryBytes, allowMalformed: true);
+      _extractTextFromPresentationXml(xml, buffer, seen);
+      return buffer.toString().trim();
+    } catch (e) {
+      debugPrint('ODP extraction error: $e');
+      return '';
+    }
+  }
+
+  bool _isMeaningfulSlideText(String text) {
+    if (text.length < 3) return false;
+    final letterCount = RegExp(r'[A-Za-z]').allMatches(text).length;
+    return letterCount >= 2;
+  }
+
+  String _extractLegacyPptBinaryText(List<int> bytes) {
+    final found = <String>{};
+    final buffer = StringBuffer();
+
+    void addIfMeaningful(String value) {
+      final cleaned = value.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (_isMeaningfulSlideText(cleaned) && found.add(cleaned)) {
+        buffer.writeln(cleaned);
+      }
+    }
+
+    // UTF-16 LE runs (common in legacy Office binary files)
+    final runes = StringBuffer();
+    for (var i = 0; i < bytes.length - 1; i += 2) {
+      final code = bytes[i] | (bytes[i + 1] << 8);
+      if (code >= 32 && code < 0xD800) {
+        runes.writeCharCode(code);
+      } else {
+        if (runes.length >= 4) addIfMeaningful(runes.toString());
+        runes.clear();
+      }
+    }
+    if (runes.length >= 4) addIfMeaningful(runes.toString());
+
+    // ASCII runs as a backup
+    final ascii = StringBuffer();
+    for (final b in bytes) {
+      if (b >= 32 && b <= 126) {
+        ascii.writeCharCode(b);
+      } else {
+        if (ascii.length >= 6) addIfMeaningful(ascii.toString());
+        ascii.clear();
+      }
+    }
+    if (ascii.length >= 6) addIfMeaningful(ascii.toString());
+
+    return buffer.toString().trim();
+  }
+
+  String _extractPresentationText(List<int> bytes, String extension) {
+    if (extension == 'odp') {
+      return DocumentTextExtractor.extractOdp(bytes);
+    }
+
+    final isOpenXml =
+        const {'pptx', 'pptm', 'potx', 'ppsx', 'pps'}.contains(extension) ||
+            DocumentTextExtractor.isZipBytes(bytes);
+
+    if (isOpenXml) {
+      return DocumentTextExtractor.extractPptx(bytes);
+    }
+
+    // .ppt / .pot may be OOXML zip or legacy binary
+    final fromZip = DocumentTextExtractor.extractPptx(bytes);
+    if (fromZip.isNotEmpty) return fromZip;
+
+    return _extractLegacyPptBinaryText(bytes);
   }
 
   String _extractPlainText(List<int> bytes) {

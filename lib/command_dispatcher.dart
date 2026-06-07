@@ -4,7 +4,7 @@ import 'config/secrets.dart';
 import 'analytics_service.dart';
 import 'custom_commands_provider.dart';
 import 'language_provider.dart';
-import 'main.dart';
+import 'navigation_keys.dart';
 import 'services/mic_coordinator.dart';
 import 'services/reading_voice_commands.dart';
 import 'tts_service.dart';
@@ -215,9 +215,9 @@ class CommandDispatcher {
         if (commandsProvider.voiceFeedbackEnabled) {
           final r = nl.replyEnglish?.trim();
           if (r != null && r.isNotEmpty) {
-            ttsService.play('', r, locale);
+            ttsService.speakBrief(r, locale);
           } else {
-            ttsService.play('', _getFeedback(language, 'noMatch'), locale);
+            ttsService.speakBrief(_getFeedback(language, 'noMatch'), locale);
           }
         }
         return true;
@@ -228,8 +228,7 @@ class CommandDispatcher {
         if (!context.mounted) return true;
         if (commandsProvider.voiceFeedbackEnabled) {
           final r = nl.replyEnglish?.trim();
-          await ttsService.play(
-              '',
+          await ttsService.speakBrief(
               (r != null && r.isNotEmpty)
                   ? r
                   : _getFeedback(language, 'assistantMuted'),
@@ -269,7 +268,7 @@ class CommandDispatcher {
             String feedbackText = (nl.replyEnglish != null && nl.replyEnglish!.trim().isNotEmpty)
                 ? nl.replyEnglish!.trim()
                 : _getFeedback(language, customCmd.action.name);
-            ttsService.play('', feedbackText, locale);
+            ttsService.speakBrief(feedbackText, locale);
           }
           
           return true;
@@ -307,7 +306,7 @@ class CommandDispatcher {
                   mapped == CommandActionType.searchLibrary)) {
             feedbackText += ': $p';
           }
-          ttsService.play('', feedbackText, locale);
+          ttsService.speakBrief(feedbackText, locale);
         }
 
         return true;
@@ -479,8 +478,25 @@ class CommandDispatcher {
       debugPrint('FAILSAFE: Force matching Pause');
       await _execute(context, const CustomCommand(id: 'fs_pause', phrase: 'pause', action: CommandActionType.ttsPause), ttsService, locale);
       return true;
+    } else if (normalized == 'go back' ||
+        normalized == 'go backward' ||
+        normalized == 'rewind') {
+      if (ttsService.isReadingSession &&
+          (ttsService.isPlaying || ttsService.userPaused)) {
+        await ttsService.seekBackward(10, locale);
+        return true;
+      }
+    } else if (normalized == 'go forward' ||
+        normalized == 'skip ahead' ||
+        normalized == 'fast forward') {
+      if (ttsService.isReadingSession &&
+          (ttsService.isPlaying || ttsService.userPaused)) {
+        await ttsService.seekForward(10, locale);
+        return true;
+      }
     } else if (normalized == 'play' ||
         normalized == 'resume' ||
+        normalized == 'continue' ||
         normalized == 'continue reading') {
       debugPrint('FAILSAFE: Force matching Play');
       await _execute(context, const CustomCommand(id: 'fs_play', phrase: 'play', action: CommandActionType.ttsPlay), ttsService, locale);
@@ -492,8 +508,7 @@ class CommandDispatcher {
     if (matched == null) {
       AnalyticsService.instance.recordUnmatchedCommand(spokenText);
       if (commandsProvider.voiceFeedbackEnabled) {
-        ttsService.play(
-          '',
+        ttsService.speakBrief(
           _getFeedback(language, 'noMatch'),
           locale,
         );
@@ -519,7 +534,7 @@ class CommandDispatcher {
         if (subCommand != null) {
           _execute(context, subCommand, ttsService, locale);
         } else if (commandsProvider.voiceFeedbackEnabled) {
-          ttsService.play('', 'Macro step not found: $step', locale);
+          ttsService.speakBrief('Macro step not found: $step', locale);
         }
       }
     } else {
@@ -531,7 +546,7 @@ class CommandDispatcher {
       if (matched.parameter != null && matched.parameter!.isNotEmpty) {
         feedbackText += ': ${matched.parameter}';
       }
-      ttsService.play('', feedbackText, locale);
+      ttsService.speakBrief(feedbackText, locale);
     }
 
     return true;
@@ -567,13 +582,14 @@ class CommandDispatcher {
         );
         break;
       case CommandActionType.ttsPlay:
-        if (!ttsService.isPlaying && ttsService.content != null) {
-          await ttsService.togglePause(locale);
+        if (ttsService.isReadingSession && ttsService.userPaused) {
+          await ttsService.resumeReading(locale);
         }
         break;
       case CommandActionType.ttsPause:
-        if (ttsService.isPlaying) {
-          await ttsService.togglePause(locale);
+        if (ttsService.isReadingSession &&
+            (ttsService.isPlaying || !ttsService.userPaused)) {
+          await ttsService.pauseReading(locale);
         }
         break;
       case CommandActionType.ttsStop:

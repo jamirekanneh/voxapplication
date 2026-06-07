@@ -259,8 +259,11 @@ class AnalyticsService extends ChangeNotifier {
     if (_currentStreak >= 7) {
       unawaited(unlockAchievement('streak_7'));
     }
-    if (_bestStreak >= 14) {
+    if (_currentStreak >= 14) {
       unawaited(unlockAchievement('streak_14'));
+    }
+    if (_currentStreak >= 30) {
+      unawaited(unlockAchievement('streak_30'));
     }
     if (totalDictLookups >= 10) {
       unawaited(unlockAchievement('dictionary_10'));
@@ -585,7 +588,8 @@ class AnalyticsService extends ChangeNotifier {
       // This would normally call NotificationService, but since we are in a singleton, 
       // we can just notify listeners and let the UI handle the "Goal Reached" animation.
       debugPrint('🎉 Daily Goal Reached! Streak: $_currentStreak');
-      if (_currentStreak == 7) {
+      const milestones = [7, 14, 30];
+      if (milestones.contains(_currentStreak)) {
         _streakMilestoneController.add(_currentStreak);
       }
     }

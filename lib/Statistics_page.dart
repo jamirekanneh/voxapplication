@@ -25,7 +25,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
     'first_launch': ('First Steps', 'Opened Vox', Icons.rocket_launch_rounded),
     'streak_3': ('On Fire', '3-day streak', Icons.local_fire_department_rounded),
     'streak_7': ('Week Warrior', '7-day streak', Icons.emoji_events_rounded),
-    'streak_14': ('Unstoppable', '14-day best streak', Icons.military_tech_rounded),
+    'streak_14': ('Unstoppable', '14-day streak', Icons.military_tech_rounded),
+    'streak_30': ('Monthly Master', '30-day streak', Icons.workspace_premium_rounded),
     'dictionary_10': ('Word Explorer', '10 dictionary lookups', Icons.menu_book_rounded),
     'dictionary_50': ('Lexicon Pro', '50 dictionary lookups', Icons.auto_stories_rounded),
     'files_5': ('Organizer', '5 file actions', Icons.folder_rounded),
@@ -34,6 +35,13 @@ class _StatisticsPageState extends State<StatisticsPage> {
     'daily_goal': ('Goal Crusher', 'Daily goal met', Icons.flag_rounded),
     'level_5': ('Rising Star', 'Reached level 5', Icons.star_rounded),
   };
+
+  static const List<(int days, String achievementId, String title)> _streakRewards = [
+    (3, 'streak_3', 'On Fire'),
+    (7, 'streak_7', 'Week Warrior'),
+    (14, 'streak_14', 'Unstoppable'),
+    (30, 'streak_30', 'Monthly Master'),
+  ];
 
   static List<Color> _barColors(BuildContext context) => [
     VoxColors.primary(context),
@@ -475,6 +483,8 @@ class _StatisticsPageState extends State<StatisticsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildGoalAndStreak(service),
+          const SizedBox(height: 12),
+          _buildStreakRewardsAlert(service),
           const SizedBox(height: 20),
           _buildGamificationHero(service),
           const SizedBox(height: 24),
@@ -870,6 +880,102 @@ class _StatisticsPageState extends State<StatisticsPage> {
               ),
             );
           }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStreakRewardsAlert(AnalyticsService service) {
+    final streak = service.currentStreak;
+    final unlocked = service.achievements;
+
+    (int days, String achievementId, String title)? nextReward;
+    for (final tier in _streakRewards) {
+      if (streak < tier.$1 && (unlocked[tier.$2] ?? 0) == 0) {
+        nextReward = tier;
+        break;
+      }
+    }
+
+    final daysToNext = nextReward == null ? 0 : (nextReward.$1 - streak).clamp(1, 99);
+    final nextTitle = nextReward?.$3 ?? 'Monthly Master';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: Colors.amber.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.amber.withValues(alpha: 0.35)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.card_giftcard_rounded, color: Colors.amber.shade600, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Streak rewards',
+                      style: TextStyle(
+                        color: VoxColors.onBg(context),
+                        fontWeight: FontWeight.w800,
+                        fontSize: 14,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      nextReward == null
+                          ? 'You unlocked every streak badge — keep reading for XP!'
+                          : 'Hit your daily goal $daysToNext more day${daysToNext == 1 ? '' : 's'} to earn “$nextTitle” (+25 XP).',
+                      style: TextStyle(
+                        color: VoxColors.textSecondary(context),
+                        fontSize: 12,
+                        height: 1.35,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: _streakRewards.map((tier) {
+              final earned = streak >= tier.$1 || (unlocked[tier.$2] ?? 0) > 0;
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
+                decoration: BoxDecoration(
+                  color: earned
+                      ? Colors.amber.withValues(alpha: 0.22)
+                      : VoxColors.onBg(context).withValues(alpha: 0.06),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: earned
+                        ? Colors.amber.withValues(alpha: 0.5)
+                        : VoxColors.onBg(context).withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Text(
+                  '${tier.$1}d · ${tier.$3}',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    color: earned
+                        ? Colors.amber.shade800
+                        : VoxColors.textHint(context),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
         ],
       ),
     );

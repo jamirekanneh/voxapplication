@@ -1,18 +1,25 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:record/record.dart';
 
+import 'app_speech_service.dart';
+
 /// Page-based microphone priority:
+/// - Read-aloud voice (playing or paused session) → hands-free pause/play/seek
+/// - Double-tap / Assistant toggle → global assistant (when read-aloud inactive)
 /// - [/notes] → voice notes recording / dictation
-/// - [/home] → global assistant (when enabled) OR library search mic
+/// - [/home] → library search mic
 /// - [/dictionary] → dictionary search mic
 /// - chatbot / study-buddy sheet → mic while sheet is open
-/// - [/menu], [/faqs] → floating chatbot mic
 class MicCoordinator extends ChangeNotifier {
   MicCoordinator._();
   static final MicCoordinator instance = MicCoordinator._();
+
+  static const _assistantOwner = 'assistant';
+  static const _readingOwner = 'reading';
 
   final List<Future<void> Function()> _releaseHandlers = [];
 
@@ -22,8 +29,12 @@ class MicCoordinator extends ChangeNotifier {
   bool _chatbotListening = false;
   bool _searchMicActive = false;
   bool _readerVoiceActive = false;
+  bool _globalReadingVoiceActive = false;
   bool _assistantMicActive = false;
   bool _ttsPlaybackActive = false;
+
+  /// Registered by [GlobalSttWrapper] so overlays (chat sheets) can trigger assistant.
+  Future<void> Function({bool manual})? requestAssistantListen;
 
   String? get currentRoute => _currentRoute;
   bool get notesRecordingActive => _notesRecordingActive;
@@ -31,38 +42,60 @@ class MicCoordinator extends ChangeNotifier {
   bool get chatbotListening => _chatbotListening;
   bool get searchMicActive => _searchMicActive;
   bool get readerVoiceActive => _readerVoiceActive;
+  bool get globalReadingVoiceActive => _globalReadingVoiceActive;
   bool get assistantMicActive => _assistantMicActive;
   bool get ttsPlaybackActive => _ttsPlaybackActive;
 
-  /// Global assistant STT — only after user taps Assistant (not while TTS plays).
+  /// True while read-aloud audio is playing — page mics & assistant yield the mic.
+  bool get readAloudMicReserved => _ttsPlaybackActive;
+
+  /// Read-aloud session owns hands-free voice controls (playing or paused).
+  bool get readAloudVoiceSessionActive => _globalReadingVoiceActive;
+
+  /// Hands-free read-aloud (pause / stop / define) while playing or paused mid-document.
+  bool get globalReadingVoiceMayListen =>
+      _globalReadingVoiceActive &&
+      !_assistantMicActive &&
+      !_searchMicActive &&
+      !_notesRecordingActive &&
+      !_chatbotListening &&
+      !_chatbotSheetOpen;
+
+  /// Assistant — not during active read-aloud playback or read-aloud voice session.
   bool get assistantMayListen =>
       _assistantMicActive &&
-      _currentRoute == '/home' &&
-      !_notesRecordingActive &&
-      !_chatbotListening &&
-      !_chatbotSheetOpen &&
-      !_searchMicActive &&
-      !_readerVoiceActive &&
-      !_ttsPlaybackActive;
+      !readAloudMicReserved &&
+      !_globalReadingVoiceActive;
 
-  /// Search-bar mic on Home / Dictionary.
+  /// Whether the user can activate the global assistant right now.
+  bool get assistantMayActivate =>
+      !readAloudMicReserved && !_globalReadingVoiceActive;
+
+  /// Search mic — not while read-aloud is actively playing.
   bool get searchMicMayListen =>
       (_currentRoute == '/home' || _currentRoute == '/dictionary') &&
+      !_assistantMicActive &&
       !_notesRecordingActive &&
       !_chatbotListening &&
       !_chatbotSheetOpen &&
-      !_readerVoiceActive;
+      !readAloudMicReserved &&
+      !_globalReadingVoiceActive;
 
-  /// Chatbot / study-buddy mic when sheet is open (not during notes recording).
+  /// Chatbot / study-buddy — not while read-aloud is actively playing.
   bool get chatbotMayListen =>
+      !_assistantMicActive &&
       !_notesRecordingActive &&
+      !readAloudMicReserved &&
+      !_globalReadingVoiceActive &&
       (_chatbotSheetOpen ||
           _currentRoute == '/menu' ||
           _currentRoute == '/faqs');
 
-  /// Voice notes recording / dictation on Notes page.
+  /// Notes dictation / recording — not while read-aloud is actively playing.
   bool get notesMayUseMic =>
-      _currentRoute == '/notes' || _notesRecordingActive;
+      !_assistantMicActive &&
+      !readAloudMicReserved &&
+      (_currentRoute == '/notes' || _notesRecordingActive);
 
   void registerReleaseHandler(Future<void> Function() handler) {
     if (!_releaseHandlers.contains(handler)) {
@@ -79,14 +112,12 @@ class MicCoordinator extends ChangeNotifier {
     if (_currentRoute == normalized) return;
     _currentRoute = normalized;
 
-    // Stop assistant / other mics when leaving home or entering higher-priority routes.
     if (normalized == '/notes' ||
         normalized == '/menu' ||
         normalized == '/faqs') {
-      unawaited(releaseAll());
+      unawaited(releaseAll(keepReadingVoice: _globalReadingVoiceActive));
     } else if (normalized == '/dictionary') {
-      // Stop home assistant only; dictionary search mic manages itself.
-      unawaited(releaseAll(skipSearchMic: true));
+      unawaited(releaseAll(skipSearchMic: true, keepReadingVoice: _globalReadingVoiceActive));
     }
 
     if (normalized != '/home' && normalized != '/dictionary') {
@@ -95,17 +126,33 @@ class MicCoordinator extends ChangeNotifier {
     notifyListeners();
   }
 
+  void syncRouteIfCurrent(BuildContext context, String routeName) {
+    final route = ModalRoute.of(context);
+    if (route?.isCurrent == true) {
+      setRoute(routeName);
+    }
+  }
+
   void setNotesRecordingActive(bool active) {
     if (_notesRecordingActive == active) return;
     _notesRecordingActive = active;
-    if (active) unawaited(releaseAll());
+    if (active) {
+      _assistantMicActive = false;
+      _searchMicActive = false;
+      _chatbotListening = false;
+      unawaited(AppSpeechService.instance.stopUnlessOwner(_readingOwner));
+    } else {
+      unawaited(releaseAll(skipSearchMic: true));
+    }
     notifyListeners();
   }
 
   void setChatbotSheetOpen(bool open) {
     if (_chatbotSheetOpen == open) return;
     _chatbotSheetOpen = open;
-    if (open) unawaited(releaseAll());
+    if (open) {
+      unawaited(releaseAll(keepReadingVoice: _globalReadingVoiceActive));
+    }
     notifyListeners();
   }
 
@@ -115,46 +162,85 @@ class MicCoordinator extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Marks search mic session without re-calling [releaseAll] (avoids killing the new session).
   void setSearchMicActive(bool active) {
     if (_searchMicActive == active) return;
     _searchMicActive = active;
     if (active) {
       _assistantMicActive = false;
-      _ttsPlaybackActive = false;
     }
     notifyListeners();
   }
 
-  /// Reader hands-free commands own the mic (blocks assistant on Home).
   void setReaderVoiceActive(bool active) {
     if (_readerVoiceActive == active) return;
     _readerVoiceActive = active;
     if (active) {
       _assistantMicActive = false;
-      unawaited(releaseAll(skipSearchMic: true));
     }
     notifyListeners();
   }
 
-  /// User tapped Assistant on Home (or double-tap) — allow global STT.
+  void setGlobalReadingVoiceActive(bool active) {
+    if (_globalReadingVoiceActive == active) return;
+    _globalReadingVoiceActive = active;
+    if (active) {
+      _assistantMicActive = false;
+      _searchMicActive = false;
+      _chatbotListening = false;
+      unawaited(AppSpeechService.instance.stopUnlessOwner(_readingOwner));
+    }
+    notifyListeners();
+  }
+
   void setAssistantMicActive(bool active) {
     if (_assistantMicActive == active) return;
+    if (active && !assistantMayActivate) return;
+
     _assistantMicActive = active;
     if (active) {
-      _ttsPlaybackActive = false;
-      unawaited(releaseAll());
+      _searchMicActive = false;
+      _chatbotListening = false;
+      _readerVoiceActive = false;
+      unawaited(_releaseForAssistantActivation());
     } else {
-      unawaited(releaseAll());
+      unawaited(AppSpeechService.instance.stopUnlessOwner(_assistantOwner));
     }
     notifyListeners();
   }
 
-  /// Document read-aloud (TTS) — no STT; release mics for speaker output.
-  Future<void> prepareForTtsPlayback() async {
-    _ttsPlaybackActive = true;
+  Future<void> activateAssistant({bool manual = true}) async {
+    if (!assistantMayActivate) return;
+    await requestAssistantListen?.call(manual: manual);
+  }
+
+  /// Page mic buttons call this to take the mic from assistant without full teardown.
+  Future<void> yieldFromAssistant() async {
+    if (!_assistantMicActive) return;
     _assistantMicActive = false;
-    await releaseAll();
+    await AppSpeechService.instance.stopUnlessOwner(_assistantOwner);
+    notifyListeners();
+  }
+
+  Future<void> _releaseForAssistantActivation() async {
+    await AppSpeechService.instance.stopUnlessOwner(_readingOwner);
+    for (final release in List<Future<void> Function()>.from(_releaseHandlers)) {
+      try {
+        await release();
+      } catch (_) {}
+    }
+    _searchMicActive = false;
+    await Future<void>.delayed(const Duration(milliseconds: 40));
+  }
+
+  /// Document read-aloud — release page mics before TTS speaks.
+  Future<void> prepareForTtsPlayback({bool stopReadingVoice = false}) async {
+    await yieldFromAssistant();
+    _ttsPlaybackActive = true;
+    if (stopReadingVoice) {
+      await AppSpeechService.instance.stop();
+    } else {
+      await AppSpeechService.instance.stopUnlessOwner(_readingOwner);
+    }
     notifyListeners();
   }
 
@@ -164,18 +250,29 @@ class MicCoordinator extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Stops assistant/chatbot/notes mics, then optional short pause for the OS audio stack.
   Future<void> prepareForSearchMic(
     Future<void> Function() searchReleaseHandler,
   ) async {
+    await yieldFromAssistant();
     unregisterReleaseHandler(searchReleaseHandler);
-    await releaseAll(skipSearchMic: true);
-    await Future<void>.delayed(const Duration(milliseconds: 120));
+    await releaseAll(
+      skipSearchMic: true,
+      keepReadingVoice: _globalReadingVoiceActive,
+    );
+    await Future<void>.delayed(const Duration(milliseconds: 80));
     registerReleaseHandler(searchReleaseHandler);
     setSearchMicActive(true);
   }
 
-  Future<void> releaseAll({bool skipSearchMic = false}) async {
+  Future<void> releaseAll({
+    bool skipSearchMic = false,
+    bool keepReadingVoice = false,
+  }) async {
+    if (keepReadingVoice) {
+      await AppSpeechService.instance.stopUnlessOwner(_readingOwner);
+    } else {
+      await AppSpeechService.instance.stop();
+    }
     for (final release in List<Future<void> Function()>.from(_releaseHandlers)) {
       try {
         await release();
@@ -184,12 +281,12 @@ class MicCoordinator extends ChangeNotifier {
     if (!skipSearchMic) {
       _searchMicActive = false;
     }
-    await Future<void>.delayed(const Duration(milliseconds: 80));
+    await Future<void>.delayed(const Duration(milliseconds: 40));
   }
 
-  /// Notes file recording: release other mic users, then OS + recorder permission.
   Future<bool> prepareForFileRecording(AudioRecorder recorder) async {
-    if (!notesMayUseMic) return false;
+    await yieldFromAssistant();
+    if (_currentRoute != '/notes') return false;
     await releaseAll();
 
     var status = await Permission.microphone.status;

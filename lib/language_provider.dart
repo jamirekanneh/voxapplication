@@ -7,6 +7,8 @@ import 'app_strings.dart';
 
 class LanguageProvider extends ChangeNotifier {
   static const _prefKey = 'selected_language';
+  static const _accessibilityPrefsVersionKey = 'accessibility_prefs_version';
+  static const _accessibilityPrefsVersion = 2;
   static const _cacheKeyPrefix = 'translation_cache_'; // new dynamic cache
 
   String _selectedLanguage = 'English';
@@ -15,13 +17,13 @@ class LanguageProvider extends ChangeNotifier {
   // Dynamic cache for strings not found in app_strings.dart
   Map<String, String> _dynamicTranslations = {};
   
-  // Accessibility & Focus Modes
+  // Accessibility & Focus Modes — default off until user enables in reader settings.
   bool _isDyslexicFontEnabled = false;
   bool _isBionicReadingEnabled = false;
 
   bool get isDyslexicFontEnabled => _isDyslexicFontEnabled;
   bool get isBionicReadingEnabled => _isBionicReadingEnabled;
-  
+
   // To avoid spamming the translate API with the same string
   final Set<String> _translatingSet = {};
 
@@ -82,8 +84,31 @@ class LanguageProvider extends ChangeNotifier {
       _selectedLanguage = 'English';
       await prefs.setString(_prefKey, 'English');
     }
-    _isDyslexicFontEnabled = prefs.getBool('isDyslexicFontEnabled') ?? false;
-    _isBionicReadingEnabled = prefs.getBool('isBionicReadingEnabled') ?? false;
+    if (prefs.containsKey('isDyslexicFontEnabled')) {
+      _isDyslexicFontEnabled = prefs.getBool('isDyslexicFontEnabled') ?? false;
+    } else {
+      _isDyslexicFontEnabled = false;
+      await prefs.setBool('isDyslexicFontEnabled', false);
+    }
+    if (prefs.containsKey('isBionicReadingEnabled')) {
+      _isBionicReadingEnabled = prefs.getBool('isBionicReadingEnabled') ?? false;
+    } else {
+      _isBionicReadingEnabled = false;
+      await prefs.setBool('isBionicReadingEnabled', false);
+    }
+
+    // One-time reset so normal state is OFF unless user opts in later.
+    final prefsVersion = prefs.getInt(_accessibilityPrefsVersionKey) ?? 0;
+    if (prefsVersion < _accessibilityPrefsVersion) {
+      _isDyslexicFontEnabled = false;
+      _isBionicReadingEnabled = false;
+      await prefs.setBool('isDyslexicFontEnabled', false);
+      await prefs.setBool('isBionicReadingEnabled', false);
+      await prefs.setInt(
+        _accessibilityPrefsVersionKey,
+        _accessibilityPrefsVersion,
+      );
+    }
     await _loadDynamicCache();
     notifyListeners();
   }

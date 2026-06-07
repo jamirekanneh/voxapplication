@@ -8,6 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'theme_provider.dart';
 import 'data/country_dial_codes.dart';
+import 'services/mic_coordinator.dart';
+import 'services/app_speech_service.dart';
 
 const _kDevWhatsApp = '905488265289';
 const _kEmailJSServiceId = String.fromEnvironment(
@@ -109,11 +111,11 @@ class _ContactUsPageState extends State<ContactUsPage> {
     orElse: () => _kCountries.first,
   );
 
+  static const _owner = 'contact_us';
+
   ContactPreference _contactPref = ContactPreference.email;
   bool _isSending = false;
   bool _sent = false;
-
-  final stt.SpeechToText _speech = stt.SpeechToText();
   bool _speechAvailable = false;
   String? _listeningField;
   bool _voiceBusy = false;
@@ -129,7 +131,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
   Future<void> _initSpeech() async {
     final status = await Permission.microphone.request();
     if (!status.isGranted) return;
-    final ok = await _speech.initialize(onError: (e) => debugPrint('STT: $e'));
+    final ok = await AppSpeechService.instance.ensureInitialized(
+      owner: _owner,
+      onError: (e) => debugPrint('STT: $e'),
+    );
     if (mounted) setState(() => _speechAvailable = ok);
   }
 
@@ -141,18 +146,20 @@ class _ContactUsPageState extends State<ContactUsPage> {
     if (_voiceBusy) return;
     _voiceBusy = true;
     try {
+      await MicCoordinator.instance.yieldFromAssistant();
       if (_listeningField == key) {
-        await _speech.stop();
+        await AppSpeechService.instance.stop();
         if (mounted) setState(() => _listeningField = null);
         return;
       }
-      if (_speech.isListening) {
-        await _speech.stop();
+      if (AppSpeechService.instance.isListening) {
+        await AppSpeechService.instance.stop();
         await Future.delayed(const Duration(milliseconds: 300));
       }
       if (!mounted) return;
       setState(() => _listeningField = key);
-      await _speech.listen(
+      await AppSpeechService.instance.listen(
+        owner: _owner,
         listenOptions: stt.SpeechListenOptions(
           cancelOnError: true,
           listenMode: stt.ListenMode.dictation,
@@ -185,7 +192,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
     ]) {
       c.dispose();
     }
-    _speech.stop();
+    AppSpeechService.instance.stop();
     _flutterTts.stop();
     super.dispose();
   }
