@@ -12,6 +12,7 @@ import 'notification_service.dart';
 import 'temp_library_provider.dart';
 import 'temp_notes_provider.dart';
 import 'theme_provider.dart';
+import 'widgets/list_selection_bar.dart';
 
 class RemindersPage extends StatefulWidget {
   const RemindersPage({super.key});
@@ -25,6 +26,8 @@ class _RemindersPageState extends State<RemindersPage> {
   bool _loading = true;
   String? _uid;
   ReminderPermissionStatus? _permissionStatus;
+  bool _isSelectionMode = false;
+  final Set<String> _selectedReminderIds = {};
 
   @override
   void initState() {
@@ -134,6 +137,82 @@ class _RemindersPageState extends State<RemindersPage> {
       _reminders = items;
       _loading = false;
     });
+  }
+
+  void _enterSelectionMode(String id) {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedReminderIds
+        ..clear()
+        ..add(id);
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedReminderIds.clear();
+    });
+  }
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selectedReminderIds.contains(id)) {
+        _selectedReminderIds.remove(id);
+        if (_selectedReminderIds.isEmpty) _isSelectionMode = false;
+      } else {
+        _selectedReminderIds.add(id);
+      }
+    });
+  }
+
+  void _toggleSelectAll() {
+    setState(() {
+      final visible = _reminders.map((r) => r.id).toList();
+      if (visible.isNotEmpty &&
+          _selectedReminderIds.length == visible.length) {
+        _selectedReminderIds.clear();
+      } else {
+        _selectedReminderIds.addAll(visible);
+      }
+    });
+  }
+
+  Future<void> _deleteSelectedReminders() async {
+    if (_selectedReminderIds.isEmpty) return;
+    final lang = context.read<LanguageProvider>();
+    final count = _selectedReminderIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(lang.t('delete_reminder_title')),
+        content: Text(lang.t('delete_reminder_body')),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(lang.t('cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(lang.t('delete')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    await RemindersService.instance
+        .deleteReminders(_selectedReminderIds.toList());
+    await _reload();
+    if (!mounted) return;
+    _exitSelectionMode();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          lang.tNamed('reminders_deleted_count', {'count': '$count'}),
+        ),
+      ),
+    );
   }
 
   Future<void> _deleteReminder(StudyReminder reminder) async {
@@ -353,18 +432,31 @@ class _RemindersPageState extends State<RemindersPage> {
     return Scaffold(
       backgroundColor: VoxColors.bg(context),
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor:
+            _isSelectionMode ? VoxColors.primary(context) : Colors.transparent,
         elevation: 0,
+        automaticallyImplyLeading: !_isSelectionMode,
         iconTheme: IconThemeData(color: VoxColors.onBg(context)),
-        title: Text(
-          lang.t('menu_reminders'),
-          style: TextStyle(
-            color: VoxColors.onBg(context),
-            fontWeight: FontWeight.w900,
-          ),
-        ),
+        title: _isSelectionMode
+            ? ListSelectionBar(
+                selectedCount: _selectedReminderIds.length,
+                visibleCount: _reminders.length,
+                onCancel: _exitSelectionMode,
+                onToggleSelectAll: _toggleSelectAll,
+                onDelete: _deleteSelectedReminders,
+                foregroundOnPrimary: true,
+              )
+            : Text(
+                lang.t('menu_reminders'),
+                style: TextStyle(
+                  color: VoxColors.onBg(context),
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: _isSelectionMode
+          ? null
+          : FloatingActionButton.extended(
         onPressed: _showAddReminderSheet,
         backgroundColor: VoxColors.primary(context),
         foregroundColor: VoxColors.onPrimary(context),
@@ -393,15 +485,41 @@ class _RemindersPageState extends State<RemindersPage> {
                     final reminder = _reminders[index];
                     final isNote =
                         reminder.targetType == StudyReminderTargetType.note;
-                    return Container(
+                    final isSelected =
+                        _isSelectionMode &&
+                        _selectedReminderIds.contains(reminder.id);
+                    return GestureDetector(
+                      onTap: () {
+                        if (_isSelectionMode) {
+                          _toggleSelection(reminder.id);
+                        }
+                      },
+                      onLongPress: () {
+                        if (!_isSelectionMode) {
+                          _enterSelectionMode(reminder.id);
+                        }
+                      },
+                      child: Container(
                       decoration: BoxDecoration(
-                        color: VoxColors.surface(context),
+                        color: isSelected
+                            ? VoxColors.primary(context).withValues(alpha: 0.1)
+                            : VoxColors.surface(context),
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: VoxColors.border(context)),
+                        border: Border.all(
+                          color: isSelected
+                              ? VoxColors.primary(context)
+                              : VoxColors.border(context),
+                          width: isSelected ? 2 : 1,
+                        ),
                       ),
                       child: ListTile(
                         contentPadding: const EdgeInsets.fromLTRB(16, 8, 8, 8),
-                        leading: CircleAvatar(
+                        leading: isSelected
+                            ? Icon(
+                                Icons.check_circle,
+                                color: VoxColors.primary(context),
+                              )
+                            : CircleAvatar(
                           backgroundColor: VoxColors.primary(context)
                               .withValues(alpha: 0.12),
                           child: Icon(
@@ -441,27 +559,31 @@ class _RemindersPageState extends State<RemindersPage> {
                             ),
                           ],
                         ),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              icon: Icon(
-                                Icons.schedule_outlined,
-                                color: VoxColors.primary(context),
+                        trailing: _isSelectionMode
+                            ? null
+                            : Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.schedule_outlined,
+                                      color: VoxColors.primary(context),
+                                    ),
+                                    tooltip: lang.t('edit_reminder_time'),
+                                    onPressed: () =>
+                                        _editReminderTime(reminder),
+                                  ),
+                                  IconButton(
+                                    icon: Icon(
+                                      Icons.delete_outline,
+                                      color: VoxColors.danger,
+                                    ),
+                                    onPressed: () => _deleteReminder(reminder),
+                                  ),
+                                ],
                               ),
-                              tooltip: lang.t('edit_reminder_time'),
-                              onPressed: () => _editReminderTime(reminder),
-                            ),
-                            IconButton(
-                              icon: Icon(
-                                Icons.delete_outline,
-                                color: VoxColors.danger,
-                              ),
-                              onPressed: () => _deleteReminder(reminder),
-                            ),
-                          ],
-                        ),
                       ),
+                    ),
                     );
                   },
                 ),

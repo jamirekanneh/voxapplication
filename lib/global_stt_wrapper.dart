@@ -6,6 +6,7 @@ import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'custom_commands_provider.dart';
 import 'command_dispatcher.dart';
+import 'services/assistant_voice_phrases.dart';
 import 'tts_service.dart';
 import 'language_provider.dart';
 import 'services/mic_coordinator.dart';
@@ -17,7 +18,7 @@ import 'mini_player_bar.dart';
 // ─────────────────────────────────────────────
 //  GLOBAL STT WRAPPER
 //  Wrap your MaterialApp child with this widget.
-//  Double-tap anywhere → starts listening → matches commands.
+//  Double-tap anywhere → toggles Assistant on/off and listens when on.
 // ─────────────────────────────────────────────
 class GlobalSttWrapper extends StatefulWidget {
   final Widget child;
@@ -83,9 +84,22 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
   void _onMicPriorityChanged() {
     if (!mounted) return;
     _readingVoiceListener.onMicChanged();
+    if (MicCoordinator.instance.authFlowActive) {
+      if (_isHardwareListening) {
+        unawaited(_releaseMicForRecording());
+      }
+      return;
+    }
     if (MicCoordinator.instance.searchMicActive) return;
-    // Don't fight read-aloud voice for the shared mic.
-    if (MicCoordinator.instance.globalReadingVoiceActive) return;
+
+    // Read-aloud playing — assistant must yield; mini-player voice owns the mic.
+    if (MicCoordinator.instance.readAloudBlocksOtherMics) {
+      if (_isHardwareListening) {
+        MicCoordinator.instance.setAssistantMicActive(false);
+        unawaited(_releaseMicForRecording());
+      }
+      return;
+    }
 
     final provider = context.read<CustomCommandsProvider>();
     if (MicCoordinator.instance.assistantMayListen &&
@@ -128,14 +142,47 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     super.dispose();
   }
 
+  void _showAssistantToggleSnack(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  Future<void> _deactivateAssistant({bool manual = true}) async {
+    if (!mounted) return;
+    final provider = context.read<CustomCommandsProvider>();
+    final lang = context.read<LanguageProvider>();
+
+    await provider.setAssistantMode(false);
+    MicCoordinator.instance.setAssistantMicActive(false);
+    _updateListening(hardware: false, ui: false);
+    if (AppSpeechService.instance.activeOwner == _owner) {
+      await AppSpeechService.instance.stop();
+    }
+
+    if (!manual || !mounted) return;
+    _showAssistantToggleSnack(lang.t('assistant_off'));
+    if (provider.voiceFeedbackEnabled) {
+      context.read<TtsService>().speakBrief(
+            lang.t('assistant_off'),
+            lang.ttsLocale,
+          );
+    }
+  }
+
   Future<void> _activateAssistant({bool manual = true}) async {
     if (!MicCoordinator.instance.assistantMayActivate) {
       if (manual && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text(
-              'Assistant is unavailable while read-aloud is active. '
-              'Say pause or stop, or use the mini player.',
+              'Assistant is unavailable while the document is playing. '
+              'Pause from the mini player first, or use earphones and voice commands.',
             ),
             behavior: SnackBarBehavior.floating,
             duration: Duration(seconds: 3),
@@ -146,11 +193,21 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
     }
     if (!_speechAvailable) return;
     final provider = context.read<CustomCommandsProvider>();
-    if (!provider.assistantModeEnabled) {
-      provider.setAssistantMode(true);
+    final lang = context.read<LanguageProvider>();
+
+    // Double-tap toggles: first tap on → second tap off.
+    if (manual && provider.assistantModeEnabled) {
+      await _deactivateAssistant(manual: manual);
+      return;
     }
+
+    await provider.setAssistantMode(true);
     MicCoordinator.instance.setAssistantMicActive(true);
     await _startListening(manual: manual);
+
+    if (manual && mounted) {
+      _showAssistantToggleSnack(lang.t('assistant_on'));
+    }
   }
 
   Future<void> _initSpeech() async {
@@ -286,7 +343,11 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
       if (commandsProvider.voiceFeedbackEnabled) {
         final ttsService = context.read<TtsService>();
         final locale = context.read<LanguageProvider>().currentLocale;
-        ttsService.speakBrief('Hey! I am listening.', locale);
+        final lang = context.read<LanguageProvider>().selectedLanguage;
+        ttsService.speakBrief(
+          AssistantVoicePhrases.listeningAck(lang),
+          locale,
+        );
       }
       _startListening(manual: true);
       return;
@@ -339,8 +400,9 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
 
   void _checkAutoRestart() {
     if (!mounted) return;
+    if (MicCoordinator.instance.authFlowActive) return;
     if (MicCoordinator.instance.searchMicActive) return;
-    if (MicCoordinator.instance.globalReadingVoiceActive) return;
+    if (MicCoordinator.instance.readAloudBlocksOtherMics) return;
     if (!MicCoordinator.instance.assistantMayListen) return;
     if (!MicCoordinator.instance.assistantMicActive) return;
     final assistantEnabled =
@@ -405,7 +467,7 @@ class _GlobalSttWrapperState extends State<GlobalSttWrapper>
         : 100.0;
 
     return Semantics(
-      label: 'Double tap anywhere to activate voice commands',
+      label: 'Double tap anywhere to turn Assistant on or off',
       child: GestureDetector(
         behavior: HitTestBehavior.translucent,
         onDoubleTap: _speechAvailable ? () => _activateAssistant(manual: true) : null,

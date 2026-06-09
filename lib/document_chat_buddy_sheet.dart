@@ -7,7 +7,9 @@ import 'language_provider.dart';
 import 'services/groq_service.dart';
 import 'services/mic_coordinator.dart';
 import 'services/app_speech_service.dart';
+import 'services/document_language_service.dart';
 import 'tts_service.dart';
+import 'theme_provider.dart';
 
 /// Chat sheet for asking questions about a document or note transcript.
 class DocumentChatBuddySheet extends StatefulWidget {
@@ -151,8 +153,10 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
       MicCoordinator.instance.registerReleaseHandler(_releaseMic);
       MicCoordinator.instance.setChatbotListening(true);
       setState(() => _isListening = true);
+      final sttLocale = context.read<LanguageProvider>().sttLocale;
       await AppSpeechService.instance.listen(
         owner: _owner,
+        localeId: sttLocale,
         listenOptions: stt.SpeechListenOptions(
           partialResults: true,
           listenMode: stt.ListenMode.dictation,
@@ -175,6 +179,11 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
   Future<void> _sendMessage() async {
     final text = _controller.text.trim();
     if (text.isEmpty || _isLoading) return;
+    final appLanguage = context.read<LanguageProvider>().selectedLanguage;
+    final outputLanguage = DocumentLanguageService.detectSpokenLanguageName(
+      text,
+      fallback: appLanguage,
+    );
 
     if (_isListening) {
       await _releaseMic();
@@ -198,6 +207,7 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
         documentTitle: widget.documentTitle,
         userMessage: text,
         conversationHistory: history,
+        outputLanguage: outputLanguage,
       );
       if (!mounted) return;
       setState(() {
@@ -207,11 +217,18 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
       _scrollToBottom();
 
       if (_voiceOutputEnabled) {
-        final locale = context.read<LanguageProvider>().currentLocale;
         final tts = context.read<TtsService>();
+        final docLanguage = DocumentLanguageService.detectLanguageName(
+          widget.documentContent,
+          fallback: appLanguage,
+        );
+        final speakLocale = DocumentLanguageService.detectTtsLocale(
+          response,
+          fallbackLanguage: docLanguage,
+        );
         Future.delayed(const Duration(milliseconds: 300), () {
           if (mounted) {
-            tts.speakBrief(response, locale);
+            tts.speakBrief(response, speakLocale);
           }
         });
       }
@@ -243,10 +260,12 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
       ),
       child: Container(
         height: MediaQuery.of(context).size.height * 0.75,
-        decoration: const BoxDecoration(
-          color: Color(0xFF0A0E1A),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-          border: Border(top: BorderSide(color: Color(0xFF4B9EFF), width: 2)),
+        decoration: BoxDecoration(
+          color: VoxColors.bg(context),
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(30)),
+          border: Border(
+            top: BorderSide(color: VoxColors.primary(context), width: 2),
+          ),
         ),
         child: Column(
           children: [
@@ -266,8 +285,8 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
                       children: [
                         Text(
                           lang.t('study_buddy'),
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: VoxColors.onBg(context),
                             fontWeight: FontWeight.w900,
                             fontSize: 18,
                           ),
@@ -277,7 +296,7 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
                           maxLines: 1,
                           overflow: TextOverflow.ellipsis,
                           style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.45),
+                            color: VoxColors.textMuted(context),
                             fontSize: 12,
                           ),
                         ),
@@ -290,8 +309,8 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
                           ? Icons.volume_up_rounded
                           : Icons.volume_off_rounded,
                       color: _voiceOutputEnabled
-                          ? const Color(0xFF4B9EFF)
-                          : Colors.white54,
+                          ? VoxColors.primary(context)
+                          : VoxColors.textSecondary(context),
                     ),
                     onPressed: () {
                       setState(() => _voiceOutputEnabled = !_voiceOutputEnabled);
@@ -302,7 +321,10 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
                     tooltip: lang.t('toggle_voice_output'),
                   ),
                   IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white54),
+                    icon: Icon(
+                      Icons.close,
+                      color: VoxColors.textSecondary(context),
+                    ),
                     onPressed: () {
                       context.read<TtsService>().stop();
                       Navigator.pop(context);
@@ -311,7 +333,7 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
                 ],
               ),
             ),
-            Divider(color: Colors.white.withValues(alpha: 0.1), height: 1),
+            Divider(color: VoxColors.border(context), height: 1),
             Expanded(
               child: ListView.builder(
                 controller: _scrollController,
@@ -325,16 +347,14 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
                         margin: const EdgeInsets.only(bottom: 8),
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.04),
+                          color: VoxColors.cardFill(context),
                           borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: Colors.white.withValues(alpha: 0.08),
-                          ),
+                          border: Border.all(color: VoxColors.border(context)),
                         ),
                         child: Text(
                           lang.t('study_buddy_greeting'),
-                          style: const TextStyle(
-                            color: Colors.white,
+                          style: TextStyle(
+                            color: VoxColors.onBg(context),
                             fontSize: 14,
                             height: 1.4,
                           ),
@@ -350,7 +370,7 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
                       child: Text(
                         lang.t('study_buddy_thinking'),
                         style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.45),
+                          color: VoxColors.textMuted(context),
                           fontSize: 12,
                           fontStyle: FontStyle.italic,
                         ),
@@ -371,19 +391,19 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
                       ),
                       decoration: BoxDecoration(
                         color: isUser
-                            ? const Color(0xFF4B9EFF).withValues(alpha: 0.1)
-                            : Colors.white.withValues(alpha: 0.05),
+                            ? VoxColors.primary(context).withValues(alpha: 0.1)
+                            : VoxColors.cardFill(context),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: isUser
-                              ? const Color(0xFF4B9EFF).withValues(alpha: 0.3)
-                              : Colors.white.withValues(alpha: 0.1),
+                              ? VoxColors.primary(context).withValues(alpha: 0.3)
+                              : VoxColors.border(context),
                         ),
                       ),
                       child: Text(
                         msg['content'] ?? '',
-                        style: const TextStyle(
-                          color: Colors.white,
+                        style: TextStyle(
+                          color: VoxColors.onBg(context),
                           fontSize: 14,
                           height: 1.45,
                         ),
@@ -418,13 +438,13 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
                         child: CircleAvatar(
                           backgroundColor: _isListening
                               ? Colors.redAccent
-                              : Colors.white.withValues(alpha: 0.05),
+                              : VoxColors.cardFill(context),
                           child: IconButton(
                             icon: Icon(
                               _isListening ? Icons.mic : Icons.mic_none,
                               color: _isListening
                                   ? Colors.white
-                                  : const Color(0xFF4B9EFF),
+                                  : VoxColors.primary(context),
                             ),
                             onPressed: _listen,
                           ),
@@ -436,14 +456,12 @@ class _DocumentChatBuddySheetState extends State<DocumentChatBuddySheet>
                   Expanded(
                     child: TextField(
                       controller: _controller,
-                      style: const TextStyle(color: Colors.white),
+                      style: TextStyle(color: VoxColors.onBg(context)),
                       decoration: InputDecoration(
                         hintText: lang.t('ask_about_document'),
-                        hintStyle: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.3),
-                        ),
+                        hintStyle: TextStyle(color: VoxColors.textHint(context)),
                         filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.05),
+                        fillColor: VoxColors.cardFill(context),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(25),
                           borderSide: BorderSide.none,

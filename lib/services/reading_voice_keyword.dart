@@ -1,4 +1,5 @@
 import 'reading_playback_state.dart';
+import 'reading_voice_keywords_i18n.dart';
 
 /// Core voice triggers for read-aloud (keyword spotter — not full dictation).
 enum ReadingVoiceKeyword {
@@ -7,25 +8,13 @@ enum ReadingVoiceKeyword {
   play,
   forward,
   backward,
+  highlight,
 }
 
 /// Local keyword spotter: scans only the **tail** of STT output so accumulated
 /// TTS echo does not drown out short commands like "pause" or "forward".
 class ReadingVoiceKeywordSpotter {
   ReadingVoiceKeywordSpotter._();
-
-  static const _pauseWords = {'pause', 'paws', 'halt', 'wait', 'hold'};
-  static const _stopWords = {'stop', 'end', 'quit'};
-  static const _playWords = {
-    'play',
-    'resume',
-    'continue',
-    'unpause',
-    'start',
-    'read',
-  };
-  static const _forwardWords = {'forward', 'skip', 'next'};
-  static const _backwardWords = {'back', 'backward', 'rewind', 'previous'};
 
   /// Interrupt-class commands — highest priority while [PLAYING].
   static const interruptKeywords = {
@@ -74,6 +63,7 @@ class ReadingVoiceKeywordSpotter {
   static ReadingVoiceKeyword? spot({
     required String spoken,
     required ReadingPlaybackState state,
+    String commandLanguage = 'English',
     String recentTtsSnippet = '',
     bool ignoreTtsEcho = false,
   }) {
@@ -88,67 +78,109 @@ class ReadingVoiceKeywordSpotter {
     if (tail.isEmpty) return null;
 
     // ── Interrupt priority (stop before pause) ──
-    if (_isStop(tail)) return ReadingVoiceKeyword.stop;
-    if (_isPause(tail)) return ReadingVoiceKeyword.pause;
+    if (_isStop(tail, commandLanguage)) return ReadingVoiceKeyword.stop;
+    if (_isPause(tail, commandLanguage)) return ReadingVoiceKeyword.pause;
 
     if (state == ReadingPlaybackState.playing) {
-      if (_isForward(tail)) return ReadingVoiceKeyword.forward;
-      if (_isBackward(tail)) return ReadingVoiceKeyword.backward;
+      if (_isHighlight(tail, commandLanguage)) {
+        return ReadingVoiceKeyword.highlight;
+      }
+      if (_isForward(tail, commandLanguage)) return ReadingVoiceKeyword.forward;
+      if (_isBackward(tail, commandLanguage)) {
+        return ReadingVoiceKeyword.backward;
+      }
       return null;
     }
 
     if (state == ReadingPlaybackState.paused) {
-      if (_isPlay(tail)) return ReadingVoiceKeyword.play;
-      if (_isForward(tail)) return ReadingVoiceKeyword.forward;
-      if (_isBackward(tail)) return ReadingVoiceKeyword.backward;
+      if (_isPlay(tail, commandLanguage)) return ReadingVoiceKeyword.play;
+      if (_isHighlight(tail, commandLanguage)) {
+        return ReadingVoiceKeyword.highlight;
+      }
+      if (_isForward(tail, commandLanguage)) return ReadingVoiceKeyword.forward;
+      if (_isBackward(tail, commandLanguage)) {
+        return ReadingVoiceKeyword.backward;
+      }
     }
 
     return null;
   }
 
-  static bool _isStop(String tail) {
-    if (_containsWord(tail, _stopWords)) return true;
-    return _matchesPhrase(tail, ['stop reading', 'stop playback', 'end reading']);
+  /// Seek-only match — bypasses TTS echo filter for fast partial STT.
+  static ReadingVoiceKeyword? spotSeekOnly(
+    String spoken, {
+    String commandLanguage = 'English',
+  }) {
+    final tail = tailWords(spoken, maxWords: 4);
+    if (tail.isEmpty) return null;
+    if (_isForward(tail, commandLanguage)) return ReadingVoiceKeyword.forward;
+    if (_isBackward(tail, commandLanguage)) return ReadingVoiceKeyword.backward;
+    return null;
   }
 
-  static bool _isPause(String tail) {
-    if (_containsWord(tail, _pauseWords)) return true;
-    return _matchesPhrase(tail, ['pause reading', 'hold on', 'hold up']);
-  }
-
-  static bool _isPlay(String tail) {
-    if (_containsWord(tail, _playWords)) return true;
-    return _matchesPhrase(tail, [
-      'continue reading',
-      'keep reading',
-      'start reading',
-    ]);
-  }
-
-  static bool _isForward(String tail) {
-    if (_containsWord(tail, _forwardWords)) return true;
-    return _matchesPhrase(tail, ['go forward', 'skip ahead']);
-  }
-
-  static bool _isBackward(String tail) {
-    if (_containsWord(tail, _backwardWords)) return true;
-    return _matchesPhrase(tail, ['go back']);
-  }
-
-  static String feedbackFor(ReadingVoiceKeyword keyword) {
-    switch (keyword) {
-      case ReadingVoiceKeyword.pause:
-        return '⏸ Paused';
-      case ReadingVoiceKeyword.stop:
-        return '🛑 Stopped';
-      case ReadingVoiceKeyword.play:
-        return '▶ Playing';
-      case ReadingVoiceKeyword.forward:
-        return '⏭ Forward';
-      case ReadingVoiceKeyword.backward:
-        return '⏮ Back';
+  /// Highlight-only match — bypasses TTS echo filter for fast partial STT.
+  static ReadingVoiceKeyword? spotHighlightOnly(
+    String spoken, {
+    String commandLanguage = 'English',
+  }) {
+    final tail = tailWords(spoken, maxWords: 4);
+    if (tail.isEmpty) return null;
+    if (_isHighlight(tail, commandLanguage)) {
+      return ReadingVoiceKeyword.highlight;
     }
+    return null;
   }
+
+  static bool _isStop(String tail, String commandLanguage) {
+    if (_containsWord(tail, ReadingVoiceKeywordsI18n.stopWords(commandLanguage))) {
+      return true;
+    }
+    return _matchesPhrase(tail, ReadingVoiceKeywordsI18n.stopPhrases(commandLanguage));
+  }
+
+  static bool _isPause(String tail, String commandLanguage) {
+    if (_containsWord(tail, ReadingVoiceKeywordsI18n.pauseWords(commandLanguage))) {
+      return true;
+    }
+    return _matchesPhrase(tail, ReadingVoiceKeywordsI18n.pausePhrases(commandLanguage));
+  }
+
+  static bool _isPlay(String tail, String commandLanguage) {
+    if (_containsWord(tail, ReadingVoiceKeywordsI18n.playWords(commandLanguage))) {
+      return true;
+    }
+    return _matchesPhrase(tail, ReadingVoiceKeywordsI18n.playPhrases(commandLanguage));
+  }
+
+  static bool _isForward(String tail, String commandLanguage) {
+    if (_containsWord(tail, ReadingVoiceKeywordsI18n.forwardWords(commandLanguage))) {
+      return true;
+    }
+    return _matchesPhrase(tail, ReadingVoiceKeywordsI18n.forwardPhrases(commandLanguage));
+  }
+
+  static bool _isBackward(String tail, String commandLanguage) {
+    if (_containsWord(tail, ReadingVoiceKeywordsI18n.backwardWords(commandLanguage))) {
+      return true;
+    }
+    return _matchesPhrase(tail, ReadingVoiceKeywordsI18n.backwardPhrases(commandLanguage));
+  }
+
+  static bool _isHighlight(String tail, String commandLanguage) {
+    if (_containsWord(tail, ReadingVoiceKeywordsI18n.highlightWords(commandLanguage))) {
+      return true;
+    }
+    return _matchesPhrase(
+      tail,
+      ReadingVoiceKeywordsI18n.highlightPhrases(commandLanguage),
+    );
+  }
+
+  static String feedbackFor(
+    ReadingVoiceKeyword keyword, {
+    String commandLanguage = 'English',
+  }) =>
+      ReadingVoiceKeywordsI18n.feedback(keyword, commandLanguage);
 
   static bool isInterrupt(ReadingVoiceKeyword keyword) =>
       interruptKeywords.contains(keyword);

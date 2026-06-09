@@ -6,6 +6,7 @@ import 'language_provider.dart';
 import 'services/app_session.dart';
 import 'services/auth_session.dart';
 import 'widgets/firestore_data_gate.dart';
+import 'widgets/list_selection_bar.dart';
 
 class RecycleBinPage extends StatefulWidget {
   const RecycleBinPage({super.key});
@@ -14,14 +15,25 @@ class RecycleBinPage extends StatefulWidget {
   State<RecycleBinPage> createState() => _RecycleBinPageState();
 }
 
-class _RecycleBinPageState extends State<RecycleBinPage> {
+class _RecycleBinPageState extends State<RecycleBinPage>
+    with SingleTickerProviderStateMixin {
   String? _resolvedUid;
   bool _isGuest = true;
   bool _loading = true;
 
+  late TabController _tabController;
+  bool _isSelectionMode = false;
+  final Set<String> _selectedIds = {};
+  List<DocumentSnapshot> _notesDocs = [];
+  List<DocumentSnapshot> _recordingsDocs = [];
+  List<DocumentSnapshot> _uploadsDocs = [];
+
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
+    _tabController.addListener(_onTabChanged);
+
     final bootUid = AppSession.bootstrapUid;
     if (bootUid != null) {
       _resolvedUid = bootUid;
@@ -32,6 +44,71 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
       if (!_isGuest && _resolvedUid != null) {
         _cleanUpExpiredItems();
         _purgeLegacyCommands();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _tabController.removeListener(_onTabChanged);
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  void _onTabChanged() {
+    if (_tabController.indexIsChanging) {
+      _exitSelectionMode();
+    }
+  }
+
+  List<DocumentSnapshot> get _currentTabDocs {
+    switch (_tabController.index) {
+      case 1:
+        return _recordingsDocs;
+      case 2:
+        return _uploadsDocs;
+      default:
+        return _notesDocs;
+    }
+  }
+
+  List<String> get _visibleIds =>
+      _currentTabDocs.map((doc) => doc.id).toList();
+
+  void _enterSelectionMode(String id) {
+    setState(() {
+      _isSelectionMode = true;
+      _selectedIds
+        ..clear()
+        ..add(id);
+    });
+  }
+
+  void _exitSelectionMode() {
+    setState(() {
+      _isSelectionMode = false;
+      _selectedIds.clear();
+    });
+  }
+
+  void _toggleSelection(String id) {
+    setState(() {
+      if (_selectedIds.contains(id)) {
+        _selectedIds.remove(id);
+        if (_selectedIds.isEmpty) _isSelectionMode = false;
+      } else {
+        _selectedIds.add(id);
+      }
+    });
+  }
+
+  void _toggleSelectAll() {
+    setState(() {
+      final visible = _visibleIds;
+      if (visible.isNotEmpty && _selectedIds.length == visible.length) {
+        _selectedIds.clear();
+      } else {
+        _selectedIds.addAll(visible);
       }
     });
   }
@@ -224,6 +301,91 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
         );
       }
     }
+  }
+
+  Future<void> _deleteSelectedPermanently() async {
+    if (_selectedIds.isEmpty) return;
+    final lang = context.read<LanguageProvider>();
+    final count = _selectedIds.length;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: VoxColors.surface(context),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: VoxColors.border(context)),
+        ),
+        title: Row(
+          children: [
+            const Icon(Icons.warning_amber_rounded, color: VoxColors.danger),
+            const SizedBox(width: 8),
+            Text(
+              lang.t('delete_forever_selected_title'),
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 17,
+                color: VoxColors.onSurface(context),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          lang.tNamed('delete_forever_selected_body', {'count': '$count'}),
+          style: TextStyle(color: VoxColors.textSecondary(context)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(
+              lang.t('cancel'),
+              style: TextStyle(color: VoxColors.textHint(context)),
+            ),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: VoxColors.danger,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+            ),
+            child: Text(lang.tNamed('delete_notes_count', {'count': '$count'})),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    try {
+      final batch = FirebaseFirestore.instance.batch();
+      for (final id in _selectedIds) {
+        batch.delete(_bin.doc(id));
+      }
+      await batch.commit();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              lang.tNamed('items_permanently_deleted', {'count': '$count'}),
+            ),
+            backgroundColor: VoxColors.surface(context),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${lang.t('failed_to_delete')} $e'),
+            backgroundColor: VoxColors.danger,
+          ),
+        );
+      }
+    }
+
+    _exitSelectionMode();
   }
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -577,37 +739,51 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
       DateTime.now().subtract(const Duration(days: 30)),
     );
 
-    return DefaultTabController(
-      length: 3,
-      child: Scaffold(
+    return Scaffold(
         backgroundColor: VoxColors.bg(context),
         appBar: AppBar(
-          title: Text(
-            lang.t('recycle_bin_title'),
-            style: TextStyle(
-              color: VoxColors.onBg(context),
-              fontWeight: FontWeight.bold,
-              fontSize: 20,
-            ),
-          ),
-          backgroundColor: Colors.transparent,
+          title: _isSelectionMode
+              ? ListSelectionBar(
+                  selectedCount: _selectedIds.length,
+                  visibleCount: _visibleIds.length,
+                  onCancel: _exitSelectionMode,
+                  onToggleSelectAll: _toggleSelectAll,
+                  onDelete: _deleteSelectedPermanently,
+                  deleteLabel: lang.t('delete'),
+                  foregroundOnPrimary: true,
+                )
+              : Text(
+                  lang.t('recycle_bin_title'),
+                  style: TextStyle(
+                    color: VoxColors.onBg(context),
+                    fontWeight: FontWeight.bold,
+                    fontSize: 20,
+                  ),
+                ),
+          backgroundColor: _isSelectionMode
+              ? VoxColors.primary(context)
+              : Colors.transparent,
           elevation: 0,
+          automaticallyImplyLeading: !_isSelectionMode,
           iconTheme: IconThemeData(color: VoxColors.onBg(context)),
-          bottom: TabBar(
-            isScrollable: true,
-            labelColor: VoxColors.onBg(context),
-            unselectedLabelColor: VoxColors.textSecondary(context),
-            indicatorColor: VoxColors.primary(context),
-            labelStyle: const TextStyle(
-              fontWeight: FontWeight.w700,
-              fontSize: 13,
-            ),
-            tabs: [
-              Tab(text: lang.t('recycle_bin_tab_notes')),
-              Tab(text: lang.t('recycle_bin_tab_recordings')),
-              Tab(text: lang.t('recycle_bin_tab_uploads')),
-            ],
-          ),
+          bottom: _isSelectionMode
+              ? null
+              : TabBar(
+                  controller: _tabController,
+                  isScrollable: true,
+                  labelColor: VoxColors.onBg(context),
+                  unselectedLabelColor: VoxColors.textSecondary(context),
+                  indicatorColor: VoxColors.primary(context),
+                  labelStyle: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13,
+                  ),
+                  tabs: [
+                    Tab(text: lang.t('recycle_bin_tab_notes')),
+                    Tab(text: lang.t('recycle_bin_tab_recordings')),
+                    Tab(text: lang.t('recycle_bin_tab_uploads')),
+                  ],
+                ),
         ),
         body: FirestoreDataGate(
           userId: _resolvedUid!,
@@ -682,6 +858,10 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
               return val['sourceCollection'] == 'library';
             }).toList();
 
+            _notesDocs = notesDocs;
+            _recordingsDocs = recordingsDocs;
+            _uploadsDocs = uploadsDocs;
+
             return Column(
               children: [
                 // Info banner
@@ -715,7 +895,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                             ),
                           ),
                         ),
-                        if (docs.isNotEmpty)
+                        if (docs.isNotEmpty && !_isSelectionMode)
                           GestureDetector(
                             onTap: () => _emptyTrash(context, docs),
                             child: const Text(
@@ -734,6 +914,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                 const SizedBox(height: 8),
                 Expanded(
                   child: TabBarView(
+                    controller: _tabController,
                     children: [
                       _buildList(notesDocs),
                       _buildList(recordingsDocs),
@@ -746,7 +927,6 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
           },
         ),
         ),
-      ),
     );
   }
 
@@ -801,17 +981,49 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
         final typeIcon = _iconForType(fileType, sourceCol);
         final typeLabel = _typeLabel(fileType, sourceCol, lang);
 
-        return Container(
+        final isSelected = _isSelectionMode && _selectedIds.contains(doc.id);
+
+        return GestureDetector(
+          onTap: () {
+            if (_isSelectionMode) {
+              _toggleSelection(doc.id);
+            }
+          },
+          onLongPress: () {
+            if (!_isSelectionMode) {
+              _enterSelectionMode(doc.id);
+            }
+          },
+          child: Container(
           margin: const EdgeInsets.only(bottom: 12),
           decoration: BoxDecoration(
-            color: VoxColors.cardFill(context),
+            color: isSelected
+                ? VoxColors.primary(context).withValues(alpha: 0.1)
+                : VoxColors.cardFill(context),
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: VoxColors.border(context)),
+            border: Border.all(
+              color: isSelected
+                  ? VoxColors.primary(context)
+                  : VoxColors.border(context),
+              width: isSelected ? 2 : 1,
+            ),
           ),
           child: Padding(
             padding: const EdgeInsets.all(14),
             child: Row(
               children: [
+                if (_isSelectionMode) ...[
+                  Icon(
+                    isSelected
+                        ? Icons.check_circle
+                        : Icons.radio_button_unchecked,
+                    color: isSelected
+                        ? VoxColors.primary(context)
+                        : VoxColors.textHint(context),
+                    size: 22,
+                  ),
+                  const SizedBox(width: 10),
+                ],
                 // Icon
                 Container(
                   width: 48,
@@ -889,6 +1101,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                 ),
                 const SizedBox(width: 8),
                 // Actions
+                if (!_isSelectionMode)
                 Column(
                   children: [
                     GestureDetector(
@@ -962,6 +1175,7 @@ class _RecycleBinPageState extends State<RecycleBinPage> {
                 ),
               ],
             ),
+          ),
           ),
         );
       },

@@ -19,6 +19,7 @@ class AuthRestore {
     Duration timeout = const Duration(seconds: 30),
   }) async {
     if (expectedUid.isEmpty) return false;
+    if (await AuthSession.isPendingSignIn()) return false;
 
     await AuthSession.clearConflictingAuthSession();
     if (AuthSession.canQueryFirestore(expectedUid)) return true;
@@ -37,6 +38,7 @@ class AuthRestore {
   }
 
   static Future<bool> _trySilentGoogle(String expectedUid) async {
+    if (await AuthSession.isPendingSignIn()) return false;
     try {
       GoogleSignIn.instance.initialize(serverClientId: _kGoogleServerClientId);
       final googleUser =

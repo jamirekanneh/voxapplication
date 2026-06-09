@@ -14,6 +14,23 @@ class AuthSession {
   static const _keyGuestMode = 'explicitGuestMode';
   static const _keyUserId = 'userId';
   static const _keyHasProfile = 'hasProfile';
+  static const _keyPendingSignIn = 'pendingSignInAfterLogout';
+
+  /// Set on logout — blocks auto device restore and silent Google until sign-in or guest.
+  static Future<bool> isPendingSignIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_keyPendingSignIn) ?? false;
+  }
+
+  static Future<void> markPendingSignIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_keyPendingSignIn, true);
+  }
+
+  static Future<void> clearPendingSignIn() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_keyPendingSignIn);
+  }
 
   static Future<bool> isExplicitGuestMode() async {
     final prefs = await SharedPreferences.getInstance();
@@ -30,6 +47,7 @@ class AuthSession {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyGuestMode, false);
     await prefs.setBool(_keyHasProfile, true);
+    await prefs.remove(_keyPendingSignIn);
     await prefs.setString(_keyUserId, user.uid);
     if (user.email?.isNotEmpty ?? false) {
       await prefs.setString('userEmail', user.email!);
@@ -41,6 +59,7 @@ class AuthSession {
 
   /// Restores local session from a device-linked account (Firestore data by UID).
   static Future<void> restoreFromDevice(DeviceLinkedUser linked) async {
+    if (await isPendingSignIn()) return;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyGuestMode, false);
     await prefs.setBool(_keyHasProfile, true);
@@ -81,6 +100,7 @@ class AuthSession {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_keyGuestMode, true);
     await prefs.setBool(_keyHasProfile, true);
+    await prefs.remove(_keyPendingSignIn);
     await prefs.remove(_keyUserId);
     await prefs.remove('userEmail');
     await prefs.remove('userName');

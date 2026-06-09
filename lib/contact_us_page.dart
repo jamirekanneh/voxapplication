@@ -1,7 +1,5 @@
 import 'dart:async';
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -10,21 +8,9 @@ import 'theme_provider.dart';
 import 'data/country_dial_codes.dart';
 import 'services/mic_coordinator.dart';
 import 'services/app_speech_service.dart';
+import 'services/contact_email_service.dart';
 
 const _kDevWhatsApp = '905488265289';
-const _kEmailJSServiceId = String.fromEnvironment(
-  'EMAILJS_SERVICE_ID',
-  defaultValue: 'service_akm5fyg',
-);
-const _kEmailJSTemplateId = String.fromEnvironment(
-  'EMAILJS_TEMPLATE_ID',
-  defaultValue: 'template_ujtn37d',
-);
-const _kEmailJSPublicKey = String.fromEnvironment(
-  'EMAILJS_PUBLIC_KEY',
-  defaultValue: '7lv-I2bSLiEeBpoYg',
-);
-// Replaced hardcoded constants with dynamic tokens in the build methods
 
 enum ContactPreference { email, whatsapp }
 
@@ -84,7 +70,9 @@ class _MicButton extends StatelessWidget {
       ),
       child: Icon(
         isListening ? Icons.stop_rounded : Icons.mic_rounded,
-        color: Colors.white,
+        color: isListening
+            ? VoxColors.onPrimary(context)
+            : VoxColors.onSurface(context),
         size: 20,
       ),
     ),
@@ -206,14 +194,15 @@ class _ContactUsPageState extends State<ContactUsPage> {
           '${_selectedCountry['flag']} ${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}';
       final email = _emailCtrl.text.trim();
       final message = _messageCtrl.text.trim();
+      final subject = _titleCtrl.text.trim();
       final text = Uri.encodeComponent(
-        'ðŸ“© *New VOX App Message*\n\n'
-        'ðŸ‘¤ *Name:* $name\n'
-        'ðŸ“§ *Email:* $email\n'
-        'ðŸ“ž *Phone:* $phone\n'
-        'ðŸ“Œ *Subject:* ${_titleCtrl.text.trim()}\n\n'
-        'ðŸ’¬ *Message:*\n$message\n\n'
-        'â†©ï¸ _Reply to this user via WhatsApp_',
+        buildContactWhatsAppMessage(
+          name: name,
+          email: email,
+          phone: phone,
+          subject: subject,
+          message: message,
+        ),
       );
       final waUrl = Uri.parse('https://wa.me/$_kDevWhatsApp?text=$text');
       if (await canLaunchUrl(waUrl)) {
@@ -229,42 +218,54 @@ class _ContactUsPageState extends State<ContactUsPage> {
         _showError('WhatsApp is not installed on this device.');
       }
     } else {
-      try {
-        final res = await http.post(
-          Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
-          headers: {'Content-Type': 'application/json'},
-          body: jsonEncode({
-            'service_id': _kEmailJSServiceId,
-            'template_id': _kEmailJSTemplateId,
-            'user_id': _kEmailJSPublicKey,
-            'template_params': {
-              'name':
-                  '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}',
-              'email': _emailCtrl.text.trim(),
-              'title': 'New message from VOX App',
-              'message_phone':
-                  '${_selectedCountry['flag']} ${_selectedCountry['name']} ${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}',
-              'subject': _titleCtrl.text.trim(),
-              'message': _messageCtrl.text.trim(),
-              'reply_preference':
-                  'ðŸ“§ User prefers Email reply\nðŸ“¬ Reply to: ${_emailCtrl.text.trim()}',
-            },
-          }),
-        );
-        if (!mounted) return;
-        if (res.statusCode == 200) {
-          setState(() {
-            _isSending = false;
-            _sent = true;
-          });
-        } else {
-          setState(() => _isSending = false);
-          _showError('Failed to send (${res.statusCode}). Try again.');
+      final name =
+          '${_firstNameCtrl.text.trim()} ${_lastNameCtrl.text.trim()}';
+      final userEmail = _emailCtrl.text.trim();
+      final phoneLine =
+          '${_selectedCountry['flag']} ${_selectedCountry['name']} ${_selectedCountry['dial']} ${_phoneCtrl.text.trim()}';
+      final subject = _titleCtrl.text.trim();
+      final message = _messageCtrl.text.trim();
+
+      final result = await ContactEmailService.send(
+        templateParams: {
+          'name': name,
+          'email': userEmail,
+          'title': 'New message from VOX App',
+          'message_phone': phoneLine,
+          'subject': subject,
+          'message': message,
+          'reply_preference':
+              'User prefers Email reply. Reply to: $userEmail',
+        },
+        mailtoSubject: 'VOX App — $subject',
+        mailtoBody:
+            'Name: $name\n'
+            'Email: $userEmail\n'
+            'Phone: $phoneLine\n'
+            'Subject: $subject\n\n'
+            'Message:\n$message',
+      );
+
+      if (!mounted) return;
+      setState(() => _isSending = false);
+
+      if (result.success) {
+        if (result.usedMailtoFallback) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: const Text(
+                'Opening your email app — tap Send to deliver the message.',
+              ),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          );
         }
-      } catch (_) {
-        if (!mounted) return;
-        setState(() => _isSending = false);
-        _showError('Network error. Check your connection.');
+        setState(() => _sent = true);
+      } else {
+        _showError(result.errorMessage ?? 'Failed to send. Try again.');
       }
     }
   }
@@ -306,11 +307,17 @@ class _ContactUsPageState extends State<ContactUsPage> {
               padding: const EdgeInsets.symmetric(horizontal: 20),
               child: TextField(
                 autofocus: true,
+                style: TextStyle(color: VoxColors.onBg(context)),
                 decoration: InputDecoration(
                   hintText: 'Search country...',
-                  prefixIcon: const Icon(Icons.search, size: 18),
+                  hintStyle: TextStyle(color: VoxColors.textHint(context)),
+                  prefixIcon: Icon(
+                    Icons.search,
+                    size: 18,
+                    color: VoxColors.textSecondary(context),
+                  ),
                   filled: true,
-                  fillColor: VoxColors.onBg(context).withValues(alpha: 0.04),
+                  fillColor: VoxColors.cardFill(context),
                   contentPadding: const EdgeInsets.symmetric(
                     horizontal: 16,
                     vertical: 10,
@@ -372,7 +379,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   style: TextStyle(
                                     fontWeight: FontWeight.w600,
                                     color: active
-                                        ? Colors.white
+                                        ? VoxColors.onPrimary(context)
                                         : VoxColors.onBg(context).withValues(alpha: 0.8),
                                   ),
                                 ),
@@ -381,16 +388,16 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 c['dial']!,
                                 style: TextStyle(
                                   color: active
-                                      ? Colors.white70
+                                      ? VoxColors.onPrimary(context).withValues(alpha: 0.85)
                                       : VoxColors.textSecondary(context),
                                   fontSize: 13,
                                 ),
                               ),
                               if (active) ...[
                                 const SizedBox(width: 8),
-                                const Icon(
+                                Icon(
                                   Icons.check,
-                                  color: Colors.white,
+                                  color: VoxColors.onPrimary(context),
                                   size: 16,
                                 ),
                               ],
@@ -414,7 +421,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
         prefixIcon: prefix,
         suffixIcon: suffix,
         filled: true,
-        fillColor: VoxColors.onBg(context).withValues(alpha: 0.04),
+        fillColor: VoxColors.cardFill(context),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 14,
@@ -473,11 +480,11 @@ class _ContactUsPageState extends State<ContactUsPage> {
         Container(
           height: 52,
           decoration: BoxDecoration(
-            color: VoxColors.onBg(context).withValues(alpha: 0.04),
+            color: VoxColors.cardFill(context),
             borderRadius: BorderRadius.circular(16),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withValues(alpha: 0.06),
+                color: VoxColors.onBg(context).withValues(alpha: 0.06),
                 blurRadius: 8,
                 offset: const Offset(0, 2),
               ),
@@ -722,7 +729,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
               style: OutlinedButton.styleFrom(
                 foregroundColor: VoxColors.textSecondary(context),
                 padding: const EdgeInsets.symmetric(vertical: 13),
-                side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                side: BorderSide(color: VoxColors.border(context)),
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12),
                 ),
@@ -859,8 +866,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                         ),
                                         TextFormField(
                                           controller: _firstNameCtrl,
-                                          style: const TextStyle(
-                                            color: Colors.white,
+                                          style: TextStyle(
+                                            color: VoxColors.onBg(context),
                                           ),
                                           textCapitalization:
                                               TextCapitalization.words,
@@ -870,9 +877,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                             prefix: Icon(
                                               Icons.person_outline_rounded,
                                               size: 18,
-                                              color: Colors.white.withValues(alpha: 
-                                                0.5,
-                                              ),
+                                              color: VoxColors.textSecondary(context),
                                             ),
                                             suffix: _mic(
                                               'firstName',
@@ -915,8 +920,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                         ),
                                         TextFormField(
                                           controller: _lastNameCtrl,
-                                          style: const TextStyle(
-                                            color: Colors.white,
+                                          style: TextStyle(
+                                            color: VoxColors.onBg(context),
                                           ),
                                           textCapitalization:
                                               TextCapitalization.words,
@@ -926,9 +931,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                             prefix: Icon(
                                               Icons.person_outline_rounded,
                                               size: 18,
-                                              color: Colors.white.withValues(alpha: 
-                                                0.5,
-                                              ),
+                                              color: VoxColors.textSecondary(context),
                                             ),
                                             suffix: _mic(
                                               'lastName',
@@ -952,7 +955,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                           _label('EMAIL ADDRESS'),
                           TextFormField(
                             controller: _emailCtrl,
-                            style: const TextStyle(color: Colors.white),
+                            style: TextStyle(color: VoxColors.onBg(context)),
                             keyboardType: TextInputType.emailAddress,
                             textInputAction: TextInputAction.next,
                             decoration:
@@ -960,13 +963,13 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   prefix: Icon(
                                     Icons.mail_outline_rounded,
                                     size: 18,
-                                    color: Colors.white.withValues(alpha: 0.5),
+                                    color: VoxColors.textSecondary(context),
                                   ),
                                   suffix: _mic('email', _emailCtrl),
                                 ).copyWith(
                                   hintText: 'john@example.com',
-                                  hintStyle: const TextStyle(
-                                    color: Color(0x420A0E1A),
+                                  hintStyle: TextStyle(
+                                    color: VoxColors.textHint(context),
                                     fontSize: 13,
                                   ),
                                 ),
@@ -996,10 +999,10 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                     vertical: 14,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.04),
+                                    color: VoxColors.cardFill(context),
                                     borderRadius: BorderRadius.circular(14),
                                     border: Border.all(
-                                      color: Colors.white.withValues(alpha: 0.1),
+                                      color: VoxColors.border(context),
                                     ),
                                   ),
                                   child: Row(
@@ -1011,8 +1014,8 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                       const SizedBox(width: 6),
                                       Text(
                                         _selectedCountry['dial']!,
-                                        style: const TextStyle(
-                                          color: Colors.white,
+                                        style: TextStyle(
+                                          color: VoxColors.onBg(context),
                                           fontWeight: FontWeight.w700,
                                           fontSize: 13,
                                         ),
@@ -1021,7 +1024,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                       Icon(
                                         Icons.arrow_drop_down_rounded,
                                         size: 18,
-                                        color: Colors.white.withValues(alpha: 0.5),
+                                        color: VoxColors.textSecondary(context),
                                       ),
                                     ],
                                   ),
@@ -1031,7 +1034,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               Expanded(
                                 child: TextFormField(
                                   controller: _phoneCtrl,
-                                  style: const TextStyle(color: Colors.white),
+                                  style: TextStyle(color: VoxColors.onBg(context)),
                                   keyboardType: TextInputType.phone,
                                   textInputAction: TextInputAction.next,
                                   decoration:
@@ -1040,7 +1043,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                       ).copyWith(
                                         hintText: '5XX XXX XXXX',
                                         hintStyle: TextStyle(
-                                          color: Colors.white.withValues(alpha: 0.3),
+                                          color: VoxColors.textHint(context),
                                           fontSize: 13,
                                         ),
                                       ),
@@ -1074,7 +1077,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                               ),
                               TextFormField(
                                 controller: _titleCtrl,
-                                style: const TextStyle(color: Colors.white),
+                                style: TextStyle(color: VoxColors.onBg(context)),
                                 textCapitalization:
                                     TextCapitalization.sentences,
                                 textInputAction: TextInputAction.next,
@@ -1083,7 +1086,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                   prefix: Icon(
                                     Icons.subject_rounded,
                                     size: 18,
-                                    color: Colors.white.withValues(alpha: 0.5),
+                                    color: VoxColors.textSecondary(context),
                                   ),
                                   suffix: _mic('title', _titleCtrl),
                                 ),
@@ -1101,7 +1104,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                             children: [
                               TextFormField(
                                 controller: _messageCtrl,
-                                style: const TextStyle(color: Colors.white),
+                                style: TextStyle(color: VoxColors.onBg(context)),
                                 maxLines: null,
                                 minLines: 6,
                                 keyboardType: TextInputType.multiline,
@@ -1114,7 +1117,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 decoration: _inputDeco().copyWith(
                                   hintText: 'Write your message here...',
                                   hintStyle: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.3),
+                                    color: VoxColors.textHint(context),
                                     fontSize: 13,
                                   ),
                                   contentPadding: const EdgeInsets.fromLTRB(
@@ -1211,14 +1214,14 @@ class _ContactUsPageState extends State<ContactUsPage> {
                                 Icon(
                                   Icons.lock_outline_rounded,
                                   size: 12,
-                                  color: Colors.white.withValues(alpha: 0.5),
+                                  color: VoxColors.textMuted(context),
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
                                   'Your information is kept private',
                                   style: TextStyle(
                                     fontSize: 11,
-                                    color: Colors.white.withValues(alpha: 0.5),
+                                    color: VoxColors.textMuted(context),
                                   ),
                                 ),
                               ],

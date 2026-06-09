@@ -6,7 +6,10 @@ import 'custom_commands_provider.dart';
 import 'language_provider.dart';
 import 'navigation_keys.dart';
 import 'services/mic_coordinator.dart';
+import 'services/assistant_voice_phrases.dart';
+import 'services/document_language_service.dart';
 import 'services/reading_voice_commands.dart';
+import 'services/reading_voice_keyword.dart';
 import 'tts_service.dart';
 import 'voice_assistant_intent.dart';
 
@@ -133,6 +136,16 @@ String _getFeedback(String language, String key) {
   return _feedback[lang]?[key] ?? _feedback['English']![key]!;
 }
 
+String _responseLanguage(String spokenText, String appLanguage) {
+  return DocumentLanguageService.detectSpokenLanguageName(
+    spokenText,
+    fallback: appLanguage,
+  );
+}
+
+String _ttsLocaleForLanguage(String language) =>
+    DocumentLanguageService.ttsLocaleForLanguage(language);
+
 // ─────────────────────────────────────────────
 //  DISPATCHER
 // ─────────────────────────────────────────────
@@ -201,11 +214,9 @@ class CommandDispatcher {
     required VoiceAssistantInterpretation nl,
     required CustomCommandsProvider commandsProvider,
     required TtsService ttsService,
-    required LanguageProvider langProvider,
+    required String responseLanguage,
+    required String responseLocale,
   }) async {
-    final locale = langProvider.currentLocale;
-    final language = langProvider.selectedLanguage;
-
     switch (nl.action) {
       case VoiceAssistantAction.unknown:
         return false;
@@ -215,9 +226,12 @@ class CommandDispatcher {
         if (commandsProvider.voiceFeedbackEnabled) {
           final r = nl.replyEnglish?.trim();
           if (r != null && r.isNotEmpty) {
-            ttsService.speakBrief(r, locale);
+            ttsService.speakBrief(r, responseLocale);
           } else {
-            ttsService.speakBrief(_getFeedback(language, 'noMatch'), locale);
+            ttsService.speakBrief(
+              _getFeedback(responseLanguage, 'noMatch'),
+              responseLocale,
+            );
           }
         }
         return true;
@@ -227,12 +241,10 @@ class CommandDispatcher {
         MicCoordinator.instance.setAssistantMicActive(false);
         if (!context.mounted) return true;
         if (commandsProvider.voiceFeedbackEnabled) {
-          final r = nl.replyEnglish?.trim();
           await ttsService.speakBrief(
-              (r != null && r.isNotEmpty)
-                  ? r
-                  : _getFeedback(language, 'assistantMuted'),
-              locale);
+            _getFeedback(responseLanguage, 'assistantMuted'),
+            responseLocale,
+          );
         }
         return true;
 
@@ -257,18 +269,17 @@ class CommandDispatcher {
             for (final step in steps) {
               final subCommand = commandsProvider.match(step);
               if (subCommand != null) {
-                _execute(context, subCommand, ttsService, locale);
+                _execute(context, subCommand, ttsService, responseLocale);
               }
             }
           } else {
-            _execute(context, customCmd, ttsService, locale);
+            _execute(context, customCmd, ttsService, responseLocale);
           }
 
           if (commandsProvider.voiceFeedbackEnabled) {
-            String feedbackText = (nl.replyEnglish != null && nl.replyEnglish!.trim().isNotEmpty)
-                ? nl.replyEnglish!.trim()
-                : _getFeedback(language, customCmd.action.name);
-            ttsService.speakBrief(feedbackText, locale);
+            final feedbackText =
+                _getFeedback(responseLanguage, customCmd.action.name);
+            ttsService.speakBrief(feedbackText, responseLocale);
           }
           
           return true;
@@ -292,13 +303,11 @@ class CommandDispatcher {
         if (!context.mounted) return false;
 
         // Siri-style: Action happens FIRST
-        _execute(context, cmd, ttsService, locale);
+        _execute(context, cmd, ttsService, responseLocale);
 
         if (commandsProvider.voiceFeedbackEnabled) {
           var feedbackText =
-              (nl.replyEnglish != null && nl.replyEnglish!.trim().isNotEmpty)
-                  ? nl.replyEnglish!.trim()
-                  : _getFeedback(language, cmd.action.name);
+              _getFeedback(responseLanguage, cmd.action.name);
           final p = (nl.query ?? '').trim();
           if (p.isNotEmpty &&
               (mapped == CommandActionType.searchNotes ||
@@ -306,7 +315,7 @@ class CommandDispatcher {
                   mapped == CommandActionType.searchLibrary)) {
             feedbackText += ': $p';
           }
-          ttsService.speakBrief(feedbackText, locale);
+          ttsService.speakBrief(feedbackText, responseLocale);
         }
 
         return true;
@@ -320,13 +329,15 @@ class CommandDispatcher {
     required TtsService ttsService,
     required LanguageProvider langProvider,
   }) async {
-    final locale = langProvider.ttsLocale;
+    final appLanguage = langProvider.selectedLanguage;
+    final responseLanguage = _responseLanguage(spokenText, appLanguage);
+    final responseLocale = _ttsLocaleForLanguage(responseLanguage);
 
     // While a document is being read aloud, reading commands take priority.
     final readingResult = await ReadingVoiceCommands.tryDuringPlayback(
       spoken: spokenText,
       tts: ttsService,
-      locale: locale,
+      locale: responseLocale,
     );
     if (readingResult.handled) {
       if (!context.mounted) return true;
@@ -371,6 +382,7 @@ class CommandDispatcher {
         interpreted = await AiService.interpretVoiceAssistant(
           transcript: spokenText,
           customCommands: commandsProvider.enabledCommands,
+          fallbackLanguage: appLanguage,
         );
         debugPrint('AI INTERPRETATION: ${interpreted?.action}');
       } catch (e) {
@@ -387,7 +399,8 @@ class CommandDispatcher {
         nl: interpreted,
         commandsProvider: commandsProvider,
         ttsService: ttsService,
-        langProvider: langProvider,
+        responseLanguage: responseLanguage,
+        responseLocale: responseLocale,
       );
       if (handled) {
         debugPrint('DISPATCH: Handled by AI Intent');
@@ -395,122 +408,56 @@ class CommandDispatcher {
       }
     }
 
-    final language = langProvider.selectedLanguage;
+    debugPrint('DISPATCH: Falling back to local matcher (lang=$responseLanguage)');
 
-    debugPrint('DISPATCH: Falling back to local matcher');
-    
-    // HARDCODED FAILSAFES: If the matching engine is struggling, we force-match core navigation.
-    final normalized = spokenText
-        .toLowerCase()
-        .replaceAll(RegExp(r'[^\p{L}\p{N}\s]', unicode: true), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    String _extractDictionaryQuery(String text) {
-      const prefixes = [
-        'search dictionary for ',
-        'search dictionary ',
-        'dictionary search ',
-        'find meaning of ',
-        'meaning of ',
-        'define ',
-      ];
-      for (final prefix in prefixes) {
-        if (text.startsWith(prefix)) {
-          return text.substring(prefix.length).trim();
-        }
+    final localizedCmd = AssistantVoicePhrases.matchSpoken(
+      spokenText,
+      appLanguage: appLanguage,
+    );
+    if (localizedCmd != null) {
+      debugPrint('DISPATCH: Localized phrase → ${localizedCmd.action.name}');
+      AnalyticsService.instance.recordVoiceCommand(
+        localizedCmd.action.displayName,
+      );
+      await _execute(context, localizedCmd, ttsService, responseLocale);
+      if (commandsProvider.voiceFeedbackEnabled) {
+        var feedbackText =
+            _getFeedback(responseLanguage, localizedCmd.action.name);
+        final p = localizedCmd.parameter?.trim();
+        if (p != null && p.isNotEmpty) feedbackText += ': $p';
+        ttsService.speakBrief(feedbackText, responseLocale);
       }
-      return '';
-    }
-    if (normalized == 'menu' || normalized == 'open menu' || normalized == 'go to menu') {
-      debugPrint('FAILSAFE: Force matching Menu');
-      await _execute(context, const CustomCommand(id: 'fs_menu', phrase: 'menu', action: CommandActionType.navigateMenu), ttsService, locale);
-      return true;
-    } else if (normalized == 'home' || normalized == 'go home' || normalized == 'back home') {
-      debugPrint('FAILSAFE: Force matching Home');
-      await _execute(context, const CustomCommand(id: 'fs_home', phrase: 'home', action: CommandActionType.navigateHome), ttsService, locale);
-      return true;
-    } else if (normalized == 'dictionary' || normalized == 'open dictionary' || normalized == 'dictionary page') {
-      debugPrint('FAILSAFE: Force matching Dictionary');
-      await _execute(context, const CustomCommand(id: 'fs_dict', phrase: 'dictionary', action: CommandActionType.navigateDictionary), ttsService, locale);
-      return true;
-    } else {
-      final dictQuery = _extractDictionaryQuery(normalized);
-      if (dictQuery.isNotEmpty) {
-        debugPrint('FAILSAFE: Force matching Dictionary search "$dictQuery"');
-        await _execute(
-          context,
-          CustomCommand(
-            id: 'fs_dict_query',
-            phrase: 'dictionary search',
-            action: CommandActionType.navigateDictionary,
-            parameter: dictQuery,
-          ),
-          ttsService,
-          locale,
-        );
-        return true;
-      }
-    }
-    if (normalized == 'notes' || normalized == 'open notes' ||
-        normalized.contains('go to notes') || normalized.contains('notes page')) {
-      debugPrint('FAILSAFE: Force matching Notes');
-      await _execute(context, const CustomCommand(id: 'fs_notes', phrase: 'notes', action: CommandActionType.navigateNotes), ttsService, locale);
-      return true;
-    } else if (normalized.contains('history') ||
-        normalized == 'open history') {
-      debugPrint('FAILSAFE: Force matching History');
-      await _execute(context, const CustomCommand(id: 'fs_history', phrase: 'history', action: CommandActionType.navigateHistory), ttsService, locale);
-      return true;
-    } else if (normalized.contains('stop') &&
-        (normalized.contains('play') ||
-            normalized.contains('read') ||
-            normalized.contains('speak'))) {
-      debugPrint('FAILSAFE: Force matching Stop');
-      await _execute(context, const CustomCommand(id: 'fs_stop', phrase: 'stop', action: CommandActionType.ttsStop), ttsService, locale);
-      return true;
-    } else if (normalized == 'stop' ||
-        normalized == 'stop reading' ||
-        normalized == 'stop playback') {
-      debugPrint('FAILSAFE: Force matching Stop');
-      await _execute(context, const CustomCommand(id: 'fs_stop2', phrase: 'stop', action: CommandActionType.ttsStop), ttsService, locale);
-      return true;
-    } else if (normalized == 'pause' || normalized == 'pause reading') {
-      debugPrint('FAILSAFE: Force matching Pause');
-      await _execute(context, const CustomCommand(id: 'fs_pause', phrase: 'pause', action: CommandActionType.ttsPause), ttsService, locale);
-      return true;
-    } else if (normalized == 'go back' ||
-        normalized == 'go backward' ||
-        normalized == 'rewind') {
-      if (ttsService.isReadingSession &&
-          (ttsService.isPlaying || ttsService.userPaused)) {
-        await ttsService.seekBackward(10, locale);
-        return true;
-      }
-    } else if (normalized == 'go forward' ||
-        normalized == 'skip ahead' ||
-        normalized == 'fast forward') {
-      if (ttsService.isReadingSession &&
-          (ttsService.isPlaying || ttsService.userPaused)) {
-        await ttsService.seekForward(10, locale);
-        return true;
-      }
-    } else if (normalized == 'play' ||
-        normalized == 'resume' ||
-        normalized == 'continue' ||
-        normalized == 'continue reading') {
-      debugPrint('FAILSAFE: Force matching Play');
-      await _execute(context, const CustomCommand(id: 'fs_play', phrase: 'play', action: CommandActionType.ttsPlay), ttsService, locale);
       return true;
     }
 
-    final matched = commandsProvider.match(spokenText);
+    if (ttsService.isReadingSession &&
+        (ttsService.isPlaying || ttsService.userPaused)) {
+      final seek = ReadingVoiceKeywordSpotter.spotSeekOnly(
+        spokenText,
+        commandLanguage: responseLanguage,
+      );
+      if (seek == ReadingVoiceKeyword.forward) {
+        await ttsService.seekForward(10, responseLocale);
+        return true;
+      }
+      if (seek == ReadingVoiceKeyword.backward) {
+        await ttsService.seekBackward(10, responseLocale);
+        return true;
+      }
+    }
+
+    final matched = commandsProvider.match(
+      spokenText,
+      language: responseLanguage,
+      appLanguage: appLanguage,
+    );
 
     if (matched == null) {
       AnalyticsService.instance.recordUnmatchedCommand(spokenText);
       if (commandsProvider.voiceFeedbackEnabled) {
         ttsService.speakBrief(
-          _getFeedback(language, 'noMatch'),
-          locale,
+          _getFeedback(responseLanguage, 'noMatch'),
+          responseLocale,
         );
       }
       return false;
@@ -532,21 +479,21 @@ class CommandDispatcher {
       for (final step in steps) {
         final subCommand = commandsProvider.match(step);
         if (subCommand != null) {
-          _execute(context, subCommand, ttsService, locale);
+          _execute(context, subCommand, ttsService, responseLocale);
         } else if (commandsProvider.voiceFeedbackEnabled) {
-          ttsService.speakBrief('Macro step not found: $step', locale);
+          ttsService.speakBrief('Macro step not found: $step', responseLocale);
         }
       }
     } else {
-      _execute(context, matched, ttsService, locale);
+      _execute(context, matched, ttsService, responseLocale);
     }
 
     if (commandsProvider.voiceFeedbackEnabled) {
-      String feedbackText = _getFeedback(language, matched.action.name);
+      String feedbackText = _getFeedback(responseLanguage, matched.action.name);
       if (matched.parameter != null && matched.parameter!.isNotEmpty) {
         feedbackText += ': ${matched.parameter}';
       }
-      ttsService.speakBrief(feedbackText, locale);
+      ttsService.speakBrief(feedbackText, responseLocale);
     }
 
     return true;

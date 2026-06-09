@@ -10,6 +10,7 @@ import 'voice_assistant_intent.dart';
 // ignore: uri_does_not_exist
 import 'config/secrets.dart';
 import 'services/groq_service.dart';
+import 'services/document_language_service.dart';
 
 class AiService {
   static const String _openRouterUrl =
@@ -222,16 +223,28 @@ class AiService {
     throw Exception('NLP API returned an empty response.');
   }
 
+  static String _outputLanguageInstruction(String outputLanguage) {
+    if (outputLanguage == 'English') {
+      return 'Write the entire response in English.';
+    }
+    return 'Write the entire response in $outputLanguage. '
+        'If the source document is in that language, preserve its terminology.';
+  }
+
   /// Summarizes the document and returns plain-text summary.
-  static Future<String> summarize(String documentText) {
+  static Future<String> summarize(
+    String documentText, {
+    String outputLanguage = 'English',
+  }) {
     final text = _prepareDocumentText(documentText);
-    const system =
-        'You are an expert academic summarizer. '
+    final lang = _outputLanguageInstruction(outputLanguage);
+    final system =
+        'You are an expert academic summarizer. $lang '
         'Given a document, produce a clear summary with: '
         '1) A short overview paragraph, '
-        '2) Key points each prefixed with "-", '
+        '2) Key points as separate lines (one idea per line — do NOT use lone "-" or bullet-only lines), '
         '3) Important conclusions. '
-        'Use plain text only and no markdown headers or bold.';
+        'Use plain text only — no markdown, headers, or bold.';
     return _callLlm(
       system,
       'Summarize this document:\n\n$text',
@@ -245,6 +258,7 @@ class AiService {
   static Future<VoiceAssistantInterpretation?> interpretVoiceAssistant({
     required String transcript,
     List<CustomCommand> customCommands = const [],
+    String fallbackLanguage = 'English',
   }) async {
     final t = transcript.trim();
     if (t.isEmpty) return null;
@@ -263,6 +277,15 @@ class AiService {
           '"customCommandId": "<ID_HERE>".\nCustom Commands:\n$cmds\n';
     }
 
+    final spokenLang = DocumentLanguageService.detectSpokenLanguageName(
+      t,
+      fallback: fallbackLanguage,
+    );
+    final replyLangRule = spokenLang == 'English'
+        ? 'If speech is unrelated, use action=none with a short reply in English (14 words max).'
+        : 'If speech is unrelated, use action=none with a short reply in $spokenLang (14 words max). '
+            'For navigation or playback actions, set reply to null — the app speaks localized feedback.';
+
     final systemPrompt =
         'You classify short spoken phrases for the Vox mobile app voice assistant '
         '(navigation, searching files/notes, opening saved quizzes, playback control). '
@@ -276,8 +299,8 @@ class AiService {
         '- Put user-specific text (search keywords, file/title hints) in query when relevant, otherwise null.\n'
         '- assistant_off means the user wants to stop the hands-free assistant.\n'
         '- reading_* means controlling text-to-speech while reading documents.\n'
-        '- Understand synonyms ("take me home", "show my uploads", "open dictionary").\n'
-        '- If speech is unrelated, use action=none with a short reply (14 words max, English).\n'
+        '- Understand synonyms in any language ("take me home", "افتح القاموس", "abrir diccionario").\n'
+        '- $replyLangRule\n'
         '$customCommandsContext';
 
     try {
@@ -307,9 +330,19 @@ class AiService {
   }
 
   /// Assistant for generic questions.
-  static Future<String> askAssistant(String userMessage) {
-    const fallbackSystem =
+  static Future<String> askAssistant(
+    String userMessage, {
+    String fallbackLanguage = 'English',
+  }) {
+    final responseLang = DocumentLanguageService.detectSpokenLanguageName(
+      userMessage,
+      fallback: fallbackLanguage,
+    );
+    final langRule = _outputLanguageInstruction(responseLang);
+
+    final fallbackSystem =
         'You are Vox Assistant, an AI helper for the Vox mobile app. '
+        '$langRule If the user writes in another language, reply in that language. '
         'Answer only from these facts. Be friendly, concise, and do not invent features.\n\n'
         'NAVIGATION: Home (library/uploaded files), Notes (voice notes + transcripts), '
         'Dictionary, Menu, Upload (+ center button), History.\n\n'
@@ -353,16 +386,18 @@ class AiService {
   static Future<List<Flashcard>> generateFlashcards(
     String documentText, {
     int count = 10,
+    String outputLanguage = 'English',
   }) async {
     final text = _prepareDocumentText(documentText);
     final seed = Random().nextInt(99999);
     final safeCount = count.clamp(3, 30);
+    final lang = _outputLanguageInstruction(outputLanguage);
 
     final system =
-        'You are a study flashcard generator. '
+        'You are a study flashcard generator. $lang '
         'Output ONLY a JSON array with exactly $safeCount objects. '
         'No markdown, no code fences, no explanation. '
-        'Each object must have string fields "question" and "answer". '
+        'Each object must have string fields "question" and "answer" with real content — never "-" or empty strings. '
         'Example: [{"question":"What is X?","answer":"X is ..."}] '
         'Seed: $seed.';
 
@@ -420,6 +455,7 @@ class AiService {
     required String userMessage,
     String? documentTitle,
     List<Map<String, String>>? conversationHistory,
+    String outputLanguage = 'English',
   }) {
     final text = _prepareDocumentText(documentText);
     final title = (documentTitle?.trim().isNotEmpty ?? false)
@@ -443,9 +479,11 @@ class AiService {
       history.writeln();
     }
 
-    const system =
-        'You are Vox Study Buddy, a helpful reading assistant. '
+    final lang = _outputLanguageInstruction(outputLanguage);
+    final system =
+        'You are Vox Study Buddy, a helpful reading assistant. $lang '
         'Answer questions using ONLY the provided document text. '
+        'If the user writes in another language, reply in that language. '
         'If the answer is not in the document, say so clearly and briefly. '
         'Keep answers concise, friendly, and accurate. Plain text only.';
 

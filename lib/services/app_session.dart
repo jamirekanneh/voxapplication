@@ -84,6 +84,7 @@ class AppSession {
   }
 
   static Future<DeviceLinkedUser?> getDeviceLinkedUser({int attempts = 3}) async {
+    if (await AuthSession.isPendingSignIn()) return null;
     final id = await deviceId();
     if (id == null || id.isEmpty) return null;
 
@@ -179,6 +180,7 @@ class AppSession {
   static Future<DeviceLinkedUser?> recognizeAndPrepareDevice({
     Duration authTimeout = _authTimeout,
   }) async {
+    if (await AuthSession.isPendingSignIn()) return null;
     if (await AuthSession.isExplicitGuestMode()) return null;
 
     DeviceLinkedUser? linked = await getDeviceLinkedUser(attempts: 3);

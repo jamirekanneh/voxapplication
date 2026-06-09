@@ -1,15 +1,20 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:flutter_tts/flutter_tts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:provider/provider.dart';
 import 'pdf_service.dart';
 import 'ai_service.dart';
+import 'language_provider.dart';
+import 'services/document_language_service.dart';
 import 'services/saved_docs_service.dart';
+import 'theme_provider.dart';
 
 class AiResultPage extends StatefulWidget {
   final String documentTitle;
   final String documentContent;
   final String mode; // 'summary' | 'flashcards'
-  final int cardCount; // how many flashcards to generate
+  final int cardCount;
+  final String outputLanguage;
   final String source; // 'Home' | 'Notes' â€” origin of the document
 
   const AiResultPage({
@@ -19,6 +24,7 @@ class AiResultPage extends StatefulWidget {
     required this.mode,
     this.cardCount = 10,
     this.source = 'Home',
+    this.outputLanguage = 'English',
   });
 
   @override
@@ -41,6 +47,26 @@ class _AiResultPageState extends State<AiResultPage> {
   bool _isSpeaking = false;
   bool _autoReadEnabled = true; // auto-read toggle
 
+  String get _ttsLocale =>
+      DocumentLanguageService.ttsLocaleForLanguage(widget.outputLanguage);
+
+  bool _isBulletLine(String line) {
+    if (line.startsWith('\u2022') || line.startsWith('*')) return true;
+    if (line.startsWith('- ') || line == '-') return true;
+    return RegExp(r'^\d+[.)]\s').hasMatch(line);
+  }
+
+  String _bulletBody(String line) {
+    if (line.startsWith('\u2022') || line.startsWith('*')) {
+      return line.substring(1).trim();
+    }
+    if (line.startsWith('- ')) return line.substring(2).trim();
+    if (line.startsWith('-')) return line.substring(1).trim();
+    final match = RegExp(r'^\d+[.)]\s*(.*)').firstMatch(line);
+    if (match != null) return (match.group(1) ?? line).trim();
+    return line;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -56,7 +82,7 @@ class _AiResultPageState extends State<AiResultPage> {
 
   // â”€â”€ Init TTS â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _initTts() async {
-    await _tts.setLanguage('en-US');
+    await _tts.setLanguage(_ttsLocale);
     await _tts.setSpeechRate(0.5);
     await _tts.setPitch(1.0);
     _tts.setCompletionHandler(() {
@@ -89,16 +115,18 @@ class _AiResultPageState extends State<AiResultPage> {
   }
 
   String _currentSpeakText() {
+    final lang = context.read<LanguageProvider>();
     if (widget.mode == 'summary') return _summary ?? '';
     if (_flashcards == null || _flashcards!.isEmpty) return '';
     final card = _flashcards![_currentCard];
     return _flipped[_currentCard]
-        ? 'Answer: ${card.answer}'
-        : 'Question: ${card.question}';
+        ? lang.tNamed('speak_answer', {'text': card.answer})
+        : lang.tNamed('speak_question', {'text': card.question});
   }
 
   // â”€â”€ Fetch AI content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _fetch() async {
+    final lang = context.read<LanguageProvider>();
     setState(() {
       _loading = true;
       _error = null;
@@ -106,12 +134,13 @@ class _AiResultPageState extends State<AiResultPage> {
     await _stopSpeaking();
     try {
       if (widget.documentContent.trim().isEmpty) {
-        throw Exception(
-          'No text to analyze. Add content or wait for the voice note transcript.',
-        );
+        throw Exception(lang.t('no_text_to_analyze'));
       }
       if (widget.mode == 'summary') {
-        final s = await AiService.summarize(widget.documentContent);
+        final s = await AiService.summarize(
+          widget.documentContent,
+          outputLanguage: widget.outputLanguage,
+        );
         if (mounted) {
           setState(() {
             _summary = s;
@@ -127,6 +156,7 @@ class _AiResultPageState extends State<AiResultPage> {
         final cards = await AiService.generateFlashcards(
           widget.documentContent,
           count: widget.cardCount,
+          outputLanguage: widget.outputLanguage,
         );
         if (mounted) {
           setState(() {
@@ -137,7 +167,12 @@ class _AiResultPageState extends State<AiResultPage> {
           // Auto-read first question
           if (_autoReadEnabled && cards.isNotEmpty) {
             await Future.delayed(const Duration(milliseconds: 400));
-            _speak('Question 1: ${cards.first.question}');
+            _speak(
+              lang.tNamed(
+                'speak_question_n',
+                {'n': '1', 'text': cards.first.question},
+              ),
+            );
           }
         }
       }
@@ -152,19 +187,20 @@ class _AiResultPageState extends State<AiResultPage> {
   }
 
   Future<String?> _promptSaveTitle(String dialogTitle) async {
+    final lang = context.read<LanguageProvider>();
     return showDialog<String>(
       context: context,
       builder: (ctx) {
         final ctrl = TextEditingController(text: widget.documentTitle);
         return AlertDialog(
-          backgroundColor: const Color(0xFF161B2E),
+          backgroundColor: VoxColors.surface(ctx),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(24),
           ),
           title: Text(
             dialogTitle,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: VoxColors.onSurface(ctx),
               fontWeight: FontWeight.w900,
             ),
           ),
@@ -172,17 +208,20 @@ class _AiResultPageState extends State<AiResultPage> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Title for Saved Docs:',
-                style: TextStyle(fontSize: 13, color: Colors.white70),
+              Text(
+                lang.t('title_for_saved_docs'),
+                style: TextStyle(
+                  fontSize: 13,
+                  color: VoxColors.textSecondary(ctx),
+                ),
               ),
               const SizedBox(height: 8),
               TextField(
                 controller: ctrl,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  border: OutlineInputBorder(),
-                  hintText: 'e.g. Chapter 1 Biology',
+                style: TextStyle(color: VoxColors.onSurface(ctx)),
+                decoration: InputDecoration(
+                  border: const OutlineInputBorder(),
+                  hintText: lang.t('title_hint_saved_docs'),
                 ),
               ),
             ],
@@ -190,7 +229,7 @@ class _AiResultPageState extends State<AiResultPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, null),
-              child: const Text('Cancel', style: TextStyle(color: Colors.grey)),
+              child: Text(lang.t('cancel'), style: const TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, ctrl.text.trim()),
@@ -198,7 +237,7 @@ class _AiResultPageState extends State<AiResultPage> {
                 backgroundColor: const Color(0xFF4B9EFF),
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Save'),
+              child: Text(lang.t('save_label')),
             ),
           ],
         );
@@ -207,10 +246,11 @@ class _AiResultPageState extends State<AiResultPage> {
   }
 
   Future<void> _saveToSavedDocs() async {
+    final lang = context.read<LanguageProvider>();
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please sign in to save to Saved Docs.')),
+        SnackBar(content: Text(lang.t('sign_in_to_save_docs'))),
       );
       return;
     }
@@ -220,7 +260,7 @@ class _AiResultPageState extends State<AiResultPage> {
     if (!isSummary && (_flashcards == null || _flashcards!.isEmpty)) return;
 
     final title = await _promptSaveTitle(
-      isSummary ? 'Save Summary' : 'Save Q&A',
+      isSummary ? lang.t('save_summary_title') : lang.t('save_qa_title'),
     );
     if (title == null || title.isEmpty) return;
 
@@ -243,7 +283,7 @@ class _AiResultPageState extends State<AiResultPage> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              ok ? 'Saved to Menu → Saved Docs' : 'Could not save document.',
+              ok ? lang.t('saved_to_menu_docs') : lang.t('could_not_save_document'),
             ),
           ),
         );
@@ -251,7 +291,7 @@ class _AiResultPageState extends State<AiResultPage> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error saving: $e')),
+          SnackBar(content: Text('${lang.t('error_saving')} $e')),
         );
       }
     } finally {
@@ -261,6 +301,7 @@ class _AiResultPageState extends State<AiResultPage> {
 
   // â”€â”€ Speaker button â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildSpeakerButton({bool compact = false}) {
+    final lang = context.watch<LanguageProvider>();
     return GestureDetector(
       onTap: _toggleSpeaker,
       child: AnimatedContainer(
@@ -271,8 +312,8 @@ class _AiResultPageState extends State<AiResultPage> {
         ),
         decoration: BoxDecoration(
           color: _isSpeaking
-              ? const Color(0xFF4B9EFF)
-              : Colors.white.withValues(alpha: 0.08),
+              ? VoxColors.primary(context)
+              : VoxColors.cardFill(context),
           borderRadius: BorderRadius.circular(20),
         ),
         child: Row(
@@ -281,16 +322,20 @@ class _AiResultPageState extends State<AiResultPage> {
             Icon(
               _isSpeaking ? Icons.stop_rounded : Icons.volume_up_rounded,
               size: 15,
-              color: _isSpeaking ? Color(0xFF0A0E1A) : Color(0x8A0A0E1A),
+              color: _isSpeaking
+                  ? VoxColors.onPrimary(context)
+                  : VoxColors.onBg(context).withValues(alpha: 0.54),
             ),
             if (!compact) ...[
               const SizedBox(width: 5),
               Text(
-                _isSpeaking ? 'Stop' : 'Read Aloud',
+                _isSpeaking ? lang.t('stop_speaking') : lang.t('read_aloud'),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
-                  color: _isSpeaking ? Color(0xFF0A0E1A) : Color(0x8A0A0E1A),
+                  color: _isSpeaking
+                      ? VoxColors.onPrimary(context)
+                      : VoxColors.onBg(context).withValues(alpha: 0.54),
                 ),
               ),
             ],
@@ -302,6 +347,7 @@ class _AiResultPageState extends State<AiResultPage> {
 
   // â”€â”€ Auto-read toggle â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildAutoReadToggle() {
+    final lang = context.watch<LanguageProvider>();
     return GestureDetector(
       onTap: () {
         setState(() => _autoReadEnabled = !_autoReadEnabled);
@@ -311,11 +357,13 @@ class _AiResultPageState extends State<AiResultPage> {
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: _autoReadEnabled
-              ? const Color(0xFF4B9EFF).withValues(alpha: 0.15)
-              : Colors.white.withValues(alpha: 0.05),
+              ? VoxColors.primary(context).withValues(alpha: 0.15)
+              : VoxColors.cardFill(context),
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: _autoReadEnabled ? const Color(0xFF4B9EFF) : Colors.white10,
+            color: _autoReadEnabled
+                ? VoxColors.primary(context)
+                : VoxColors.border(context),
           ),
         ),
         child: Row(
@@ -328,13 +376,13 @@ class _AiResultPageState extends State<AiResultPage> {
             ),
             const SizedBox(width: 4),
             Text(
-              _autoReadEnabled ? 'Auto ON' : 'Auto OFF',
+              _autoReadEnabled ? lang.t('auto_on') : lang.t('auto_off'),
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
                 color: _autoReadEnabled
-                    ? const Color(0xFF4B9EFF)
-                    : Colors.white38,
+                    ? VoxColors.primary(context)
+                    : VoxColors.textHint(context),
               ),
             ),
           ],
@@ -352,7 +400,7 @@ class _AiResultPageState extends State<AiResultPage> {
       itemBuilder: (_, i) {
         final line = lines[i].trim();
         if (line.isEmpty) return const SizedBox(height: 10);
-        final isBullet = line.startsWith('â€¢');
+        final isBullet = _isBulletLine(line);
         return Padding(
           padding: EdgeInsets.only(bottom: 6, left: isBullet ? 8 : 0),
           child: Row(
@@ -360,7 +408,7 @@ class _AiResultPageState extends State<AiResultPage> {
             children: [
               if (isBullet) ...[
                 const Text(
-                  'â€¢  ',
+                  '\u2022  ',
                   style: TextStyle(
                     fontSize: 15,
                     color: Color(0xFF4B9EFF),
@@ -369,11 +417,11 @@ class _AiResultPageState extends State<AiResultPage> {
                 ),
                 Expanded(
                   child: Text(
-                    line.substring(1).trim(),
-                    style: const TextStyle(
+                    _bulletBody(line),
+                    style: TextStyle(
                       fontSize: 15,
                       height: 1.55,
-                      color: Colors.white,
+                      color: VoxColors.onSurface(context),
                     ),
                   ),
                 ),
@@ -381,10 +429,10 @@ class _AiResultPageState extends State<AiResultPage> {
                 Expanded(
                   child: Text(
                     line,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 15,
                       height: 1.65,
-                      color: Colors.white70,
+                      color: VoxColors.textSecondary(context),
                     ),
                   ),
                 ),
@@ -397,6 +445,7 @@ class _AiResultPageState extends State<AiResultPage> {
 
   // â”€â”€ Flashcard view â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Widget _buildFlashcards() {
+    final lang = context.watch<LanguageProvider>();
     final cards = _flashcards!;
     final card = cards[_currentCard];
     final isFlipped = _flipped[_currentCard];
@@ -409,9 +458,12 @@ class _AiResultPageState extends State<AiResultPage> {
           child: Row(
             children: [
               Text(
-                'Card ${_currentCard + 1} of ${cards.length}',
+                lang.tNamed('card_progress', {
+                  'current': '${_currentCard + 1}',
+                  'total': '${cards.length}',
+                }),
                 style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.5),
+                  color: VoxColors.textMuted(context),
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
                 ),
@@ -420,8 +472,11 @@ class _AiResultPageState extends State<AiResultPage> {
               _buildSpeakerButton(compact: true),
               const SizedBox(width: 8),
               Text(
-                'Tap to flip',
-                style: TextStyle(color: Colors.grey[500], fontSize: 11),
+                lang.t('tap_to_flip'),
+                style: TextStyle(
+                  color: VoxColors.textMuted(context),
+                  fontSize: 11,
+                ),
               ),
             ],
           ),
@@ -434,9 +489,9 @@ class _AiResultPageState extends State<AiResultPage> {
             borderRadius: BorderRadius.circular(4),
             child: LinearProgressIndicator(
               value: (_currentCard + 1) / cards.length,
-              backgroundColor: Colors.white.withValues(alpha: 0.05),
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFF4B9EFF),
+              backgroundColor: VoxColors.surfaceMuted(context),
+              valueColor: AlwaysStoppedAnimation<Color>(
+                VoxColors.primary(context),
               ),
               minHeight: 4,
             ),
@@ -451,8 +506,8 @@ class _AiResultPageState extends State<AiResultPage> {
             onTap: () {
               setState(() => _flipped[_currentCard] = !_flipped[_currentCard]);
               final newText = _flipped[_currentCard]
-                  ? 'Answer: ${card.answer}'
-                  : 'Question: ${card.question}';
+                  ? lang.tNamed('speak_answer', {'text': card.answer})
+                  : lang.tNamed('speak_question', {'text': card.question});
               if (_autoReadEnabled) _speak(newText);
             },
             child: AnimatedSwitcher(
@@ -465,20 +520,20 @@ class _AiResultPageState extends State<AiResultPage> {
                 padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
                   color: isFlipped
-                      ? const Color(0xFF161B2E)
-                      : Colors.white.withValues(alpha: 0.04),
+                      ? VoxColors.surface2(context)
+                      : VoxColors.surface(context),
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: Color(0xFF0A0E1A).withValues(alpha: 0.08),
+                      color: VoxColors.onBg(context).withValues(alpha: 0.08),
                       blurRadius: 20,
                       offset: const Offset(0, 6),
                     ),
                   ],
                   border: Border.all(
                     color: isFlipped
-                        ? const Color(0xFF4B9EFF).withValues(alpha: 0.4)
-                        : Colors.white.withValues(alpha: 0.08),
+                        ? VoxColors.primary(context).withValues(alpha: 0.4)
+                        : VoxColors.border(context),
                   ),
                 ),
                 child: Column(
@@ -491,19 +546,21 @@ class _AiResultPageState extends State<AiResultPage> {
                       ),
                       decoration: BoxDecoration(
                         color: isFlipped
-                            ? const Color(0xFF4B9EFF).withValues(alpha: 0.15)
-                            : Colors.white.withValues(alpha: 0.05),
+                            ? VoxColors.primary(context).withValues(alpha: 0.15)
+                            : VoxColors.surfaceMuted(context),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        isFlipped ? 'ANSWER' : 'QUESTION',
+                        isFlipped
+                            ? lang.t('flashcard_answer')
+                            : lang.t('flashcard_question'),
                         style: TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.w800,
                           letterSpacing: 1.5,
                           color: isFlipped
-                              ? const Color(0xFF4B9EFF)
-                              : Colors.grey[500],
+                              ? VoxColors.primary(context)
+                              : VoxColors.textMuted(context),
                         ),
                       ),
                     ),
@@ -515,20 +572,20 @@ class _AiResultPageState extends State<AiResultPage> {
                         fontSize: 17,
                         height: 1.6,
                         fontWeight: FontWeight.w700,
-                        color: Colors.white,
+                        color: VoxColors.onSurface(context),
                       ),
                     ),
                     const SizedBox(height: 16),
                     Icon(
                       Icons.touch_app_outlined,
                       size: 14,
-                      color: isFlipped ? Colors.grey[600] : Colors.grey[400],
+                      color: VoxColors.textSecondary(context),
                     ),
                     Text(
-                      'Tap to flip',
+                      lang.t('tap_to_flip'),
                       style: TextStyle(
                         fontSize: 10,
-                        color: isFlipped ? Colors.grey[600] : Colors.grey[400],
+                        color: VoxColors.textSecondary(context),
                       ),
                     ),
                   ],
@@ -555,27 +612,30 @@ class _AiResultPageState extends State<AiResultPage> {
                           if (_autoReadEnabled) {
                             Future.delayed(const Duration(milliseconds: 200), () {
                               _speak(
-                                'Question ${_currentCard + 1}: ${_flashcards![_currentCard].question}',
+                                lang.tNamed('speak_question_n', {
+                                  'n': '${_currentCard + 1}',
+                                  'text': _flashcards![_currentCard].question,
+                                }),
                               );
                             });
                           }
                         }
                       : null,
                   style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
+                    foregroundColor: VoxColors.onBg(context),
                     side: BorderSide(
                       color: _currentCard > 0
-                          ? Colors.white.withValues(alpha: 0.2)
-                          : Colors.white.withValues(alpha: 0.05),
+                          ? VoxColors.borderStrong(context)
+                          : VoxColors.border(context),
                     ),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
                   ),
-                  child: const Text(
-                    'â† Previous',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  child: Text(
+                    lang.t('previous_card'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
@@ -592,24 +652,28 @@ class _AiResultPageState extends State<AiResultPage> {
                           if (_autoReadEnabled) {
                             Future.delayed(const Duration(milliseconds: 200), () {
                               _speak(
-                                'Question ${_currentCard + 1}: ${_flashcards![_currentCard].question}',
+                                lang.tNamed('speak_question_n', {
+                                  'n': '${_currentCard + 1}',
+                                  'text': _flashcards![_currentCard].question,
+                                }),
                               );
                             });
                           }
                         }
                       : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF4B9EFF),
-                    foregroundColor: Colors.white,
+                    backgroundColor: VoxColors.primary(context),
+                    foregroundColor: VoxColors.onPrimary(context),
+                    disabledForegroundColor: VoxColors.textHint(context),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(14),
                     ),
-                    disabledBackgroundColor: Colors.white.withValues(alpha: 0.05),
+                    disabledBackgroundColor: VoxColors.surfaceMuted(context),
                   ),
-                  child: const Text(
-                    'Next â†’',
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                  child: Text(
+                    lang.t('next_card'),
+                    style: const TextStyle(fontWeight: FontWeight.w700),
                   ),
                 ),
               ),
@@ -621,6 +685,7 @@ class _AiResultPageState extends State<AiResultPage> {
   }
 
   Widget _buildTopBarActions({required bool isSummary}) {
+    final lang = context.watch<LanguageProvider>();
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: Row(
@@ -640,18 +705,18 @@ class _AiResultPageState extends State<AiResultPage> {
                   color: const Color(0xFF4B9EFF).withValues(alpha: 0.3),
                 ),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.bookmark_add_outlined,
                     size: 16,
                     color: Color(0xFF4B9EFF),
                   ),
-                  SizedBox(width: 4),
+                  const SizedBox(width: 4),
                   Text(
-                    'Save',
-                    style: TextStyle(
+                    lang.t('save_label'),
+                    style: const TextStyle(
                       color: Color(0xFF4B9EFF),
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
@@ -689,25 +754,23 @@ class _AiResultPageState extends State<AiResultPage> {
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.06),
+                color: VoxColors.cardFill(context),
                 borderRadius: BorderRadius.circular(10),
-                border: Border.all(
-                  color: Colors.white.withValues(alpha: 0.08),
-                ),
+                border: Border.all(color: VoxColors.border(context)),
               ),
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(
+                  const Icon(
                     Icons.picture_as_pdf_outlined,
                     size: 16,
                     color: Colors.blue,
                   ),
-                  SizedBox(width: 4),
+                  const SizedBox(width: 4),
                   Text(
                     'PDF',
                     style: TextStyle(
-                      color: Colors.white,
+                      color: VoxColors.onBg(context),
                       fontSize: 11,
                       fontWeight: FontWeight.bold,
                     ),
@@ -734,10 +797,10 @@ class _AiResultPageState extends State<AiResultPage> {
                   _stopSpeaking();
                   Navigator.pop(context);
                 },
-                child: const Icon(
+                child: Icon(
                   Icons.keyboard_arrow_down,
                   size: 32,
-                  color: Colors.white,
+                  color: VoxColors.onBg(context),
                 ),
               ),
               const SizedBox(width: 12),
@@ -749,10 +812,10 @@ class _AiResultPageState extends State<AiResultPage> {
                       title,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 17,
-                        color: Colors.white,
+                        color: VoxColors.onBg(context),
                       ),
                     ),
                     Text(
@@ -761,7 +824,7 @@ class _AiResultPageState extends State<AiResultPage> {
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontSize: 11,
-                        color: Colors.white.withValues(alpha: 0.5),
+                        color: VoxColors.textMuted(context),
                       ),
                     ),
                   ],
@@ -773,13 +836,13 @@ class _AiResultPageState extends State<AiResultPage> {
                   child: Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.06),
+                      color: VoxColors.cardFill(context),
                       borderRadius: BorderRadius.circular(10),
                     ),
-                    child: const Icon(
+                    child: Icon(
                       Icons.refresh,
                       size: 20,
-                      color: Colors.white70,
+                      color: VoxColors.textSecondary(context),
                     ),
                   ),
                 ),
@@ -797,17 +860,19 @@ class _AiResultPageState extends State<AiResultPage> {
   // â”€â”€ Build â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   @override
   Widget build(BuildContext context) {
+    final lang = context.watch<LanguageProvider>();
     final isSummary = widget.mode == 'summary';
-    final title = isSummary ? 'Summary' : 'Q&A Generator';
+    final title =
+        isSummary ? lang.t('ai_summary') : lang.t('qa_generator');
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: VoxColors.bg(context),
       body: SafeArea(
         child: Column(
           children: [
             _buildTopBar(isSummary: isSummary, title: title),
 
-            const Divider(height: 1, color: Colors.white10),
+            Divider(height: 1, color: VoxColors.border(context)),
 
             // Body
             Expanded(
@@ -822,9 +887,13 @@ class _AiResultPageState extends State<AiResultPage> {
                           const SizedBox(height: 16),
                           Text(
                             isSummary
-                                ? 'Generating summary...'
-                                : 'Creating ${widget.cardCount} questions...',
-                            style: const TextStyle(color: Colors.white54),
+                                ? lang.t('generating_summary')
+                                : lang.tNamed('creating_questions', {
+                                    'count': '${widget.cardCount}',
+                                  }),
+                            style: TextStyle(
+                              color: VoxColors.textSecondary(context),
+                            ),
                           ),
                         ],
                       ),
@@ -836,25 +905,26 @@ class _AiResultPageState extends State<AiResultPage> {
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(
+                            Icon(
                               Icons.error_outline,
                               size: 48,
-                              color: Color(0x610A0E1A),
+                              color: VoxColors.textHint(context),
                             ),
                             const SizedBox(height: 16),
-                            const Text(
-                              'Something went wrong',
+                            Text(
+                              lang.t('something_went_wrong'),
                               style: TextStyle(
                                 fontWeight: FontWeight.bold,
                                 fontSize: 16,
+                                color: VoxColors.onBg(context),
                               ),
                             ),
                             const SizedBox(height: 8),
                             Text(
                               _error!,
                               textAlign: TextAlign.center,
-                              style: const TextStyle(
-                                color: Color(0x8A0A0E1A),
+                              style: TextStyle(
+                                color: VoxColors.textSecondary(context),
                                 fontSize: 13,
                               ),
                             ),
@@ -862,8 +932,8 @@ class _AiResultPageState extends State<AiResultPage> {
                             ElevatedButton(
                               onPressed: _fetch,
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Color(0xFF0A0E1A),
-                                foregroundColor: const Color(0xFFF0F4FF),
+                                backgroundColor: VoxColors.primary(context),
+                                foregroundColor: VoxColors.onPrimary(context),
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(14),
                                 ),
@@ -872,7 +942,7 @@ class _AiResultPageState extends State<AiResultPage> {
                                   vertical: 14,
                                 ),
                               ),
-                              child: const Text('Try Again'),
+                              child: Text(lang.t('try_again')),
                             ),
                           ],
                         ),

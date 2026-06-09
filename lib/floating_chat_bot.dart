@@ -6,6 +6,8 @@ import 'tts_service.dart';
 import 'language_provider.dart';
 import 'services/mic_coordinator.dart';
 import 'services/app_speech_service.dart';
+import 'services/document_language_service.dart';
+import 'theme_provider.dart';
 
 class FloatingBotWrapper extends StatefulWidget {
   final Widget child;
@@ -228,8 +230,10 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
         MicCoordinator.instance.registerReleaseHandler(_releaseChatbotMic);
         MicCoordinator.instance.setChatbotListening(true);
         setState(() => _isListening = true);
+        final sttLocale = context.read<LanguageProvider>().sttLocale;
         await AppSpeechService.instance.listen(
           owner: _owner,
+          localeId: sttLocale,
           listenOptions: stt.SpeechListenOptions(
             partialResults: true,
             listenMode: stt.ListenMode.dictation,
@@ -264,6 +268,12 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
     final text = _controller.text.trim();
     if (text.isEmpty) return;
 
+    final appLang = context.read<LanguageProvider>().selectedLanguage;
+    final responseLang = DocumentLanguageService.detectSpokenLanguageName(
+      text,
+      fallback: appLang,
+    );
+
     if (_isListening) {
       await _releaseChatbotMic();
     }
@@ -275,7 +285,10 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
     _controller.clear();
 
     try {
-      final response = await AiService.askAssistant(text);
+      final response = await AiService.askAssistant(
+        text,
+        fallbackLanguage: appLang,
+      );
       if (mounted) {
         setState(() {
           _messages.add({'role': 'assistant', 'content': response});
@@ -283,11 +296,14 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
         });
         
         if (_voiceOutputEnabled) {
-          final locale = context.read<LanguageProvider>().currentLocale;
           final tts = context.read<TtsService>();
+          final speakLocale = DocumentLanguageService.detectTtsLocale(
+            response,
+            fallbackLanguage: responseLang,
+          );
           Future.delayed(const Duration(milliseconds: 300), () {
             if (mounted) {
-              tts.speakBrief(response, locale);
+              tts.speakBrief(response, speakLocale);
             }
           });
         }
@@ -320,9 +336,9 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
       child: Container(
         height: MediaQuery.of(context).size.height * 0.7,
         padding: const EdgeInsets.all(16),
-        decoration: const BoxDecoration(
-          color: Color(0xFF0A0E1A),
-          borderRadius: BorderRadius.only(
+        decoration: BoxDecoration(
+          color: VoxColors.bg(context),
+          borderRadius: const BorderRadius.only(
             topLeft: Radius.circular(24),
             topRight: Radius.circular(24),
           ),
@@ -334,10 +350,10 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
               children: [
                 Text(
                   lang.t('vox_assistant'),
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontSize: 20,
                     fontWeight: FontWeight.w900,
-                    color: Colors.white,
+                    color: VoxColors.onBg(context),
                   ),
                 ),
                 Row(
@@ -346,7 +362,9 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                     IconButton(
                       icon: Icon(
                         _voiceOutputEnabled ? Icons.volume_up_rounded : Icons.volume_off_rounded,
-                        color: _voiceOutputEnabled ? const Color(0xFF4B9EFF) : Colors.white54,
+                        color: _voiceOutputEnabled
+                            ? VoxColors.primary(context)
+                            : VoxColors.textSecondary(context),
                       ),
                       onPressed: () {
                         setState(() {
@@ -371,7 +389,10 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                       },
                     ),
                     IconButton(
-                      icon: const Icon(Icons.close, color: Colors.white70),
+                      icon: Icon(
+                        Icons.close,
+                        color: VoxColors.textSecondary(context),
+                      ),
                       onPressed: () {
                         context.read<TtsService>().stop();
                         Navigator.pop(context);
@@ -381,7 +402,7 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                 ),
               ],
             ),
-            Divider(color: Colors.white.withValues(alpha: 0.1)),
+            Divider(color: VoxColors.border(context)),
             Expanded(
               child: ListView.builder(
                 itemCount: _messages.length,
@@ -402,20 +423,20 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
                         color: isUser
-                            ? const Color(0xFF4B9EFF).withValues(alpha: 0.1)
-                            : Colors.white.withValues(alpha: 0.04),
+                            ? VoxColors.primary(context).withValues(alpha: 0.1)
+                            : VoxColors.cardFill(context),
                         borderRadius: BorderRadius.circular(16),
                         border: Border.all(
                           color: isUser
-                              ? const Color(0xFF4B9EFF).withValues(alpha: 0.3)
-                              : Colors.white.withValues(alpha: 0.08),
+                              ? VoxColors.primary(context).withValues(alpha: 0.3)
+                              : VoxColors.border(context),
                         ),
                       ),
                       child: Text(
                         text,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 15,
-                          color: Colors.white,
+                          color: VoxColors.onBg(context),
                           height: 1.4,
                         ),
                       ),
@@ -450,13 +471,13 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                       child: CircleAvatar(
                         backgroundColor: _isListening
                             ? Colors.redAccent
-                            : Colors.white.withValues(alpha: 0.05),
+                            : VoxColors.cardFill(context),
                         child: IconButton(
                           icon: Icon(
                             _isListening ? Icons.mic : Icons.mic_none,
                             color: _isListening
                                 ? Colors.white
-                                : const Color(0xFF4B9EFF),
+                                : VoxColors.primary(context),
                           ),
                           onPressed: _listen,
                         ),
@@ -468,14 +489,12 @@ class _ChatBotBottomSheetState extends State<ChatBotBottomSheet> with SingleTick
                 Expanded(
                   child: TextField(
                     controller: _controller,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: VoxColors.onBg(context)),
                     decoration: InputDecoration(
                       hintText: lang.t('ask_something'),
-                      hintStyle: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.3),
-                      ),
+                      hintStyle: TextStyle(color: VoxColors.textHint(context)),
                       filled: true,
-                      fillColor: Colors.white.withValues(alpha: 0.05),
+                      fillColor: VoxColors.cardFill(context),
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(25),
                         borderSide: BorderSide.none,

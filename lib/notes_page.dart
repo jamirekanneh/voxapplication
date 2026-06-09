@@ -24,6 +24,7 @@ import 'services/app_speech_service.dart';
 import 'analytics_service.dart';
 import 'services/saved_docs_service.dart';
 import 'document_chat_buddy_sheet.dart';
+import 'widgets/list_selection_bar.dart';
 
 const int _kMaxTitleLength = 100;
 const Duration _kMaxRecordingDuration = Duration(hours: 1);
@@ -1344,6 +1345,17 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     });
   }
 
+  void _toggleSelectAllNotes() {
+    setState(() {
+      if (_selectedNoteIds.length == _visibleNoteIds.length &&
+          _visibleNoteIds.isNotEmpty) {
+        _selectedNoteIds.clear();
+      } else {
+        _selectedNoteIds.addAll(_visibleNoteIds);
+      }
+    });
+  }
+
   // ————————————————————————————————————————————————
   //  DELETE SELECTED NOTES
   // ————————————————————————————————————————————————
@@ -1448,9 +1460,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                lang.tNamed('notes_deleted_count', {'count': '$count'}),
+                lang.tNamed('notes_moved_recycle_count', {'count': '$count'}),
               ),
-              backgroundColor: const Color(0xFF333333),
+              backgroundColor: VoxColors.surface(context),
+              behavior: SnackBarBehavior.floating,
             ),
           );
         }
@@ -1948,6 +1961,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                             documentContent: sheetContent,
                                             mode: 'summary',
                                             source: 'Notes',
+                                            outputLanguage: lang.selectedLanguage,
                                           ),
                                         ),
                                       );
@@ -1974,6 +1988,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                             mode: 'flashcards',
                                             cardCount: count,
                                             source: 'Notes',
+                                            outputLanguage: lang.selectedLanguage,
                                           ),
                                         ),
                                       );
@@ -3089,6 +3104,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                           _transcriptController.text.trim(),
                                       mode: 'summary',
                                       source: 'Notes',
+                                      outputLanguage: lang.selectedLanguage,
                                     ),
                                   ),
                                 );
@@ -3113,6 +3129,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                       mode: 'flashcards',
                                       cardCount: count,
                                       source: 'Notes',
+                                      outputLanguage: lang.selectedLanguage,
                                     ),
                                   ),
                                 );
@@ -3155,27 +3172,14 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
       backgroundColor: VoxColors.bg(context),
       appBar: AppBar(
         title: _isNoteSelectionMode
-            ? Row(
-                children: [
-                  IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      color: VoxColors.onPrimary(context),
-                      size: 22,
-                    ),
-                    onPressed: _exitNoteSelectionMode,
-                  ),
-                  Text(
-                    lang.tNamed('selected_count', {
-                      'count': '${_selectedNoteIds.length}',
-                    }),
-                    style: TextStyle(
-                      color: VoxColors.onPrimary(context),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 16,
-                    ),
-                  ),
-                ],
+            ? ListSelectionBar(
+                selectedCount: _selectedNoteIds.length,
+                visibleCount: _visibleNoteIds.length,
+                onCancel: _exitNoteSelectionMode,
+                onToggleSelectAll: _toggleSelectAllNotes,
+                onDelete: _deleteSelectedNotes,
+                deleteLabel: lang.t('delete'),
+                foregroundOnPrimary: true,
               )
             : Text(
                 lang.t('voice_notes_title'),
@@ -3192,67 +3196,7 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
         elevation: 0,
         automaticallyImplyLeading: false,
         actions: _isNoteSelectionMode
-            ? [
-                TextButton.icon(
-                  onPressed: () {
-                    setState(() {
-                      if (_selectedNoteIds.length == _visibleNoteIds.length &&
-                          _visibleNoteIds.isNotEmpty) {
-                        _selectedNoteIds.clear();
-                      } else {
-                        _selectedNoteIds.addAll(_visibleNoteIds);
-                      }
-                    });
-                  },
-                  icon: Icon(
-                    _selectedNoteIds.length == _visibleNoteIds.length &&
-                            _visibleNoteIds.isNotEmpty
-                        ? Icons.deselect
-                        : Icons.select_all,
-                    color: VoxColors.onPrimary(context),
-                    size: 18,
-                  ),
-                  label: Text(
-                    _selectedNoteIds.length == _visibleNoteIds.length &&
-                            _visibleNoteIds.isNotEmpty
-                        ? lang.t('deselect')
-                        : lang.t('select_all'),
-                    style: TextStyle(
-                      color: VoxColors.onPrimary(context),
-                      fontWeight: FontWeight.w700,
-                      fontSize: 12,
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: ElevatedButton.icon(
-                    onPressed: _selectedNoteIds.isNotEmpty
-                        ? _deleteSelectedNotes
-                        : null,
-                    icon: Icon(Icons.delete_outline, size: 18),
-                    label: Text(
-                      lang.t('delete'),
-                      style: const TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 12,
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: VoxColors.danger,
-                      foregroundColor: Colors.white,
-                      disabledBackgroundColor: VoxColors.textHint(context),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 12,
-                        vertical: 8,
-                      ),
-                    ),
-                  ),
-                ),
-              ]
+            ? null
             : [
                 Padding(
                   padding: const EdgeInsets.only(right: 16),

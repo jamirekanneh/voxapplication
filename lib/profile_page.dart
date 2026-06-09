@@ -5,14 +5,24 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'language_provider.dart';
 import 'theme_provider.dart';
+import 'temp_library_provider.dart';
+import 'temp_notes_provider.dart';
+import 'navigation_keys.dart';
 import 'services/app_session.dart';
 import 'services/auth_session.dart';
 import 'services/account_credentials_service.dart';
+import 'services/email_change_service.dart';
+import 'services/guest_upgrade_service.dart';
+import 'services/mic_coordinator.dart';
+
+const _kGoogleServerClientId =
+    '1033671503358-c8dhmiu6henkq7ig0cg8ata4mq24a9af.apps.googleusercontent.com';
 
 // ——————————————————————————————————————————————————
 //  ProfilePage
@@ -53,12 +63,29 @@ class _ProfilePageState extends State<ProfilePage>
   // Anonymous flow stages: 'join' | 'returning' | 'verify'
   String _anonStage = 'join';
   bool _anonLoading = false;
+  bool _googleLoading = false;
+  bool? _syncExistingCloudData;
   int _resendCooldownSeconds = 0;
 
   bool _credentialsBusy = false;
 
+  // Snapshots taken when entering edit mode (for cancel).
+  String? _editSnapshotName;
+  String? _editSnapshotEmail;
+  String? _editSnapshotImage;
+
   // Spinning ring (kept for visual polish on loading states)
   late AnimationController _rotateController;
+
+  String get _displayName {
+    final name = _nameController.text.trim();
+    return name.isNotEmpty ? name : 'Not set';
+  }
+
+  String get _displayEmail {
+    final email = _emailController.text.trim();
+    return email.isNotEmpty ? email : 'Not set';
+  }
 
   @override
   void initState() {
@@ -71,6 +98,9 @@ class _ProfilePageState extends State<ProfilePage>
       vsync: this,
       duration: const Duration(seconds: 3),
     )..repeat();
+    if (widget.isAnonymous) {
+      GoogleSignIn.instance.initialize(serverClientId: _kGoogleServerClientId);
+    }
     _loadProfileFromFirestore();
   }
 
@@ -158,7 +188,12 @@ class _ProfilePageState extends State<ProfilePage>
 
       widget.onProfileUpdated?.call();
       if (mounted) {
-        setState(() => _isEditing = false);
+        setState(() {
+          _isEditing = false;
+          _editSnapshotName = null;
+          _editSnapshotEmail = null;
+          _editSnapshotImage = null;
+        });
       }
       _showSnack("Profile updated");
     } catch (e) {
@@ -192,33 +227,205 @@ class _ProfilePageState extends State<ProfilePage>
     }
 
     setState(() => _anonLoading = true);
-
-    final snapshot = await FirebaseFirestore.instance
-        .collection('users')
-        .where('email', isEqualTo: email)
-        .limit(1)
-        .get();
-
+    final exists = await GuestUpgradeService.emailExistsInSystem(email);
     if (!mounted) return;
     setState(() => _anonLoading = false);
 
-    if (snapshot.docs.isNotEmpty) {
-      // Email already registered — show password sign-in
-      setState(() => _anonStage = 'returning');
-    } else {
-      await _createNewAccount(name, email, password);
+    if (exists) {
+      final sync = await _promptGuestDataSync(email: email);
+      if (sync == null || !mounted) return;
+      if (!sync) {
+        final lang = context.read<LanguageProvider>();
+        final confirmed = await _confirmDialog(
+          title: lang.t('guest_save_fresh_confirm_title'),
+          body: lang.t('guest_save_fresh_confirm_body'),
+          confirmLabel: lang.t('profile_email_fresh_confirm_button'),
+          destructive: true,
+        );
+        if (!confirmed || !mounted) return;
+      }
+      setState(() {
+        _syncExistingCloudData = sync;
+        _anonStage = 'returning';
+      });
+      return;
     }
+
+    await _createNewAccount(name, email, password);
+  }
+
+  Future<bool?> _promptGuestDataSync({required String email}) async {
+    final lang = context.read<LanguageProvider>();
+    return showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        Widget choiceCard({
+          required String title,
+          required String body,
+          required IconData icon,
+          required bool keep,
+        }) {
+          return Material(
+            color: VoxColors.cardFill(ctx),
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
+              onTap: () => Navigator.pop(ctx, keep),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: keep
+                        ? VoxColors.primary(ctx).withValues(alpha: 0.4)
+                        : VoxColors.danger.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          icon,
+                          size: 20,
+                          color:
+                              keep ? VoxColors.primary(ctx) : VoxColors.danger,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              color: VoxColors.onSurface(ctx),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      body,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.45,
+                        color: VoxColors.textSecondary(ctx),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return AlertDialog(
+          title: Text(lang.t('guest_save_sync_title')),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  lang.tNamed('guest_save_sync_intro', {'email': email}),
+                  style: TextStyle(
+                    height: 1.45,
+                    color: VoxColors.textSecondary(ctx),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                choiceCard(
+                  title: lang.t('guest_save_sync_keep_title'),
+                  body: lang.t('guest_save_sync_keep_body'),
+                  icon: Icons.cloud_done_outlined,
+                  keep: true,
+                ),
+                const SizedBox(height: 10),
+                choiceCard(
+                  title: lang.t('guest_save_sync_fresh_title'),
+                  body: lang.t('guest_save_sync_fresh_body'),
+                  icon: Icons.delete_forever_outlined,
+                  keep: false,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(lang.t('cancel')),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _goHomeAfterUpgrade(String message) async {
+    if (!mounted) return;
+    _showSnack(message);
+    await Future<void>.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+    MicCoordinator.instance.exitAuthFlow();
+    globalNavigatorKey.currentState
+        ?.pushNamedAndRemoveUntil('/home', (_) => false);
+  }
+
+  Future<void> _completeGuestUpgrade(
+    User user, {
+    required bool syncCloudData,
+    required String name,
+    String? email,
+    required String successMessage,
+  }) async {
+    await GuestUpgradeService.applyCloudDataChoice(
+      user: user,
+      syncCloudData: syncCloudData,
+      email: email ?? _emailController.text.trim(),
+    );
+
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      'username': name.isNotEmpty ? name : (user.displayName ?? ''),
+      'email': user.email ?? email ?? '',
+      'photoBase64': _base64Image ?? '',
+      'photoUrl': user.photoURL ?? '',
+      'userId': user.uid,
+      'createdAt': FieldValue.serverTimestamp(),
+      'lastLoginAt': FieldValue.serverTimestamp(),
+    }, SetOptions(merge: true));
+
+    await AuthSession.markSignedIn(user);
+    final prefs = await SharedPreferences.getInstance();
+    final savedName = name.isNotEmpty ? name : (user.displayName ?? '');
+    if (savedName.isNotEmpty) {
+      await prefs.setString('userName', savedName);
+    }
+
+    if (!mounted) return;
+    await GuestUpgradeService.uploadGuestSessionData(
+      uid: user.uid,
+      notes: context.read<TempNotesProvider>(),
+      library: context.read<TempLibraryProvider>(),
+    );
+
+    await AppSession.markSetupComplete(userId: user.uid);
+    widget.onProfileUpdated?.call();
+    await _goHomeAfterUpgrade(successMessage);
   }
 
   // —— Anonymous: create a brand new email/password account ——
   Future<void> _createNewAccount(String name, String email, String password) async {
+    final lang = context.read<LanguageProvider>();
     setState(() => _anonLoading = true);
     try {
       User? user = FirebaseAuth.instance.currentUser;
       UserCredential cred;
 
       if (user != null && user.isAnonymous) {
-        // Upgrade anonymous account to email/password
         final credential = EmailAuthProvider.credential(
           email: email,
           password: password,
@@ -231,30 +438,33 @@ class _ProfilePageState extends State<ProfilePage>
         );
       }
 
-      final newUser = cred.user!;
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(newUser.uid)
-          .set({
-        'username': name,
-        'email': email,
-        'photoBase64': _base64Image ?? '',
-        'createdAt': FieldValue.serverTimestamp(),
-        'userId': newUser.uid,
-      });
-
-      final prefs = await SharedPreferences.getInstance();
-      await AuthSession.markSignedIn(newUser);
-      await prefs.setString('userName', name);
-      await AppSession.markSetupComplete(userId: newUser.uid);
-
-      widget.onProfileUpdated?.call();
-      if (mounted) {
-        _showSnack("Account created! Your data is now being saved.");
-        Navigator.pop(context);
-      }
+      await _completeGuestUpgrade(
+        cred.user!,
+        syncCloudData: true,
+        name: name,
+        email: email,
+        successMessage: lang.t('guest_save_success_new'),
+      );
     } on FirebaseAuthException catch (e) {
-      _showSnack(_authErrorMessage(e));
+      if (e.code == 'email-already-in-use') {
+        final sync = await _promptGuestDataSync(email: email);
+        if (sync == null || !mounted) return;
+        if (!sync) {
+          final confirmed = await _confirmDialog(
+            title: lang.t('guest_save_fresh_confirm_title'),
+            body: lang.t('guest_save_fresh_confirm_body'),
+            confirmLabel: lang.t('profile_email_fresh_confirm_button'),
+            destructive: true,
+          );
+          if (!confirmed || !mounted) return;
+        }
+        setState(() {
+          _syncExistingCloudData = sync;
+          _anonStage = 'returning';
+        });
+      } else {
+        _showSnack(_authErrorMessage(e));
+      }
     } catch (e) {
       _showSnack("Error: $e");
     } finally {
@@ -265,6 +475,8 @@ class _ProfilePageState extends State<ProfilePage>
   // —— Returning user: sign in with password ─────────
   Future<void> _signInReturningUser(String password) async {
     if (_anonLoading) return;
+    final lang = context.read<LanguageProvider>();
+    final sync = _syncExistingCloudData ?? true;
     setState(() => _anonLoading = true);
     final email = _emailController.text.trim();
     try {
@@ -273,24 +485,17 @@ class _ProfilePageState extends State<ProfilePage>
         password: password,
       );
       final user = cred.user!;
+      final name = _nameController.text.trim();
 
-      final prefs = await SharedPreferences.getInstance();
-      await AuthSession.markSignedIn(user);
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      if (doc.exists) {
-        final name = (doc.data()?['username'] as String?) ?? '';
-        await prefs.setString('userName', name);
-      }
-      await AppSession.markSetupComplete(userId: user.uid);
-
-      widget.onProfileUpdated?.call();
-      if (mounted) {
-        _showSnack("Welcome back!");
-        Navigator.pop(context);
-      }
+      await _completeGuestUpgrade(
+        user,
+        syncCloudData: sync,
+        name: name,
+        email: email,
+        successMessage: sync
+            ? lang.t('guest_save_success_sync')
+            : lang.t('guest_save_success_fresh'),
+      );
     } on FirebaseAuthException catch (e) {
       _showSnack(_authErrorMessage(e));
     } catch (e) {
@@ -298,6 +503,130 @@ class _ProfilePageState extends State<ProfilePage>
     } finally {
       if (mounted) setState(() => _anonLoading = false);
     }
+  }
+
+  Future<void> _handleGuestGoogleSignIn() async {
+    if (_googleLoading || _anonLoading) return;
+    final lang = context.read<LanguageProvider>();
+    setState(() => _googleLoading = true);
+
+    AuthCredential? credential;
+    final existingUser = FirebaseAuth.instance.currentUser;
+
+    try {
+      if (kIsWeb) {
+        final googleProvider = GoogleAuthProvider()
+          ..setCustomParameters({'prompt': 'select_account'});
+        if (existingUser != null && existingUser.isAnonymous) {
+          try {
+            final result = await existingUser.linkWithPopup(googleProvider);
+            await _finishGuestGoogleSignIn(result.user, lang);
+            return;
+          } on FirebaseAuthException catch (linkError) {
+            if (linkError.code == 'credential-already-in-use' ||
+                linkError.code == 'account-exists-with-different-credential') {
+              credential = linkError.credential;
+            } else {
+              rethrow;
+            }
+          }
+        } else {
+          final result =
+              await FirebaseAuth.instance.signInWithPopup(googleProvider);
+          await _finishGuestGoogleSignIn(result.user, lang);
+          return;
+        }
+      } else {
+        final googleUser = await GoogleSignIn.instance.authenticate();
+        final idToken = googleUser.authentication.idToken;
+        if (idToken == null || idToken.isEmpty) {
+          throw const GoogleSignInException(
+            code: GoogleSignInExceptionCode.unknownError,
+            description: 'Google did not return a sign-in token.',
+          );
+        }
+        credential = GoogleAuthProvider.credential(idToken: idToken);
+
+        if (existingUser != null && existingUser.isAnonymous) {
+          try {
+            final result = await existingUser.linkWithCredential(credential);
+            await _finishGuestGoogleSignIn(result.user, lang);
+            return;
+          } on FirebaseAuthException catch (linkError) {
+            if (linkError.code == 'credential-already-in-use' ||
+                linkError.code == 'account-exists-with-different-credential') {
+              // Fall through to signInWithCredential.
+            } else {
+              rethrow;
+            }
+          }
+        }
+      }
+
+      if (credential != null) {
+        final result =
+            await FirebaseAuth.instance.signInWithCredential(credential);
+        await _finishGuestGoogleSignIn(result.user, lang);
+      }
+    } on GoogleSignInException catch (e) {
+      if (e.code != GoogleSignInExceptionCode.canceled) {
+        _showSnack('Google sign-in cancelled or failed.');
+      }
+    } on FirebaseAuthException catch (e) {
+      _showSnack(_authErrorMessage(e));
+    } catch (e) {
+      _showSnack('Google sign-in error: $e');
+    } finally {
+      if (mounted) setState(() => _googleLoading = false);
+    }
+  }
+
+  Future<void> _finishGuestGoogleSignIn(
+    User? user,
+    LanguageProvider lang,
+  ) async {
+    if (user == null || !mounted) return;
+
+    final hadProfile = await GuestUpgradeService.userHasCloudProfile(user.uid);
+    var syncCloud = true;
+
+    if (hadProfile) {
+      if (_syncExistingCloudData != null) {
+        syncCloud = _syncExistingCloudData!;
+      } else {
+        final email = user.email?.trim() ?? _emailController.text.trim();
+        final choice = await _promptGuestDataSync(
+          email: email.isNotEmpty ? email : 'your Google account',
+        );
+        if (choice == null || !mounted) return;
+        syncCloud = choice;
+        if (!syncCloud) {
+          final confirmed = await _confirmDialog(
+            title: lang.t('guest_save_fresh_confirm_title'),
+            body: lang.t('guest_save_fresh_confirm_body'),
+            confirmLabel: lang.t('profile_email_fresh_confirm_button'),
+            destructive: true,
+          );
+          if (!confirmed || !mounted) return;
+        }
+      }
+    }
+
+    final name = _nameController.text.trim().isNotEmpty
+        ? _nameController.text.trim()
+        : (user.displayName ?? '');
+
+    await _completeGuestUpgrade(
+      user,
+      syncCloudData: syncCloud,
+      name: name,
+      email: user.email,
+      successMessage: hadProfile
+          ? (syncCloud
+              ? lang.t('guest_save_success_sync')
+              : lang.t('guest_save_success_fresh'))
+          : lang.t('guest_save_success_new'),
+    );
   }
 
   Future<void> _sendPasswordReset() async {
@@ -319,22 +648,149 @@ class _ProfilePageState extends State<ProfilePage>
   String _authErrorMessage(FirebaseAuthException e) =>
       AccountCredentialsService.authErrorMessage(e);
 
+  Widget _flowBanner(
+    BuildContext ctx, {
+    required String message,
+    IconData icon = Icons.info_outline_rounded,
+    bool warning = false,
+    bool danger = false,
+  }) {
+    final Color bg;
+    final Color border;
+    final Color iconColor;
+    if (danger) {
+      bg = VoxColors.danger.withValues(alpha: 0.1);
+      border = VoxColors.danger.withValues(alpha: 0.35);
+      iconColor = VoxColors.danger;
+    } else if (warning) {
+      bg = Colors.amber.withValues(alpha: 0.12);
+      border = Colors.amber.withValues(alpha: 0.4);
+      iconColor = Colors.amber.shade800;
+    } else {
+      bg = VoxColors.primary(ctx).withValues(alpha: 0.08);
+      border = VoxColors.primary(ctx).withValues(alpha: 0.25);
+      iconColor = VoxColors.primary(ctx);
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: border),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: iconColor, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(
+                fontSize: 13,
+                height: 1.45,
+                color: VoxColors.onSurface(ctx),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showOutcomeDialog({
+    required String title,
+    required String body,
+    IconData icon = Icons.check_circle_outline_rounded,
+    Color? iconColor,
+  }) async {
+    if (!mounted) return;
+    final lang = context.read<LanguageProvider>();
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        icon: Icon(icon, color: iconColor ?? VoxColors.primary(ctx), size: 32),
+        title: Text(title, textAlign: TextAlign.center),
+        content: SingleChildScrollView(
+          child: Text(body, style: const TextStyle(height: 1.5)),
+        ),
+        actions: [
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(lang.t('profile_got_it')),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<bool> _confirmDialog({
+    required String title,
+    required String body,
+    required String confirmLabel,
+    bool destructive = false,
+  }) async {
+    if (!mounted) return false;
+    final lang = context.read<LanguageProvider>();
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(
+          child: Text(body, style: const TextStyle(height: 1.5)),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text(lang.t('cancel')),
+          ),
+          FilledButton(
+            style: destructive
+                ? FilledButton.styleFrom(backgroundColor: VoxColors.danger)
+                : null,
+            onPressed: () => Navigator.pop(ctx, true),
+            child: Text(confirmLabel),
+          ),
+        ],
+      ),
+    );
+    return result ?? false;
+  }
+
   Future<void> _showChangeEmailSheet() async {
     final lang = context.read<LanguageProvider>();
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) return;
 
-    final hasPassword = AccountCredentialsService.hasPasswordProvider(user);
-    final hasGoogle = AccountCredentialsService.hasGoogleProvider(user);
+    if (!AccountCredentialsService.hasPasswordProvider(user)) {
+      await _showOutcomeDialog(
+        title: context.read<LanguageProvider>().t('profile_change_email'),
+        body: context.read<LanguageProvider>().t('profile_email_need_password_account'),
+        icon: Icons.lock_outline_rounded,
+        iconColor: Colors.amber.shade800,
+      );
+      return;
+    }
 
+    final currentEmailCtrl = TextEditingController(
+      text: user.email?.trim() ?? _emailController.text.trim(),
+    );
+    final currentPasswordCtrl = TextEditingController();
     final newEmailCtrl = TextEditingController();
-    final passwordCtrl = TextEditingController();
-    var obscure = true;
+    final newPasswordCtrl = TextEditingController();
+    final confirmPasswordCtrl = TextEditingController();
+    var step = 0;
+    var obscureCurrent = true;
+    var obscureNew = true;
+    var verifying = false;
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
+      isDismissible: !verifying,
       builder: (ctx) {
         return StatefulBuilder(
           builder: (ctx, setSheetState) {
@@ -361,33 +817,43 @@ class _ProfilePageState extends State<ProfilePage>
                         color: VoxColors.onSurface(ctx),
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     Text(
-                      'Firebase will email a verification link to your new address. '
-                      'Your sign-in email updates only after you open that link.',
+                      step == 0
+                          ? lang.t('profile_email_step_verify')
+                          : lang.t('profile_email_step_new'),
                       style: TextStyle(
-                        fontSize: 13,
-                        color: VoxColors.textSecondary(ctx),
-                        height: 1.4,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.3,
+                        color: VoxColors.primary(ctx),
                       ),
+                    ),
+                    const SizedBox(height: 10),
+                    _flowBanner(
+                      ctx,
+                      message: step == 0
+                          ? lang.t('profile_email_verify_info')
+                          : lang.t('profile_email_new_info'),
+                      warning: step == 1,
                     ),
                     const SizedBox(height: 16),
-                    TextField(
-                      controller: newEmailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      autocorrect: false,
-                      decoration: InputDecoration(
-                        labelText: lang.t('profile_new_email'),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
+                    if (step == 0) ...[
+                      TextField(
+                        controller: currentEmailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        autocorrect: false,
+                        decoration: InputDecoration(
+                          labelText: lang.t('profile_current_email'),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
                         ),
                       ),
-                    ),
-                    if (hasPassword) ...[
                       const SizedBox(height: 12),
                       TextField(
-                        controller: passwordCtrl,
-                        obscureText: obscure,
+                        controller: currentPasswordCtrl,
+                        obscureText: obscureCurrent,
                         decoration: InputDecoration(
                           labelText: lang.t('profile_current_password'),
                           border: OutlineInputBorder(
@@ -395,32 +861,58 @@ class _ProfilePageState extends State<ProfilePage>
                           ),
                           suffixIcon: IconButton(
                             icon: Icon(
-                              obscure
+                              obscureCurrent
+                                  ? Icons.visibility_off_outlined
+                                  : Icons.visibility_outlined,
+                            ),
+                            onPressed: () => setSheetState(
+                              () => obscureCurrent = !obscureCurrent,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ] else ...[
+                      TextField(
+                        controller: newEmailCtrl,
+                        keyboardType: TextInputType.emailAddress,
+                        autocorrect: false,
+                        decoration: InputDecoration(
+                          labelText: lang.t('profile_new_email'),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        controller: newPasswordCtrl,
+                        obscureText: obscureNew,
+                        decoration: InputDecoration(
+                          labelText: lang.t('profile_new_password'),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          suffixIcon: IconButton(
+                            icon: Icon(
+                              obscureNew
                                   ? Icons.visibility_off_outlined
                                   : Icons.visibility_outlined,
                             ),
                             onPressed: () =>
-                                setSheetState(() => obscure = !obscure),
+                                setSheetState(() => obscureNew = !obscureNew),
                           ),
                         ),
                       ),
-                    ],
-                    if (hasGoogle && !hasPassword) ...[
                       const SizedBox(height: 12),
-                      OutlinedButton.icon(
-                        onPressed: _credentialsBusy
-                            ? null
-                            : () async {
-                                final email = newEmailCtrl.text.trim();
-                                if (email.isEmpty) return;
-                                Navigator.pop(ctx);
-                                await _submitEmailChange(
-                                  newEmail: email,
-                                  useGoogleReauth: true,
-                                );
-                              },
-                        icon: const Icon(Icons.g_mobiledata_rounded),
-                        label: Text(lang.t('profile_confirm_with_google')),
+                      TextField(
+                        controller: confirmPasswordCtrl,
+                        obscureText: obscureNew,
+                        decoration: InputDecoration(
+                          labelText: lang.t('profile_confirm_password'),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
                       ),
                     ],
                     const SizedBox(height: 16),
@@ -428,32 +920,100 @@ class _ProfilePageState extends State<ProfilePage>
                       children: [
                         Expanded(
                           child: TextButton(
-                            onPressed: () => Navigator.pop(ctx, false),
+                            onPressed: verifying ? null : () => Navigator.pop(ctx),
                             child: Text(lang.t('cancel')),
                           ),
                         ),
-                        if (hasPassword)
-                          Expanded(
-                            child: FilledButton(
-                              onPressed: _credentialsBusy
-                                  ? null
-                                  : () async {
-                                      if (passwordCtrl.text.isEmpty) {
+                        Expanded(
+                          child: FilledButton(
+                            onPressed: verifying || _credentialsBusy
+                                ? null
+                                : () async {
+                                    if (step == 0) {
+                                      if (currentEmailCtrl.text.trim().isEmpty ||
+                                          currentPasswordCtrl.text.isEmpty) {
                                         _showSnack(
                                           lang.t('profile_enter_current_password'),
                                         );
                                         return;
                                       }
-                                      final email = newEmailCtrl.text.trim();
-                                      Navigator.pop(ctx);
-                                      await _submitEmailChange(
-                                        newEmail: email,
-                                        currentPassword: passwordCtrl.text,
+                                      setSheetState(() => verifying = true);
+                                      try {
+                                        await EmailChangeService
+                                            .verifyCurrentCredentials(
+                                          email: currentEmailCtrl.text,
+                                          password: currentPasswordCtrl.text,
+                                        );
+                                        if (!ctx.mounted) return;
+                                        setSheetState(() {
+                                          verifying = false;
+                                          step = 1;
+                                        });
+                                      } on FirebaseAuthException catch (e) {
+                                        if (!ctx.mounted) return;
+                                        setSheetState(() => verifying = false);
+                                        _showSnack(_authErrorMessage(e));
+                                      } catch (e) {
+                                        if (!ctx.mounted) return;
+                                        setSheetState(() => verifying = false);
+                                        _showSnack('Error: $e');
+                                      }
+                                      return;
+                                    }
+
+                                    final newEmail = newEmailCtrl.text.trim();
+                                    final newPassword = newPasswordCtrl.text;
+                                    if (newEmail.isEmpty ||
+                                        !newEmail.contains('@')) {
+                                      _showSnack('Enter a valid new email.');
+                                      return;
+                                    }
+                                    if (newPassword.length < 6) {
+                                      _showSnack(
+                                        'New password must be at least 6 characters.',
                                       );
-                                    },
-                              child: Text(lang.t('profile_change_email')),
-                            ),
+                                      return;
+                                    }
+                                    if (newPassword != confirmPasswordCtrl.text) {
+                                      _showSnack(
+                                        lang.t('profile_passwords_dont_match'),
+                                      );
+                                      return;
+                                    }
+                                    if (newEmail.toLowerCase() ==
+                                        currentEmailCtrl.text
+                                            .trim()
+                                            .toLowerCase()) {
+                                      _showSnack(
+                                        'New email must differ from your current email.',
+                                      );
+                                      return;
+                                    }
+
+                                    Navigator.pop(ctx);
+                                    await _promptEmailDataChoice(
+                                      oldEmail: currentEmailCtrl.text.trim(),
+                                      currentPassword: currentPasswordCtrl.text,
+                                      newEmail: newEmail,
+                                      newPassword: newPassword,
+                                    );
+                                  },
+                            child: verifying
+                                ? SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: VoxColors.onPrimary(ctx),
+                                    ),
+                                  )
+                                : Text(
+                                    step == 0
+                                        ? lang.t('profile_verify_continue')
+                                        : lang.t('profile_change_email'),
+                                  ),
                           ),
+                        ),
                       ],
                     ),
                   ],
@@ -465,28 +1025,168 @@ class _ProfilePageState extends State<ProfilePage>
       },
     );
 
+    currentEmailCtrl.dispose();
+    currentPasswordCtrl.dispose();
     newEmailCtrl.dispose();
-    passwordCtrl.dispose();
+    newPasswordCtrl.dispose();
+    confirmPasswordCtrl.dispose();
   }
 
-  Future<void> _submitEmailChange({
+  Future<void> _promptEmailDataChoice({
+    required String oldEmail,
+    required String currentPassword,
     required String newEmail,
-    String? currentPassword,
-    bool useGoogleReauth = false,
+    required String newPassword,
   }) async {
     final lang = context.read<LanguageProvider>();
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
+    final sync = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) {
+        Widget choiceCard({
+          required String title,
+          required String body,
+          required IconData icon,
+          required bool keep,
+        }) {
+          return Material(
+            color: VoxColors.cardFill(ctx),
+            borderRadius: BorderRadius.circular(14),
+            child: InkWell(
+              onTap: () => Navigator.pop(ctx, keep),
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: keep
+                        ? VoxColors.primary(ctx).withValues(alpha: 0.4)
+                        : VoxColors.danger.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(
+                          icon,
+                          size: 20,
+                          color: keep ? VoxColors.primary(ctx) : VoxColors.danger,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            title,
+                            style: TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 15,
+                              color: VoxColors.onSurface(ctx),
+                            ),
+                          ),
+                        ),
+                        Icon(
+                          Icons.chevron_right_rounded,
+                          color: VoxColors.textHint(ctx),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      body,
+                      style: TextStyle(
+                        fontSize: 13,
+                        height: 1.45,
+                        color: VoxColors.textSecondary(ctx),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        }
+
+        return AlertDialog(
+          title: Text(lang.t('profile_email_sync_title')),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  lang.tNamed('profile_email_sync_intro', {'email': newEmail}),
+                  style: TextStyle(
+                    height: 1.45,
+                    color: VoxColors.textSecondary(ctx),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                choiceCard(
+                  title: lang.t('profile_email_sync_keep_title'),
+                  body: lang.t('profile_email_sync_keep_body'),
+                  icon: Icons.cloud_done_outlined,
+                  keep: true,
+                ),
+                const SizedBox(height: 10),
+                choiceCard(
+                  title: lang.t('profile_email_sync_fresh_title'),
+                  body: lang.t('profile_email_sync_fresh_body'),
+                  icon: Icons.delete_forever_outlined,
+                  keep: false,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: Text(lang.t('cancel')),
+            ),
+          ],
+        );
+      },
+    );
+    if (sync == null || !mounted) return;
+
+    if (!sync) {
+      final confirmed = await _confirmDialog(
+        title: lang.t('profile_email_fresh_confirm_title'),
+        body: lang.t('profile_email_fresh_confirm_body'),
+        confirmLabel: lang.t('profile_email_fresh_confirm_button'),
+        destructive: true,
+      );
+      if (!confirmed || !mounted) return;
+    }
 
     setState(() => _credentialsBusy = true);
     try {
-      await AccountCredentialsService.requestEmailChange(
-        user: user,
-        newEmail: newEmail,
+      await EmailChangeService.applyEmailChange(
         currentPassword: currentPassword,
-        useGoogleReauth: useGoogleReauth,
+        newEmail: newEmail,
+        newPassword: newPassword,
+        syncData: sync,
+        oldEmail: oldEmail,
       );
-      _showSnack(lang.t('profile_email_change_sent'));
+      if (!mounted) return;
+      setState(() {
+        _emailController.text = newEmail;
+      });
+      widget.onProfileUpdated?.call();
+      await _showOutcomeDialog(
+        title: sync
+            ? lang.t('profile_email_success_sync_title')
+            : lang.t('profile_email_success_fresh_title'),
+        body: lang.tNamed(
+          sync
+              ? 'profile_email_success_sync_body'
+              : 'profile_email_success_fresh_body',
+          {'email': newEmail},
+        ),
+        icon: sync ? Icons.mark_email_read_outlined : Icons.refresh_rounded,
+      );
     } on FirebaseAuthException catch (e) {
       _showSnack(_authErrorMessage(e));
     } catch (e) {
@@ -501,303 +1201,110 @@ class _ProfilePageState extends State<ProfilePage>
     final user = FirebaseAuth.instance.currentUser;
     if (user == null || user.isAnonymous) return;
 
-    final hasPassword = AccountCredentialsService.hasPasswordProvider(user);
-    final hasGoogle = AccountCredentialsService.hasGoogleProvider(user);
-
-    if (!hasPassword && hasGoogle) {
-      await _showSetPasswordWithGoogleSheet();
-      return;
-    }
-    if (!hasPassword) {
-      _showSnack('No password on this account. Use password reset email instead.');
-      return;
-    }
-
-    final currentCtrl = TextEditingController();
-    final newCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-    var obscureCurrent = true;
-    var obscureNew = true;
+    final emailCtrl = TextEditingController(
+      text: user.email?.trim() ?? _emailController.text.trim(),
+    );
 
     await showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            final bottom = MediaQuery.viewInsetsOf(ctx).bottom;
-            return Padding(
-              padding: EdgeInsets.only(bottom: bottom),
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-                decoration: BoxDecoration(
-                  color: VoxColors.surface(ctx),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: VoxColors.border(ctx)),
+        final bottom = MediaQuery.viewInsetsOf(ctx).bottom;
+        return Padding(
+          padding: EdgeInsets.only(bottom: bottom),
+          child: Container(
+            margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+            decoration: BoxDecoration(
+              color: VoxColors.surface(ctx),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: VoxColors.border(ctx)),
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  lang.t('profile_change_password'),
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    color: VoxColors.onSurface(ctx),
+                  ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      lang.t('profile_change_password'),
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: VoxColors.onSurface(ctx),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: currentCtrl,
-                      obscureText: obscureCurrent,
-                      decoration: InputDecoration(
-                        labelText: lang.t('profile_current_password'),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            obscureCurrent
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                          ),
-                          onPressed: () => setSheetState(
-                            () => obscureCurrent = !obscureCurrent,
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: newCtrl,
-                      obscureText: obscureNew,
-                      decoration: InputDecoration(
-                        labelText: lang.t('profile_new_password'),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            obscureNew
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                          ),
-                          onPressed: () =>
-                              setSheetState(() => obscureNew = !obscureNew),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: confirmCtrl,
-                      obscureText: obscureNew,
-                      decoration: InputDecoration(
-                        labelText: lang.t('profile_confirm_password'),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton(
-                      onPressed: _credentialsBusy
-                          ? null
-                          : () async {
-                              if (newCtrl.text != confirmCtrl.text) {
-                                _showSnack(lang.t('profile_passwords_dont_match'));
-                                return;
-                              }
-                              Navigator.pop(ctx);
-                              await _submitPasswordChange(
-                                currentPassword: currentCtrl.text,
-                                newPassword: newCtrl.text,
-                              );
-                            },
-                      child: Text(lang.t('profile_change_password')),
-                    ),
-                  ],
+                const SizedBox(height: 10),
+                _flowBanner(ctx, message: lang.t('profile_password_reset_hint')),
+                const SizedBox(height: 12),
+                _flowBanner(
+                  ctx,
+                  message: lang.t('profile_password_steps'),
+                  icon: Icons.format_list_numbered_rounded,
                 ),
-              ),
-            );
-          },
+                const SizedBox(height: 16),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  autocorrect: false,
+                  decoration: InputDecoration(
+                    labelText: lang.t('profile_current_email'),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                FilledButton(
+                  onPressed: _credentialsBusy
+                      ? null
+                      : () async {
+                          final email = emailCtrl.text.trim();
+                          if (email.isEmpty || !email.contains('@')) {
+                            _showSnack('Enter a valid email address.');
+                            return;
+                          }
+                          Navigator.pop(ctx);
+                          final confirmed = await _confirmDialog(
+                            title: lang.t('profile_password_confirm_title'),
+                            body: lang.tNamed(
+                              'profile_password_confirm_body',
+                              {'email': email},
+                            ),
+                            confirmLabel: lang.t('profile_send_reset_email'),
+                          );
+                          if (confirmed) {
+                            await _sendPasswordResetEmail(email);
+                          }
+                        },
+                  child: Text(lang.t('profile_send_reset_email')),
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
 
-    currentCtrl.dispose();
-    newCtrl.dispose();
-    confirmCtrl.dispose();
+    emailCtrl.dispose();
   }
 
-  Future<void> _showSetPasswordWithGoogleSheet() async {
+  Future<void> _sendPasswordResetEmail(String email) async {
     final lang = context.read<LanguageProvider>();
-    final newCtrl = TextEditingController();
-    final confirmCtrl = TextEditingController();
-    var obscure = true;
-
-    await showModalBottomSheet<void>(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (ctx, setSheetState) {
-            final bottom = MediaQuery.viewInsetsOf(ctx).bottom;
-            return Padding(
-              padding: EdgeInsets.only(bottom: bottom),
-              child: Container(
-                margin: const EdgeInsets.fromLTRB(12, 0, 12, 12),
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-                decoration: BoxDecoration(
-                  color: VoxColors.surface(ctx),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      lang.t('profile_change_password'),
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        color: VoxColors.onSurface(ctx),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Confirm with Google, then set a password for this account.',
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: VoxColors.textSecondary(ctx),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    TextField(
-                      controller: newCtrl,
-                      obscureText: obscure,
-                      decoration: InputDecoration(
-                        labelText: lang.t('profile_new_password'),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            obscure
-                                ? Icons.visibility_off_outlined
-                                : Icons.visibility_outlined,
-                          ),
-                          onPressed: () =>
-                              setSheetState(() => obscure = !obscure),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: confirmCtrl,
-                      obscureText: obscure,
-                      decoration: InputDecoration(
-                        labelText: lang.t('profile_confirm_password'),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    FilledButton.icon(
-                      onPressed: _credentialsBusy
-                          ? null
-                          : () async {
-                              if (newCtrl.text != confirmCtrl.text) {
-                                _showSnack(lang.t('profile_passwords_dont_match'));
-                                return;
-                              }
-                              Navigator.pop(ctx);
-                              await _submitPasswordChangeWithGoogle(
-                                newPassword: newCtrl.text,
-                              );
-                            },
-                      icon: const Icon(Icons.g_mobiledata_rounded),
-                      label: Text(lang.t('profile_confirm_with_google')),
-                    ),
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-
-    newCtrl.dispose();
-    confirmCtrl.dispose();
-  }
-
-  Future<void> _submitPasswordChange({
-    required String currentPassword,
-    required String newPassword,
-  }) async {
-    final lang = context.read<LanguageProvider>();
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
     setState(() => _credentialsBusy = true);
-    try {
-      await AccountCredentialsService.changePassword(
-        user: user,
-        currentPassword: currentPassword,
-        newPassword: newPassword,
-      );
-      _showSnack(lang.t('profile_password_updated'));
-    } on FirebaseAuthException catch (e) {
-      _showSnack(_authErrorMessage(e));
-    } catch (e) {
-      _showSnack('Error: $e');
-    } finally {
-      if (mounted) setState(() => _credentialsBusy = false);
-    }
-  }
-
-  Future<void> _submitPasswordChangeWithGoogle({
-    required String newPassword,
-  }) async {
-    final lang = context.read<LanguageProvider>();
-    final user = FirebaseAuth.instance.currentUser;
-    if (user == null) return;
-
-    setState(() => _credentialsBusy = true);
-    try {
-      await AccountCredentialsService.changePasswordAfterGoogleReauth(
-        user: user,
-        newPassword: newPassword,
-      );
-      _showSnack(lang.t('profile_password_updated'));
-    } on FirebaseAuthException catch (e) {
-      _showSnack(_authErrorMessage(e));
-    } catch (e) {
-      _showSnack('Error: $e');
-    } finally {
-      if (mounted) setState(() => _credentialsBusy = false);
-    }
-  }
-
-  Future<void> _sendPasswordResetToAccountEmail() async {
-    final email = FirebaseAuth.instance.currentUser?.email?.trim() ??
-        _emailController.text.trim();
-    if (email.isEmpty || !email.contains('@')) {
-      _showSnack('No email on this account.');
-      return;
-    }
     try {
       await AccountCredentialsService.sendPasswordResetEmail(email);
-      _showSnack('Password reset email sent to $email.');
+      if (!mounted) return;
+      await _showOutcomeDialog(
+        title: lang.t('profile_password_sent_title'),
+        body: lang.tNamed('profile_password_sent_body', {'email': email}),
+        icon: Icons.mark_email_read_outlined,
+      );
     } on FirebaseAuthException catch (e) {
       _showSnack(_authErrorMessage(e));
     } catch (e) {
       _showSnack('Error: $e');
+    } finally {
+      if (mounted) setState(() => _credentialsBusy = false);
     }
   }
 
@@ -807,10 +1314,6 @@ class _ProfilePageState extends State<ProfilePage>
     if (user == null || user.isAnonymous || _isEditing) {
       return const SizedBox.shrink();
     }
-
-    final hasPassword = AccountCredentialsService.hasPasswordProvider(user);
-    final hasGoogle = AccountCredentialsService.hasGoogleProvider(user);
-    final providers = AccountCredentialsService.describeProviders(user);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -827,53 +1330,18 @@ class _ProfilePageState extends State<ProfilePage>
             ),
           ),
         ),
-        if (providers.isNotEmpty)
-          Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 10),
-            child: Text(
-              '${lang.t('profile_signed_in_with')}: $providers',
-              style: TextStyle(
-                color: VoxColors.textHint(context),
-                fontSize: 12,
-              ),
-            ),
-          ),
         _securityTile(
           icon: Icons.alternate_email_rounded,
           label: lang.t('profile_change_email'),
+          subtitle: lang.t('profile_change_email_subtitle'),
           onTap: _credentialsBusy ? null : _showChangeEmailSheet,
         ),
-        if (hasPassword)
-          _securityTile(
-            icon: Icons.lock_outline_rounded,
-            label: lang.t('profile_change_password'),
-            onTap: _credentialsBusy ? null : _showChangePasswordSheet,
-          ),
-        if (hasPassword)
-          _securityTile(
-            icon: Icons.mail_outline_rounded,
-            label: lang.t('profile_reset_password_email'),
-            onTap: _credentialsBusy ? null : _sendPasswordResetToAccountEmail,
-          ),
-        if (hasGoogle && !hasPassword)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(4, 8, 4, 0),
-            child: Text(
-              lang.t('profile_google_password_hint'),
-              style: TextStyle(
-                color: VoxColors.textSecondary(context),
-                fontSize: 12,
-                height: 1.45,
-              ),
-            ),
-          ),
-        if (hasGoogle && !hasPassword)
-          _securityTile(
-            icon: Icons.lock_outline_rounded,
-            label: lang.t('profile_change_password'),
-            subtitle: 'Set a password (Google confirm)',
-            onTap: _credentialsBusy ? null : _showChangePasswordSheet,
-          ),
+        _securityTile(
+          icon: Icons.lock_outline_rounded,
+          label: lang.t('profile_change_password'),
+          subtitle: lang.t('profile_change_password_subtitle'),
+          onTap: _credentialsBusy ? null : _showChangePasswordSheet,
+        ),
         const SizedBox(height: 8),
       ],
     );
@@ -972,7 +1440,9 @@ class _ProfilePageState extends State<ProfilePage>
       radius: radius,
       backgroundColor: VoxColors.primary(context),
       child: Text(
-        widget.username.isNotEmpty ? widget.username[0].toUpperCase() : '?',
+        _nameController.text.trim().isNotEmpty
+            ? _nameController.text.trim()[0].toUpperCase()
+            : '?',
         style: TextStyle(
           fontSize: radius * 0.85,
           fontWeight: FontWeight.w900,
@@ -1057,7 +1527,12 @@ class _ProfilePageState extends State<ProfilePage>
                     ),
                     if (!_isEditing)
                       GestureDetector(
-                        onTap: () => setState(() => _isEditing = true),
+                        onTap: () => setState(() {
+                          _editSnapshotName = _nameController.text;
+                          _editSnapshotEmail = _emailController.text;
+                          _editSnapshotImage = _base64Image;
+                          _isEditing = true;
+                        }),
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                           decoration: BoxDecoration(
@@ -1088,9 +1563,11 @@ class _ProfilePageState extends State<ProfilePage>
                           GestureDetector(
                             onTap: () => setState(() {
                               _isEditing = false;
-                              _nameController.text = widget.username;
-                              _emailController.text = widget.email;
-                              _base64Image = widget.base64Image;
+                              _nameController.text =
+                                  _editSnapshotName ?? _nameController.text;
+                              _emailController.text =
+                                  _editSnapshotEmail ?? _emailController.text;
+                              _base64Image = _editSnapshotImage;
                             }),
                             child: Container(
                               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -1197,7 +1674,7 @@ class _ProfilePageState extends State<ProfilePage>
                             )
                           : _profileInfoTile(
                               label: "NAME",
-                              value: widget.username.isNotEmpty ? widget.username : "Not set",
+                              value: _displayName,
                               icon: Icons.person_outline_rounded,
                             ),
                       const SizedBox(height: 12),
@@ -1214,9 +1691,7 @@ class _ProfilePageState extends State<ProfilePage>
                             )
                           : _profileInfoTile(
                               label: "EMAIL",
-                              value: widget.email.isNotEmpty
-                                  ? widget.email
-                                  : "Not set",
+                              value: _displayEmail,
                               icon: Icons.alternate_email_rounded,
                               locked: true,
                             ),
@@ -1535,6 +2010,10 @@ class _ProfilePageState extends State<ProfilePage>
             isLoading: _anonLoading,
             onTap: _onAnonSaveTapped,
           ),
+          const SizedBox(height: 20),
+          _anonDivider(),
+          const SizedBox(height: 16),
+          _anonGoogleButton(),
           const SizedBox(height: 32),
         ],
       ),
@@ -1618,6 +2097,10 @@ class _ProfilePageState extends State<ProfilePage>
                 isLoading: _anonLoading,
                 onTap: () => _signInReturningUser(passwordCtrl.text),
               ),
+              const SizedBox(height: 20),
+              _anonDivider(),
+              const SizedBox(height: 16),
+              _anonGoogleButton(),
               const SizedBox(height: 16),
               Center(
                 child: TextButton(
@@ -1631,7 +2114,10 @@ class _ProfilePageState extends State<ProfilePage>
               ),
               Center(
                 child: TextButton(
-                  onPressed: () => setState(() => _anonStage = 'join'),
+                  onPressed: () => setState(() {
+                    _anonStage = 'join';
+                    _syncExistingCloudData = null;
+                  }),
                   child: Text(
                     "Use a different email",
                     style: TextStyle(
@@ -1743,6 +2229,59 @@ class _ProfilePageState extends State<ProfilePage>
           ],
           const SizedBox(height: 32),
         ],
+      ),
+    );
+  }
+
+  Widget _anonDivider() {
+    return Row(
+      children: [
+        Expanded(child: Divider(color: VoxColors.border(context))),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'OR',
+            style: TextStyle(
+              color: VoxColors.textHint(context),
+              fontWeight: FontWeight.w700,
+              fontSize: 11,
+              letterSpacing: 1.2,
+            ),
+          ),
+        ),
+        Expanded(child: Divider(color: VoxColors.border(context))),
+      ],
+    );
+  }
+
+  Widget _anonGoogleButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: OutlinedButton.icon(
+        onPressed: (_googleLoading || _anonLoading)
+            ? null
+            : _handleGuestGoogleSignIn,
+        icon: _googleLoading
+            ? SizedBox(
+                width: 18,
+                height: 18,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2,
+                  color: VoxColors.primary(context),
+                ),
+              )
+            : const Icon(Icons.g_mobiledata_rounded, size: 28),
+        label: const Text(
+          'Continue with Google',
+          style: TextStyle(fontWeight: FontWeight.w700),
+        ),
+        style: OutlinedButton.styleFrom(
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          side: BorderSide(color: VoxColors.border(context)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+          ),
+        ),
       ),
     );
   }

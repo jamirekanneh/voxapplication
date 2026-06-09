@@ -7,10 +7,15 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'language_provider.dart';
 import 'theme_provider.dart';
 import 'services/app_session.dart';
 import 'services/auth_session.dart';
+import 'services/guest_upgrade_service.dart';
+import 'services/mic_coordinator.dart';
+import 'widgets/account_data_sync_dialog.dart';
 
 enum _SnackTone { neutral, success, error }
 
@@ -105,11 +110,15 @@ class _UserProfilePageState extends State<UserProfilePage> {
   String? _currentPhotoBase64;
   bool _entryGatePending = true;
   bool _showReturningSignIn = false;
+  bool? _syncExistingCloudData;
 
   @override
   void initState() {
     super.initState();
     _isEditingMode = widget.isEditingMode;
+    if (!widget.isEditingMode) {
+      unawaited(MicCoordinator.instance.enterAuthFlow());
+    }
     GoogleSignIn.instance.initialize(serverClientId: _kGoogleServerClientId);
     unawaited(_resolveEntry());
   }
@@ -117,15 +126,16 @@ class _UserProfilePageState extends State<UserProfilePage> {
   /// Block sign-in UI until device restore / auth restore finishes (avoids flash).
   Future<void> _resolveEntry() async {
     try {
-      if (!widget.isEditingMode) {
+      final pendingSignIn = await AuthSession.isPendingSignIn();
+      if (!widget.isEditingMode && !pendingSignIn) {
         final redirected = await _redirectIfDeviceRecognized();
         if (redirected) return;
       }
-      await _ensureAuth();
+      await _ensureAuth(pendingSignIn: pendingSignIn);
       if (widget.isEditingMode) {
         await _loadCurrentUserData();
         await _evaluateSwitchableEmail();
-      } else {
+      } else if (!pendingSignIn) {
         await _prefillFromDeviceOrPrefs();
       }
     } finally {
@@ -134,6 +144,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   }
 
   Future<void> _prefillFromDeviceOrPrefs() async {
+    if (await AuthSession.isPendingSignIn()) return;
     final linked = AppSession.lastRestoredDeviceUser ??
         await AppSession.getDeviceLinkedUser(attempts: 2);
     if (linked != null) {
@@ -196,11 +207,21 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  Future<void> _ensureAuth() async {
+  Future<void> _ensureAuth({bool pendingSignIn = false}) async {
     if (FirebaseAuth.instance.currentUser != null) return;
 
     final guest = await AuthSession.isExplicitGuestMode();
     if (guest) {
+      try {
+        await FirebaseAuth.instance.signInAnonymously();
+      } catch (e) {
+        debugPrint('Silent anon sign-in error: $e');
+      }
+      return;
+    }
+
+    // After logout: show profile immediately — only anonymous for Firestore rules.
+    if (pendingSignIn || await AuthSession.isPendingSignIn()) {
       try {
         await FirebaseAuth.instance.signInAnonymously();
       } catch (e) {
@@ -232,6 +253,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
   /// Returns true if navigated away to home (device recognized — skip profile).
   Future<bool> _redirectIfDeviceRecognized() async {
     if (widget.isEditingMode || !mounted) return false;
+    if (await AuthSession.isPendingSignIn()) return false;
     try {
       final user = FirebaseAuth.instance.currentUser;
       if (user != null && !user.isAnonymous) {
@@ -252,96 +274,56 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  Future<void> _reassignCollectionOwner({
-    required String collection,
-    required String fromUserId,
-    required String toUserId,
-  }) async {
-    if (fromUserId == toUserId) return;
-    final snapshot = await FirebaseFirestore.instance
-        .collection(collection)
-        .where('userId', isEqualTo: fromUserId)
-        .get();
-    if (snapshot.docs.isEmpty) return;
-    final batch = FirebaseFirestore.instance.batch();
-    for (final doc in snapshot.docs) {
-      batch.update(doc.reference, {'userId': toUserId});
+  Future<bool> _promptReturningUserDataChoice(String email) async {
+    final sync = await showAccountDataSyncDialog(context, email: email);
+    if (sync == null || !mounted) return false;
+    if (!sync) {
+      final confirmed = await showAccountFreshConfirmDialog(context);
+      if (!confirmed || !mounted) return false;
     }
-    await batch.commit();
+    setState(() => _syncExistingCloudData = sync);
+    return true;
   }
 
-  Future<void> _mergeLegacyDataToCurrentUid(User user) async {
-    final email = (user.email ?? '').trim();
-    if (email.isEmpty) return;
-
-    final usersRef = FirebaseFirestore.instance.collection('users');
-    QuerySnapshot<Map<String, dynamic>> sameEmail;
-    try {
-      sameEmail = await usersRef.where('email', isEqualTo: email).get();
-    } catch (e) {
-      debugPrint('mergeLegacy: email lookup failed ($e), continuing with uid doc.');
-      sameEmail = await usersRef.where(FieldPath.documentId, isEqualTo: user.uid).get();
+  Future<void> _completeSignIn(
+    User user, {
+    required bool? syncCloudData,
+    required String name,
+    String? email,
+    required String successMessage,
+  }) async {
+    if (syncCloudData != null) {
+      await GuestUpgradeService.applyCloudDataChoice(
+        user: user,
+        syncCloudData: syncCloudData,
+        email: email ?? _emailController.text.trim(),
+      );
     }
-    final currentRef = usersRef.doc(user.uid);
 
-    final merged = <String, dynamic>{
-      'email': email,
+    final photo = _base64Image ?? '';
+    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
+      'username': name.isNotEmpty ? name : (user.displayName ?? ''),
+      'email': user.email ?? email ?? '',
+      'photoBase64': photo,
+      'photoUrl': user.photoURL ?? '',
       'userId': user.uid,
+      if (syncCloudData == null) 'createdAt': FieldValue.serverTimestamp(),
       'lastLoginAt': FieldValue.serverTimestamp(),
-    };
-    for (final doc in sameEmail.docs) {
-      final data = doc.data();
-      if ((data['username'] as String?)?.isNotEmpty == true) {
-        merged['username'] = data['username'];
-      }
-      if ((data['photoBase64'] as String?)?.isNotEmpty == true) {
-        merged['photoBase64'] = data['photoBase64'];
-      }
-      if ((data['photoUrl'] as String?)?.isNotEmpty == true) {
-        merged['photoUrl'] = data['photoUrl'];
-      }
-    }
-    await currentRef.set(merged, SetOptions(merge: true));
+    }, SetOptions(merge: true));
 
-    // Only migrate records that used email-as-userId. Trying to migrate
-    // arbitrary old uid owners can fail Firestore ownership checks.
-    final legacyOwnerIds = <String>{email};
-    for (final legacyId in legacyOwnerIds) {
-      try {
-        await _reassignCollectionOwner(
-          collection: 'notes',
-          fromUserId: legacyId,
-          toUserId: user.uid,
-        );
-        await _reassignCollectionOwner(
-          collection: 'library',
-          fromUserId: legacyId,
-          toUserId: user.uid,
-        );
-        await _reassignCollectionOwner(
-          collection: 'custom_commands',
-          fromUserId: legacyId,
-          toUserId: user.uid,
-        );
-      } catch (e) {
-        debugPrint('mergeLegacy: owner reassignment skipped for $legacyId: $e');
-      }
+    await AuthSession.markSignedIn(user);
+    final prefs = await SharedPreferences.getInstance();
+    final savedName = name.isNotEmpty ? name : (user.displayName ?? '');
+    if (savedName.isNotEmpty) {
+      await prefs.setString('userName', savedName);
     }
+    await AppSession.markSetupComplete(userId: user.uid);
 
-    // Cleanup duplicate profile docs that used email as document id / owner id.
-    for (final doc in sameEmail.docs) {
-      if (doc.id == user.uid) continue;
-      final data = doc.data();
-      final legacyOwner = (data['userId'] as String?)?.trim() ?? '';
-      final isLegacyEmailDoc = doc.id == email || legacyOwner == email;
-      if (!isLegacyEmailDoc) continue;
-      try {
-        await usersRef.doc(doc.id).delete();
-        debugPrint('mergeLegacy: removed duplicate legacy user doc ${doc.id}');
-      } catch (e) {
-        debugPrint('mergeLegacy: could not delete legacy user doc ${doc.id}: $e');
-      }
-    }
+    if (!mounted) return;
+    MicCoordinator.instance.exitAuthFlow();
+    _showSnack(successMessage, tone: _SnackTone.success);
+    await Future<void>.delayed(const Duration(milliseconds: 600));
+    Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
   }
 
   Future<void> _requestEmailSwitch() async {
@@ -415,22 +397,24 @@ class _UserProfilePageState extends State<UserProfilePage> {
 
     if (mounted) setState(() => _isLoading = true);
     try {
-      await _createNewAccount(name, email, password);
-    } on FirebaseAuthException catch (e) {
-      if (e.code == 'email-already-in-use') {
-        if (!mounted) return;
+      final exists = await GuestUpgradeService.emailExistsInSystem(email);
+      if (!mounted) return;
+      if (exists) {
+        final ok = await _promptReturningUserDataChoice(email);
+        if (!ok || !mounted) {
+          setState(() => _isLoading = false);
+          return;
+        }
         setState(() {
           _isLoading = false;
           _showReturningSignIn = true;
         });
-        _showSnack(
-          'This email is already registered. Sign in with your password to sync your data.',
-          tone: _SnackTone.neutral,
-        );
-      } else {
-        _showSnack(_authErrorMessage(e), tone: _SnackTone.error);
-        if (mounted) setState(() => _isLoading = false);
+        return;
       }
+      await _createNewAccount(name, email, password);
+    } on FirebaseAuthException catch (e) {
+      _showSnack(_authErrorMessage(e), tone: _SnackTone.error);
+      if (mounted) setState(() => _isLoading = false);
     } catch (e) {
       _showSnack('Error creating account: $e', tone: _SnackTone.error);
       if (mounted) setState(() => _isLoading = false);
@@ -439,91 +423,68 @@ class _UserProfilePageState extends State<UserProfilePage> {
   bool _isValidEmail(String email) =>
       RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(email);
 
- Future<void> _createNewAccount(String name, String email, String password) async {
-  try {
-    UserCredential cred;
-    final currentUser = FirebaseAuth.instance.currentUser;
+  Future<void> _createNewAccount(
+    String name,
+    String email,
+    String password,
+  ) async {
+    try {
+      UserCredential cred;
+      final currentUser = FirebaseAuth.instance.currentUser;
 
-    // 1. Authentication Logic: Handles linking anonymous accounts or creating new ones
-    if (currentUser != null && currentUser.isAnonymous) {
-      final credential = EmailAuthProvider.credential(
+      if (currentUser != null && currentUser.isAnonymous) {
+        cred = await currentUser.linkWithCredential(
+          EmailAuthProvider.credential(email: email, password: password),
+        );
+      } else {
+        cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+          email: email,
+          password: password,
+        );
+      }
+
+      await _completeSignIn(
+        cred.user!,
+        syncCloudData: null,
+        name: name,
         email: email,
-        password: password,
+        successMessage: 'Account created! Welcome to Vox.',
       );
-      cred = await currentUser.linkWithCredential(credential);
-    } else {
-      cred = await FirebaseAuth.instance.createUserWithEmailAndPassword(
-        email: email,
-        password: password,
-      );
+    } on FirebaseAuthException catch (e) {
+      if (e.code == 'email-already-in-use') {
+        if (!mounted) return;
+        final ok = await _promptReturningUserDataChoice(email);
+        if (!ok || !mounted) return;
+        setState(() => _showReturningSignIn = true);
+      } else {
+        rethrow;
+      }
+    } catch (e) {
+      _showSnack('Error creating account: $e', tone: _SnackTone.error);
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
     }
-
-    final user = cred.user!;
-    await _mergeLegacyDataToCurrentUid(user);
-    final photo = _base64Image ?? '';
-
-    // 2. Firestore Storage:
-    // Keep UID as canonical owner key across providers.
-    await FirebaseFirestore.instance.collection('users').doc(user.uid).set({
-      'username': name,
-      'email': email,
-      'photoBase64': photo,
-      'photoUrl': user.photoURL ?? '',
-      'createdAt': FieldValue.serverTimestamp(),
-      'userId': user.uid,
-    });
-
-    // 3. Local Storage:
-    // Persist UID as canonical identifier.
-    await AuthSession.markSignedIn(user);
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString('userName', name);
-    await AppSession.markSetupComplete(userId: user.uid);
-
-    // 4. Success Navigation
-    if (mounted) {
-      _showSnack('Account created! Welcome to Vox.', tone: _SnackTone.success);
-      await Future<void>.delayed(const Duration(milliseconds: 600));
-      // Ensure the navigation matches your defined routes
-      Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
-    }
-  } on FirebaseAuthException {
-    rethrow;
-  } catch (e) {
-    _showSnack('Error creating account: $e', tone: _SnackTone.error);
-  } finally {
-    if (mounted) setState(() => _isLoading = false);
   }
-}
   Future<void> _signInReturningUser(String password) async {
     if (_isLoading) return;
     if (mounted) setState(() => _isLoading = true);
     final email = _emailController.text.trim();
+    final sync = _syncExistingCloudData ?? true;
+    final lang = context.read<LanguageProvider>();
     try {
       final cred = await FirebaseAuth.instance.signInWithEmailAndPassword(
         email: email,
         password: password,
       );
-      final user = cred.user!;
-      await _mergeLegacyDataToCurrentUid(user);
-
-      await AuthSession.markSignedIn(user);
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .get();
-      if (doc.exists) {
-        final name = (doc.data()?['username'] as String?) ?? '';
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString('userName', name);
-      }
-      await AppSession.markSetupComplete(userId: user.uid);
-
-      if (mounted) {
-        _showSnack('Welcome back!', tone: _SnackTone.success);
-        await Future<void>.delayed(const Duration(milliseconds: 600));
-        Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
-      }
+      await _completeSignIn(
+        cred.user!,
+        syncCloudData: sync,
+        name: _nameController.text.trim(),
+        email: email,
+        successMessage: sync
+            ? lang.t('guest_save_success_sync')
+            : lang.t('guest_save_success_fresh'),
+      );
     } on FirebaseAuthException catch (e) {
       _showSnack(_authErrorMessage(e), tone: _SnackTone.error);
     } catch (e) {
@@ -662,7 +623,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         if (existingUser != null && existingUser.isAnonymous) {
           try {
             final result = await existingUser.linkWithPopup(googleProvider);
-            await _syncGoogleUserDataAndRedirect(result.user);
+            await _finishGoogleSignIn(result.user);
             return;
           } on FirebaseAuthException catch (linkError) {
             if (linkError.code == 'credential-already-in-use' ||
@@ -674,7 +635,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
           }
         } else {
           final result = await FirebaseAuth.instance.signInWithPopup(googleProvider);
-          await _syncGoogleUserDataAndRedirect(result.user);
+          await _finishGoogleSignIn(result.user);
           return;
         }
       } else {
@@ -692,7 +653,7 @@ class _UserProfilePageState extends State<UserProfilePage> {
         if (existingUser != null && existingUser.isAnonymous) {
           try {
             final result = await existingUser.linkWithCredential(credential);
-            await _syncGoogleUserDataAndRedirect(result.user);
+            await _finishGoogleSignIn(result.user);
             return;
           } on FirebaseAuthException catch (linkError) {
             if (linkError.code == 'credential-already-in-use' ||
@@ -710,14 +671,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
         if (existingUser != null && !existingUser.isAnonymous) {
           try {
             final linked = await existingUser.linkWithCredential(credential);
-            await _syncGoogleUserDataAndRedirect(linked.user);
+            await _finishGoogleSignIn(linked.user);
             return;
           } on FirebaseAuthException catch (_) {
             // Fall back to sign-in flow below.
           }
         }
         final result = await FirebaseAuth.instance.signInWithCredential(credential);
-        await _syncGoogleUserDataAndRedirect(result.user);
+        await _finishGoogleSignIn(result.user);
       }
     } catch (e) {
       final msg = _googleSignInUserMessage(e);
@@ -727,54 +688,46 @@ class _UserProfilePageState extends State<UserProfilePage> {
     }
   }
 
-  Future<void> _syncGoogleUserDataAndRedirect(User? user) async {
-    if (user == null) return;
+  Future<void> _finishGoogleSignIn(User? user) async {
+    if (user == null || !mounted) return;
 
-    final doc = await FirebaseFirestore.instance
-        .collection('users')
-        .doc(user.uid)
-        .get();
+    final lang = context.read<LanguageProvider>();
+    final hadProfile = await GuestUpgradeService.userHasCloudProfile(user.uid);
+    bool? syncCloud;
 
-    if (!doc.exists) {
-      await FirebaseFirestore.instance
-          .collection('users')
-          .doc(user.uid)
-          .set({
-        'username': user.displayName ?? '',
-        'email': user.email ?? '',
-        'photoBase64': '',
-        'photoUrl': user.photoURL ?? '',
-        'createdAt': FieldValue.serverTimestamp(),
-        'userId': user.uid,
-      });
+    if (hadProfile) {
+      if (_syncExistingCloudData != null) {
+        syncCloud = _syncExistingCloudData;
+      } else {
+        final email = user.email?.trim() ?? _emailController.text.trim();
+        final choice = await showAccountDataSyncDialog(
+          context,
+          email: email.isNotEmpty ? email : 'your Google account',
+        );
+        if (choice == null || !mounted) return;
+        syncCloud = choice;
+        if (!syncCloud) {
+          final confirmed = await showAccountFreshConfirmDialog(context);
+          if (!confirmed || !mounted) return;
+        }
+      }
     }
 
-    await AuthSession.markSignedIn(user);
-    final prefs = await SharedPreferences.getInstance();
-    if ((user.displayName ?? '').isNotEmpty) {
-      await prefs.setString('userName', user.displayName!);
-    }
-    await _mergeLegacyDataToCurrentUid(user);
-    await AppSession.markSetupComplete(userId: user.uid);
+    final name = _nameController.text.trim().isNotEmpty
+        ? _nameController.text.trim()
+        : (user.displayName ?? '');
 
-    if (!mounted) return;
-
-    final dn = user.displayName?.trim();
-    final em = user.email?.trim();
-    final label =
-        ((dn ?? '').isNotEmpty ? dn : null) ??
-        ((em ?? '').isNotEmpty ? em : null);
-    _showSnack(
-      label != null
-          ? 'Welcome back! Signed in as $label.'
-          : 'Sign-in complete.',
-      tone: _SnackTone.success,
-      duration: const Duration(seconds: 3),
+    await _completeSignIn(
+      user,
+      syncCloudData: hadProfile ? syncCloud : null,
+      name: name,
+      email: user.email,
+      successMessage: hadProfile
+          ? (syncCloud == true
+              ? lang.t('guest_save_success_sync')
+              : lang.t('guest_save_success_fresh'))
+          : 'Account created! Welcome to Vox.',
     );
-
-    await Future<void>.delayed(const Duration(milliseconds: 650));
-    if (!mounted) return;
-    Navigator.of(context, rootNavigator: true).pushReplacementNamed('/home');
   }
 
   Future<void> _pickImage() async {
@@ -921,9 +874,14 @@ class _UserProfilePageState extends State<UserProfilePage> {
           child: _ReturningUserView(
             email: _emailController.text.trim(),
             isLoading: _isLoading,
+            googleLoading: _googleLoading,
             onSignIn: _signInReturningUser,
+            onGoogleSignIn: _handleGoogleSignIn,
             onForgotPassword: _sendPasswordReset,
-            onBack: () => setState(() => _showReturningSignIn = false),
+            onBack: () => setState(() {
+              _showReturningSignIn = false;
+              _syncExistingCloudData = null;
+            }),
           ),
         ),
       );
@@ -1070,7 +1028,9 @@ class _UserProfilePageState extends State<UserProfilePage> {
 class _ReturningUserView extends StatefulWidget {
   final String email;
   final bool isLoading;
+  final bool googleLoading;
   final Future<void> Function(String password) onSignIn;
+  final VoidCallback onGoogleSignIn;
   final VoidCallback onForgotPassword;
   final VoidCallback onBack;
 
@@ -1078,7 +1038,9 @@ class _ReturningUserView extends StatefulWidget {
     super.key,
     required this.email,
     required this.isLoading,
+    required this.googleLoading,
     required this.onSignIn,
+    required this.onGoogleSignIn,
     required this.onForgotPassword,
     required this.onBack,
   });
@@ -1105,7 +1067,7 @@ class _ReturningUserViewState extends State<_ReturningUserView> {
         const _VoxHeader(
           tag: 'WELCOME BACK',
           title: "YOU'RE\nALREADY HERE.",
-          subtitle: "Sign in with your password to continue.",
+          subtitle: 'Sign in to sync your data or start fresh.',
         ),
         const SizedBox(height: 48),
         Padding(
@@ -1214,6 +1176,11 @@ class _ReturningUserViewState extends State<_ReturningUserView> {
               ],
             ),
           ),
+        ),
+        const _DividerRow(),
+        _GoogleButton(
+          isLoading: widget.googleLoading,
+          onTap: widget.onGoogleSignIn,
         ),
       ],
     );

@@ -36,6 +36,7 @@ import 'services/mic_route_observer.dart';
 import 'services/app_route_observer.dart';
 import 'services/auth_session.dart';
 import 'services/app_session.dart';
+import 'services/mic_coordinator.dart';
 import 'navigation_keys.dart';
 
 class MyApp extends StatefulWidget {
@@ -58,6 +59,10 @@ class _MyAppState extends State<MyApp> {
         context
             .read<CustomCommandsProvider>()
             .loadCommandsForUser(user.uid);
+      } else {
+        unawaited(MicCoordinator.instance.enterAuthFlow());
+        unawaited(context.read<CustomCommandsProvider>().clearOnLogout());
+        context.read<TtsService>().stop();
       }
     });
     _handleIncomingLinks();
@@ -163,7 +168,11 @@ class _MyAppState extends State<MyApp> {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  await dotenv.load(fileName: 'assets/project.env');
+  try {
+    await dotenv.load(fileName: 'assets/project.env');
+  } catch (e) {
+    debugPrint('project.env not loaded (using built-in defaults): $e');
+  }
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
 
   FirebaseFirestore.instance.settings = const Settings(

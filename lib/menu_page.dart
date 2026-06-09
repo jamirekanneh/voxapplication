@@ -18,8 +18,12 @@ import 'floating_chat_bot.dart';
 import 'recommendations_page.dart';
 import 'reminders_page.dart';
 import 'user_profile.dart';
+import 'custom_commands_provider.dart';
+import 'tts_service.dart';
 import 'services/app_session.dart';
 import 'services/auth_session.dart';
+import 'services/mic_coordinator.dart';
+import 'navigation_keys.dart';
 
 
 class MenuPage extends StatefulWidget {
@@ -388,6 +392,11 @@ class _MenuPageState extends State<MenuPage> {
                     child: ElevatedButton(
                       onPressed: () async {
                         Navigator.pop(ctx);
+                        await MicCoordinator.instance.enterAuthFlow();
+                        await context.read<CustomCommandsProvider>().clearOnLogout();
+                        await context.read<TtsService>().stop();
+                        await AuthSession.markPendingSignIn();
+                        AppSession.lastRestoredDeviceUser = null;
                         await AppSession.clearDeviceLinkForLogout();
                         await AuthSession.clearGuestMode();
                         final prefs = await SharedPreferences.getInstance();
@@ -397,15 +406,13 @@ class _MenuPageState extends State<MenuPage> {
                         await prefs.remove('userName');
                         await prefs.remove('pendingEmailLink');
                         await FirebaseAuth.instance.signOut();
-                        if (context.mounted) {
-                          Navigator.of(context).pushAndRemoveUntil(
-                            MaterialPageRoute(
-                              builder: (_) =>
-                                  const UserProfilePage(isEditingMode: false),
-                            ),
-                            (route) => false,
-                          );
-                        }
+                        globalNavigatorKey.currentState?.pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const UserProfilePage(isEditingMode: false),
+                          ),
+                          (route) => false,
+                        );
                       },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: VoxColors.danger,

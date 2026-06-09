@@ -8,47 +8,55 @@ import 'headphone_audio_detector.dart';
 class ReadAloudUi {
   ReadAloudUi._();
 
-  static const _commandsList =
-      'pause · play · continue · stop · forward · back';
-
-  static String get voiceControlsIntro {
+  static String voiceControlsIntro(String Function(String) t) {
     if (HeadphoneAudioDetector.instance.isHeadphonesConnected) {
-      return 'Earphones on — say $_commandsList while the app reads.';
+      return t('voice_controls_intro_headphones');
     }
-    return 'Voice while reading: $_commandsList. '
-        'Plug in earphones if commands are missed.';
+    return t('voice_controls_intro_speaker');
   }
 
-  static String get voiceControlsPausedTip =>
-      'Paused — say play, continue, stop, forward, or back.';
+  static String voiceControlsPausedTip(String Function(String) t) =>
+      t('voice_controls_paused_tip');
 
-  static String get voiceControlsPlayingSpeakerTip =>
-      'Say pause, stop, forward, or back. '
-      'Earphones work best so the mic hears only you.';
+  static String voiceControlsPlayingSpeakerTip(String Function(String) t) =>
+      t('voice_controls_playing_speaker_tip');
 
-  static String get voiceControlsPlayingHeadphoneTip =>
-      'Say $_commandsList anytime while reading.';
+  static String voiceControlsPlayingHeadphoneTip(String Function(String) t) =>
+      t('voice_controls_playing_headphone_tip');
 
   static final ValueNotifier<bool> voiceTipVisible = ValueNotifier(false);
-  static final ValueNotifier<String> voiceTipMessage =
-      ValueNotifier(voiceControlsIntro);
+  static final ValueNotifier<String> voiceTipMessage = ValueNotifier('');
 
   static bool _voiceTipShown = false;
   static Timer? _hideTimer;
+  static String Function(String)? _defaultTranslator;
+
+  static void configureTranslator(String Function(String) t) {
+    _defaultTranslator = t;
+    if (voiceTipMessage.value.isEmpty) {
+      voiceTipMessage.value = voiceControlsIntro(t);
+    }
+  }
+
+  static String Function(String) get _t =>
+      _defaultTranslator ?? (k) => k;
+
+  static String translate(String key) => _t(key);
 
   static void resetVoiceTip() {
     _voiceTipShown = false;
     _hideTimer?.cancel();
     voiceTipVisible.value = false;
-    voiceTipMessage.value = voiceControlsIntro;
+    voiceTipMessage.value = voiceControlsIntro(_t);
   }
 
-  static void showVoiceControlsTip() {
+  static void showVoiceControlsTip([String Function(String)? t]) {
     if (_voiceTipShown) return;
     _voiceTipShown = true;
+    final translate = t ?? _t;
 
     _hideTimer?.cancel();
-    voiceTipMessage.value = voiceControlsIntro;
+    voiceTipMessage.value = voiceControlsIntro(translate);
     voiceTipVisible.value = true;
     _hideTimer = Timer(const Duration(seconds: 5), () {
       voiceTipVisible.value = false;
@@ -72,7 +80,7 @@ class ReadAloudUi {
     voiceTipVisible.value = true;
     _hideTimer = Timer(const Duration(seconds: 2), () {
       voiceTipVisible.value = false;
-      voiceTipMessage.value = voiceControlsIntro;
+      voiceTipMessage.value = voiceControlsIntro(_t);
     });
   }
 }

@@ -10,6 +10,7 @@ import 'services/read_aloud_ui.dart';
 import 'services/headphone_audio_detector.dart';
 import 'services/read_aloud_voice_service.dart';
 import 'services/reading_audio_session.dart';
+import 'services/document_language_service.dart';
 
 class TtsService extends ChangeNotifier {
   final FlutterTts _tts = FlutterTts();
@@ -89,6 +90,7 @@ class TtsService extends ChangeNotifier {
 
   List<Map<String, String>> get availableVoices => _availableVoices;
   Map<String, String>? get selectedVoice => _selectedVoice;
+  String? get readingLocale => _readingLocale;
 
   /// One brief voice-controls hint per [play] session.
   bool consumeVoiceControlsTip() {
@@ -290,6 +292,8 @@ class TtsService extends ChangeNotifier {
     if (chunk.trim().isEmpty) return false;
     _activeChunkEnd = offset + chunk.length;
 
+    await _applyVoiceOrLocale(locale);
+
     if (isReadingSession) {
       final headphones = HeadphoneAudioDetector.instance.isHeadphonesConnected;
       if (headphones) {
@@ -428,10 +432,13 @@ class TtsService extends ChangeNotifier {
     if (text.isEmpty) return;
 
     int start = 0;
+    const sentenceEnds = {'.', '!', '?', '؟', '。', '！', '？'};
     for (int i = 0; i < text.length; i++) {
       final ch = text[i];
-      if (ch != '.' && ch != '!' && ch != '?') continue;
-      if (i > 0 && i + 1 < text.length && text[i + 1] == '.') continue;
+      if (!sentenceEnds.contains(ch)) continue;
+      if (ch == '.' && i > 0 && i + 1 < text.length && text[i + 1] == '.') {
+        continue;
+      }
 
       int end = i + 1;
       while (end < text.length && (text[end] == ' ' || text[end] == '\n')) {
@@ -564,6 +571,29 @@ class TtsService extends ChangeNotifier {
     return _sentenceSpans.length - 1;
   }
 
+  /// Sentence to pin when the user says "highlight" — uses playback position,
+  /// preferring the sentence that was just being read when crossing a boundary.
+  ({int start, int end})? sentenceSpanForVoiceHighlight() {
+    final text = content;
+    if (text == null || text.isEmpty) return null;
+    if (_sentenceSpans.isEmpty) _parseSentenceSpans(text);
+
+    final pos = _extrapolatedHighlightPosition().clamp(0, text.length);
+    var idx = _sentenceIndexForCharPos(pos);
+    if (idx > 0) {
+      final span = _sentenceSpans[idx];
+      final len = (span.end - span.start).clamp(1, text.length);
+      final into = pos - span.start;
+      if (into < (len * 0.2).round()) {
+        idx -= 1;
+      }
+    }
+
+    final target = _sentenceSpans[idx];
+    if (target.end <= target.start) return null;
+    return (start: target.start, end: target.end);
+  }
+
   void _updateSentenceBounds(int charPos) {
     final text = content;
     if (text == null || text.isEmpty) return;
@@ -618,9 +648,6 @@ class TtsService extends ChangeNotifier {
         });
 
         _availableVoices = all;
-        if (_availableVoices.isNotEmpty && _selectedVoice == null) {
-          _selectedVoice = _availableVoices.first;
-        }
       }
     } catch (e) {
       debugPrint('Voice load error: $e');
@@ -638,15 +665,138 @@ class TtsService extends ChangeNotifier {
     }
   }
 
-  Future<void> _applyVoiceOrLocale(String locale) async {
-    if (_selectedVoice != null) {
-      await _tts.setVoice({
-        'name': _selectedVoice!['name']!,
-        'locale': _selectedVoice!['locale']!,
-      });
-    } else {
-      await _tts.setLanguage(locale);
+  /// Switch TTS language mid-session (keeps playback position).
+  Future<void> switchReadingLocale(String locale) async {
+    if (content == null || _readingLocale == locale) return;
+    final offset = _currentCharOffset;
+    final wasPlaying = isPlaying;
+    final wasPaused = userPaused;
+
+    await _safeStop();
+    _readingLocale = locale;
+    await _applyVoiceOrLocale(locale);
+    _currentCharOffset = offset;
+    _segmentBaseOffset = offset;
+    _reanchorPlayback(offset);
+    _updateSentenceBounds(offset);
+
+    if (wasPlaying) {
+      userPaused = false;
+      isPlaying = true;
+      isVisible = true;
+      notifyListeners();
+      await _beginSpeakingAt(offset, locale);
+    } else if (wasPaused) {
+      userPaused = true;
+      isVisible = true;
+      notifyListeners();
     }
+  }
+
+  static List<String> _languageCandidates(String locale) {
+    final normalized = locale.replaceAll('_', '-');
+    final prefix = normalized.split('-').first.toLowerCase();
+    switch (prefix) {
+      case 'ar':
+        return [
+          normalized,
+          locale,
+          'ar-SA',
+          'ar_EG',
+          'ar-EG',
+          'ar-AE',
+          'ar',
+        ];
+      case 'zh':
+        return [normalized, locale, 'zh-CN', 'zh_CN', 'zh-TW', 'zh'];
+      case 'es':
+        return [normalized, locale, 'es-ES', 'es_ES', 'es-MX', 'es'];
+      case 'fr':
+        return [normalized, locale, 'fr-FR', 'fr_FR', 'fr-CA', 'fr'];
+      case 'tr':
+        return [normalized, locale, 'tr-TR', 'tr_TR', 'tr'];
+      default:
+        return [normalized, locale, 'en-US', 'en_US'];
+    }
+  }
+
+  static String _localePrefix(String locale) =>
+      locale.toLowerCase().split(RegExp(r'[-_]')).first;
+
+  bool _voiceMatchesPrefix(Map<String, String> voice, String prefix) {
+    final voiceLocale = (voice['locale'] ?? '').toLowerCase();
+    return voiceLocale.startsWith(prefix) ||
+        voiceLocale.contains('-$prefix-') ||
+        voiceLocale.contains('${prefix}_');
+  }
+
+  Future<bool> _isLocaleAvailable(String locale) async {
+    try {
+      final result = await _tts.isLanguageAvailable(locale);
+      if (result is bool) return result;
+      if (result is int) return result > 0;
+    } catch (_) {}
+    return false;
+  }
+
+  Future<String?> _resolveAvailableLocale(String locale) async {
+    final seen = <String>{};
+    for (final candidate in _languageCandidates(locale)) {
+      if (!seen.add(candidate)) continue;
+      if (await _isLocaleAvailable(candidate)) return candidate;
+    }
+    return null;
+  }
+
+  Future<bool> _ensureVoiceForLocale(String locale) async {
+    if (_availableVoices.isEmpty) {
+      try {
+        await _loadVoices();
+      } catch (_) {}
+    }
+
+    final prefix = _localePrefix(locale);
+    final resolved = await _resolveAvailableLocale(locale) ?? locale;
+
+    Map<String, String>? best;
+    for (final voice in _availableVoices) {
+      if (!_voiceMatchesPrefix(voice, prefix)) continue;
+      best = voice;
+      final voiceLocale = (voice['locale'] ?? '').toLowerCase();
+      if (voiceLocale == resolved.toLowerCase() ||
+          voiceLocale.startsWith('$prefix-') ||
+          voiceLocale.startsWith('${prefix}_')) {
+        break;
+      }
+    }
+
+    if (best != null) {
+      _selectedVoice = best;
+      await _tts.setVoice({
+        'name': best['name']!,
+        'locale': best['locale']!,
+      });
+      try {
+        await _tts.setLanguage(best['locale']!);
+      } catch (_) {}
+      return true;
+    }
+
+    _selectedVoice = null;
+    for (final candidate in _languageCandidates(locale)) {
+      try {
+        if (!await _isLocaleAvailable(candidate)) continue;
+        final ok = await _tts.setLanguage(candidate);
+        if (_speakSucceeded(ok)) return true;
+      } catch (_) {}
+    }
+
+    debugPrint('TtsService: no installed voice/language for $locale');
+    return false;
+  }
+
+  Future<void> _applyVoiceOrLocale(String locale) async {
+    await _ensureVoiceForLocale(locale);
   }
 
   /// Short spoken feedback (assistant, navigation, chat) — no mini player.
@@ -666,11 +816,15 @@ class TtsService extends ChangeNotifier {
     }
 
     _briefSpeaking = true;
-    await _applyVoiceOrLocale(locale);
+    final textLocale = DocumentLanguageService.detectTtsLocale(
+      trimmed,
+      fallbackLanguage: DocumentLanguageService.languageNameFromTtsLocale(locale),
+    );
+    await _ensureVoiceForLocale(textLocale);
     await _tts.setSpeechRate(0.55);
     await _tts.setPitch(1.0);
     await _tts.setVolume(1.0);
-    await _tts.speak(trimmed);
+    await _tts.speak(trimmed, focus: false);
   }
 
   Future<void> play(String t, String c, String locale) async {
@@ -723,9 +877,14 @@ class TtsService extends ChangeNotifier {
     } else {
       await _applyReadAloudVolume();
     }
-    final started = await _beginSpeakingAt(0, locale);
+    var started = await _beginSpeakingAt(0, locale);
+    if (!started) {
+      await _ensureVoiceForLocale(locale);
+      started = await _beginSpeakingAt(0, locale);
+    }
     if (started) {
       isPlaying = true;
+      userPaused = false;
       MicCoordinator.instance.setTtsPlaybackActive(true);
       _reanchorPlayback(0);
       _startHighlightTimer();
@@ -736,7 +895,9 @@ class TtsService extends ChangeNotifier {
       });
     } else {
       isPlaying = false;
+      userPaused = false;
       notifyListeners();
+      debugPrint('TtsService: failed to start reading for locale $locale');
     }
   }
 
@@ -778,6 +939,8 @@ class TtsService extends ChangeNotifier {
 
   Future<void> resumeReading(String locale) async {
     if (!isReadingSession || !userPaused || isPlaying) return;
+
+    await MicCoordinator.instance.reclaimMicForReadAloudPlayback();
 
     // Release mic + voice-communication audio BEFORE flipping state.
     await ReadAloudVoiceService.instance.suspendForTts();
@@ -870,6 +1033,29 @@ class TtsService extends ChangeNotifier {
     await seekBackward(seconds, locale);
   }
 
+  /// Jump to the next or previous sentence (delta +1 / −1).
+  Future<void> skipToAdjacentSentence(int delta, String locale) async {
+    final text = content;
+    if (text == null || !isReadingSession || delta == 0) return;
+    if (_sentenceSpans.isEmpty) _parseSentenceSpans(text);
+    if (_sentenceSpans.isEmpty) return;
+
+    final currentIdx = _sentenceIndexForCharPos(_displayCharPos);
+    final targetIdx = (currentIdx + delta).clamp(0, _sentenceSpans.length - 1);
+    if (targetIdx == currentIdx) return;
+
+    final newOffset = _sentenceSpans[targetIdx].start;
+    _activeSentenceIndex = targetIdx;
+
+    if (userPaused && !isPlaying) {
+      _applySeekPosition(newOffset);
+      notifyListeners();
+      return;
+    }
+
+    await _resumeSpeakingFromOffset(newOffset, locale);
+  }
+
   /// Move read position forward while paused (no auto-play).
   Future<void> nudgeForward(int seconds, String locale) async {
     final text = content;
@@ -945,7 +1131,6 @@ class TtsService extends ChangeNotifier {
     final charsToSkip = (speechRate * 13 * seconds).round();
     int newOffset = (_displayCharPos + charsToSkip).clamp(0, text.length);
     if (newOffset >= text.length) {
-      newOffset = text.length;
       _applySeekPosition(newOffset.clamp(0, text.length - 1));
       notifyListeners();
       return;
@@ -961,31 +1146,7 @@ class TtsService extends ChangeNotifier {
       return;
     }
 
-    await ReadAloudVoiceService.instance.suspendForTts();
-    await ReadingAudioSession.deactivate();
-    await _haltTtsEngine();
-    userPaused = false;
-    _currentCharOffset = newOffset;
-    _segmentBaseOffset = newOffset;
-    _lastEngineCharPos = newOffset;
-    _reanchorPlayback(newOffset);
-    _updateSentenceBounds(newOffset);
-    await MicCoordinator.instance.prepareForTtsPlayback(stopReadingVoice: true);
-    await _applyVoiceOrLocale(locale);
-    await _tts.setSpeechRate(speechRate);
-    final started = await _beginSpeakingAt(newOffset, locale);
-    if (started) {
-      isPlaying = true;
-      userPaused = false;
-      MicCoordinator.instance.setTtsPlaybackActive(true);
-      _startHighlightTimer();
-      unawaited(_attachVoiceAfterTtsStart());
-    } else {
-      isPlaying = false;
-      userPaused = true;
-      unawaited(ReadAloudVoiceService.instance.resumeAfterTts());
-    }
-    notifyListeners();
+    await _resumeSpeakingFromOffset(newOffset, locale);
   }
 
   /// Seek backward by [seconds].
@@ -995,7 +1156,6 @@ class TtsService extends ChangeNotifier {
     final charsToSkip = (speechRate * 13 * seconds).round();
     int newOffset = (_displayCharPos - charsToSkip).clamp(0, text.length);
     if (newOffset <= 0) {
-      newOffset = 0;
       _applySeekPosition(0);
       notifyListeners();
       return;
@@ -1003,6 +1163,14 @@ class TtsService extends ChangeNotifier {
     while (newOffset > 0 && text[newOffset] != ' ') {
       newOffset--;
     }
+    newOffset = newOffset.clamp(0, text.length);
+
+    await _resumeSpeakingFromOffset(newOffset, locale);
+  }
+
+  Future<void> _resumeSpeakingFromOffset(int newOffset, String locale) async {
+    final text = content;
+    if (text == null || !isReadingSession) return;
     newOffset = newOffset.clamp(0, text.length);
 
     await ReadAloudVoiceService.instance.suspendForTts();

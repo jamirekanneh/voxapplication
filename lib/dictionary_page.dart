@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
@@ -10,48 +11,74 @@ import 'analytics_service.dart';
 import 'theme_provider.dart';
 import 'services/mic_coordinator.dart';
 import 'services/app_speech_service.dart';
+import 'services/dictionary_search_history_service.dart';
 
-// â”€â”€ API language codes for dictionaryapi.dev â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-const Map<String, String?> _apiLangCode = {
+// Wiktionary-backed language codes (freedictionaryapi.com).
+const Map<String, String> _apiLangCode = {
   'English': 'en',
   'Spanish': 'es',
   'French': 'fr',
   'Arabic': 'ar',
   'Turkish': 'tr',
-  'Chinese': null,
+  'Chinese': 'zh',
 };
 
-// MW Medical API key â€” get free from dictionaryapi.com
-const String _mwMedicalKey = 'YOUR_MW_MEDICAL_API_KEY';
+String _normalizeSearchWord(String input, String langCode) {
+  final trimmed = input.trim();
+  if (trimmed.isEmpty) return '';
+  const lowerLangs = {'en', 'es', 'fr', 'tr'};
+  if (lowerLangs.contains(langCode)) return trimmed.toLowerCase();
+  return trimmed;
+}
 
-// â”€â”€ Source label shown on result card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-enum _ResultSource { general, medical, cs, notFound }
+// Merriam-Webster keys — register each reference at dictionaryapi.com.
+const String _mwMedicalKey = '28965174-d50d-4d58-82fa-0ce787de8209';
+const String _mwCollegiateKey = 'd315ee28-5f96-4830-b598-c387d1354bf1';
+const String _mwLegalKey = ''; // Register Legal at dictionaryapi.com, then paste key here
+
+enum _ResultSource { general, medical, legal, cs }
 
 extension _SourceInfo on _ResultSource {
-  String get label {
+  String labelKey() {
     switch (this) {
       case _ResultSource.general:
-        return 'General';
+        return 'dictionary_source_general';
       case _ResultSource.medical:
-        return 'Medical';
+        return 'dictionary_source_medical';
+      case _ResultSource.legal:
+        return 'dictionary_source_legal';
       case _ResultSource.cs:
-        return 'Technical';
-      case _ResultSource.notFound:
-        return '';
+        return 'dictionary_source_technical';
     }
   }
 
-  String get emoji {
+  IconData get icon {
     switch (this) {
       case _ResultSource.general:
-        return 'ðŸŒ';
+        return Icons.public_rounded;
       case _ResultSource.medical:
-        return 'ðŸ¥';
+        return Icons.medical_services_outlined;
+      case _ResultSource.legal:
+        return Icons.gavel_rounded;
       case _ResultSource.cs:
-        return 'ðŸ’»';
-      case _ResultSource.notFound:
-        return '';
+        return Icons.computer_rounded;
     }
+  }
+
+}
+
+_ResultSource? _resultSourceFromKey(String? key) {
+  switch (key) {
+    case 'general':
+      return _ResultSource.general;
+    case 'medical':
+      return _ResultSource.medical;
+    case 'legal':
+      return _ResultSource.legal;
+    case 'cs':
+      return _ResultSource.cs;
+    default:
+      return null;
   }
 }
 
@@ -70,7 +97,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
   final FocusNode _focusNode = FocusNode();
 
   Map<String, dynamic>? _result;
-  _ResultSource _resultSource = _ResultSource.general;
+  final Set<_ResultSource> _activeSources = {};
+  List<DictionarySearchEntry> _recentSearches = [];
   String? _error;
   bool _loading = false;
   bool _isPlaying = false;
@@ -90,10 +118,17 @@ class _DictionaryPageState extends State<DictionaryPage> {
   void initState() {
     super.initState();
     MicCoordinator.instance.registerReleaseHandler(_releaseDictionaryMic);
+    unawaited(_loadRecentSearches());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       MicCoordinator.instance.syncRouteIfCurrent(context, '/dictionary');
     });
+  }
+
+  Future<void> _loadRecentSearches() async {
+    final recent = await DictionarySearchHistoryService.instance.loadRecent();
+    if (!mounted) return;
+    setState(() => _recentSearches = recent);
   }
 
   @override
@@ -109,8 +144,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
     _searchController.text = query;
     final lang = context.read<LanguageProvider>();
-    final langCode = _apiLangCode[lang.selectedLanguage];
-    if (langCode == null) return;
+    final langCode = _apiLangCode[lang.selectedLanguage] ?? 'en';
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _search(langCode);
     });
@@ -132,10 +166,10 @@ class _DictionaryPageState extends State<DictionaryPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  VOICE SEARCH
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<void> _startVoiceSearch(String? langCode) async {
+  Future<void> _startVoiceSearch(String langCode) async {
     if (_isListening) {
       await _releaseDictionaryMic();
-      final word = _searchController.text.trim();
+      final word = _normalizeSearchWord(_searchController.text, langCode);
       if (word.isNotEmpty) _search(langCode);
       return;
     }
@@ -248,8 +282,8 @@ class _DictionaryPageState extends State<DictionaryPage> {
   //  3. If general returns nothing / weak â†’ prefer medical if it found it
   //  4. If both fail â†’ show error with suggestions
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<void> _search(String? langCode) async {
-    final word = _searchController.text.trim().toLowerCase();
+  Future<void> _search(String langCode) async {
+    final word = _normalizeSearchWord(_searchController.text, langCode);
     if (word.isEmpty) return;
 
     if (word.length > 60 ||
@@ -266,29 +300,37 @@ class _DictionaryPageState extends State<DictionaryPage> {
       _error = null;
       _result = null;
       _audioUrl = null;
+      _activeSources.clear();
     });
     _focusNode.unfocus();
 
     try {
-      // â”€â”€ Fire both lookups simultaneously â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      final code = langCode;
+      final isEnglish = code == 'en';
       final futures = await Future.wait([
-        _fetchGeneral(word, langCode ?? 'en'),
-        _fetchMedical(word),
-        _fetchCS(word),
+        _fetchGeneral(word, code),
+        isEnglish ? _fetchCollegiate(word) : Future<Map<String, dynamic>?>.value(null),
+        isEnglish ? _fetchMedical(word) : Future<Map<String, dynamic>?>.value(null),
+        isEnglish ? _fetchLegal(word) : Future<Map<String, dynamic>?>.value(null),
+        _fetchCS(word, code),
       ]);
 
       final generalResult = futures[0];
-      final medicalResult = futures[1];
-      final csResult = futures[2];
+      final collegiateResult = futures[1];
+      final medicalResult = futures[2];
+      final legalResult = futures[3];
+      final csResult = futures[4];
 
       final List<Map<String, dynamic>> aggregatedMeanings = [];
+      final activeSources = <_ResultSource>{};
       String wordTitle = word;
       String phoneticToUse = '';
       String originToUse = '';
       final List<dynamic> phoneticsToUse = [];
 
-      void processResult(Map<String, dynamic>? res) {
+      void processResult(Map<String, dynamic>? res, _ResultSource source) {
         if (res == null) return;
+        activeSources.add(source);
 
         wordTitle = res['word'] ?? wordTitle;
         if (phoneticToUse.isEmpty) phoneticToUse = res['phonetic'] ?? '';
@@ -298,105 +340,24 @@ class _DictionaryPageState extends State<DictionaryPage> {
           phoneticsToUse.addAll(res['phonetics'] as List<dynamic>);
         }
 
-        final meaningsList = (res['meanings'] as List<dynamic>? ?? []).map(
-          (m) => m as Map<String, dynamic>,
-        );
-        aggregatedMeanings.addAll(meaningsList);
+        for (final m in (res['meanings'] as List<dynamic>? ?? [])) {
+          final map = Map<String, dynamic>.from(m as Map<String, dynamic>);
+          map['_source'] = source.name;
+          aggregatedMeanings.add(map);
+        }
       }
 
-      processResult(generalResult);
-      processResult(medicalResult);
-      processResult(csResult);
-
-      _ResultSource determinePrimarySource() {
-        if (medicalResult != null) return _ResultSource.medical;
-
-        int medicalScore = 0;
-        int techScore = 0;
-
-        final techKeywords = [
-          'computer',
-          'software',
-          'programming',
-          'algorithm',
-          'network',
-          'computing',
-          'data structure',
-          'code ',
-          'developer',
-          'hardware',
-          'app ',
-          'internet',
-          'technology',
-        ];
-        final medKeywords = [
-          'medical',
-          'disease',
-          'anatomy',
-          'blood',
-          'heart',
-          'organ ',
-          'virus',
-          'infection',
-          'syndrome',
-          'clinical',
-          'hospital',
-          'surgery',
-          'patient',
-          'treatment',
-          'drug',
-          'medicine',
-          'illness',
-          'muscle',
-        ];
-
-        final textToScan = aggregatedMeanings.toString().toLowerCase();
-        for (var kw in techKeywords) {
-          if (textToScan.contains(kw)) techScore += 2;
-        }
-        for (var kw in medKeywords) {
-          if (textToScan.contains(kw)) medicalScore += 2;
-        }
-
-        final w = word.toLowerCase();
-        if ([
-          'python',
-          'java',
-          'html',
-          'css',
-          'react',
-          'flutter',
-          'dart',
-          'api',
-          'computer',
-          'structure',
-        ].contains(w)) {
-          techScore += 10;
-        }
-        if ([
-          'heart',
-          'brain',
-          'liver',
-          'cancer',
-          'flu',
-          'covid',
-          'ill',
-          'sick',
-          'pain',
-        ].contains(w)) {
-          medicalScore += 10;
-        }
-
-        if (techScore > 0 && techScore > medicalScore) return _ResultSource.cs;
-        if (medicalScore > 0 && medicalScore > techScore) {
-          return _ResultSource.medical;
-        }
-        return _ResultSource.general;
-      }
+      processResult(generalResult, _ResultSource.general);
+      processResult(collegiateResult, _ResultSource.general);
+      processResult(medicalResult, _ResultSource.medical);
+      processResult(legalResult, _ResultSource.legal);
+      processResult(csResult, _ResultSource.cs);
 
       if (aggregatedMeanings.isNotEmpty) {
         setState(() {
-          _resultSource = determinePrimarySource();
+          _activeSources
+            ..clear()
+            ..addAll(activeSources);
           _result = {
             'word': wordTitle,
             'phonetic': phoneticToUse,
@@ -406,13 +367,21 @@ class _DictionaryPageState extends State<DictionaryPage> {
           };
         });
 
-        // Track dictionary lookup
         AnalyticsService.instance.recordDictionaryLookup(word);
+        await DictionarySearchHistoryService.instance.recordSearch(
+          word: word,
+          langCode: code,
+        );
+        await _loadRecentSearches();
 
         if (generalResult != null) {
           _extractAudio(generalResult);
+        } else if (collegiateResult != null) {
+          _extractAudio(collegiateResult);
         } else if (medicalResult != null) {
           _extractAudio(medicalResult);
+        } else if (legalResult != null) {
+          _extractAudio(legalResult);
         } else if (csResult != null) {
           _extractAudio(csResult);
         }
@@ -429,7 +398,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
   }
 
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  //  FETCH â€” General (dictionaryapi.dev)
+  //  FETCH — General (Wiktionary via freedictionaryapi.com)
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<Map<String, dynamic>?> _fetchGeneral(
     String word,
@@ -437,31 +406,141 @@ class _DictionaryPageState extends State<DictionaryPage> {
   ) async {
     try {
       final uri = Uri.parse(
-        'https://api.dictionaryapi.dev/api/v2/entries/$langCode/${Uri.encodeComponent(word)}',
+        'https://freedictionaryapi.com/api/v1/entries/$langCode/${Uri.encodeComponent(word)}',
       );
-      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      final response = await http.get(uri).timeout(const Duration(seconds: 12));
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
-        if (data.isNotEmpty) return data[0] as Map<String, dynamic>;
+        final data = jsonDecode(response.body) as Map<String, dynamic>;
+        return _parseFreeDictionaryApi(data, word, langCode);
       }
     } catch (_) {}
     return null;
   }
 
+  Map<String, dynamic>? _parseFreeDictionaryApi(
+    Map<String, dynamic> data,
+    String fallbackWord,
+    String langCode,
+  ) {
+    final entries = data['entries'] as List<dynamic>? ?? [];
+    if (entries.isEmpty) return null;
+
+    final word = (data['word'] as String?)?.trim();
+    final title = (word != null && word.isNotEmpty) ? word : fallbackWord;
+
+    String? languageName;
+    String phonetic = '';
+    final phonetics = <Map<String, dynamic>>[];
+    final meanings = <Map<String, dynamic>>[];
+
+    for (final raw in entries) {
+      if (raw is! Map<String, dynamic>) continue;
+      languageName ??= (raw['language'] as Map?)?['name'] as String?;
+
+      if (phonetic.isEmpty) {
+        for (final p in (raw['pronunciations'] as List<dynamic>? ?? [])) {
+          if (p is! Map<String, dynamic>) continue;
+          final text = (p['text'] as String?)?.trim() ?? '';
+          if (text.isEmpty) continue;
+          phonetic = text;
+          phonetics.add({'text': text, 'audio': ''});
+          break;
+        }
+      }
+
+      final part = (raw['partOfSpeech'] as String?)?.trim() ?? 'definition';
+      final definitions = <Map<String, dynamic>>[];
+      for (final sense in (raw['senses'] as List<dynamic>? ?? [])) {
+        if (sense is! Map<String, dynamic>) continue;
+        final def = (sense['definition'] as String?)?.trim() ?? '';
+        if (def.isEmpty) continue;
+        final examples = sense['examples'] as List<dynamic>? ?? [];
+        final example =
+            examples.isNotEmpty ? (examples.first as String?)?.trim() : null;
+        definitions.add({
+          'definition': def,
+          if (example != null && example.isNotEmpty) 'example': example,
+        });
+      }
+
+      if (definitions.isEmpty) continue;
+
+      meanings.add({
+        'partOfSpeech': part,
+        'definitions': definitions,
+        'synonyms': (raw['synonyms'] as List<dynamic>? ?? [])
+            .whereType<String>()
+            .toList(),
+        'antonyms': (raw['antonyms'] as List<dynamic>? ?? [])
+            .whereType<String>()
+            .toList(),
+      });
+    }
+
+    if (meanings.isEmpty) return null;
+
+    final langLabel = languageName ?? langCode.toUpperCase();
+    return {
+      'word': title,
+      'phonetic': phonetic,
+      'phonetics': phonetics,
+      'origin': 'Wiktionary ($langLabel)',
+      'meanings': meanings,
+    };
+  }
+
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  FETCH â€” Merriam-Webster Medical
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  Future<Map<String, dynamic>?> _fetchCollegiate(String word) async {
+    return _fetchMerriamWebsterReference(
+      word: word,
+      reference: 'collegiate',
+      apiKey: _mwCollegiateKey,
+      originLabel: 'Merriam-Webster Collegiate',
+    );
+  }
+
   Future<Map<String, dynamic>?> _fetchMedical(String word) async {
-    if (_mwMedicalKey == 'YOUR_MW_MEDICAL_API_KEY') return null;
+    return _fetchMerriamWebsterReference(
+      word: word,
+      reference: 'medical',
+      apiKey: _mwMedicalKey,
+      originLabel: 'Merriam-Webster Medical',
+    );
+  }
+
+  /// Legal requires its own key at dictionaryapi.com (collegiate key does not work).
+  Future<Map<String, dynamic>?> _fetchLegal(String word) async {
+    return _fetchMerriamWebsterReference(
+      word: word,
+      reference: 'legal',
+      apiKey: _mwLegalKey,
+      originLabel: 'Merriam-Webster Legal',
+    );
+  }
+
+  Future<Map<String, dynamic>?> _fetchMerriamWebsterReference({
+    required String word,
+    required String reference,
+    required String apiKey,
+    required String originLabel,
+  }) async {
+    if (apiKey.isEmpty) return null;
     try {
       final uri = Uri.parse(
-        'https://www.dictionaryapi.com/api/v3/references/medical/json/${Uri.encodeComponent(word)}?key=$_mwMedicalKey',
+        'https://www.dictionaryapi.com/api/v3/references/$reference/json/${Uri.encodeComponent(word)}?key=$apiKey',
       );
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         if (data is List && data.isNotEmpty && data[0] is Map) {
-          return _parseMerriamWebster(data[0] as Map<String, dynamic>, word);
+          final parsed =
+              _parseMerriamWebster(data[0] as Map<String, dynamic>, word);
+          if ((parsed['origin'] as String? ?? '').isEmpty) {
+            parsed['origin'] = originLabel;
+          }
+          return parsed;
         }
       }
     } catch (_) {}
@@ -471,10 +550,11 @@ class _DictionaryPageState extends State<DictionaryPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  FETCH â€” Technical (Wikipedia)
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-  Future<Map<String, dynamic>?> _fetchCS(String word) async {
+  Future<Map<String, dynamic>?> _fetchCS(String word, String langCode) async {
     try {
+      final wikiLang = langCode == 'zh' ? 'zh' : langCode;
       final uri = Uri.parse(
-        'https://en.wikipedia.org/api/rest_v1/page/summary/${Uri.encodeComponent(word)}',
+        'https://$wikiLang.wikipedia.org/api/rest_v1/page/summary/${Uri.encodeComponent(word)}',
       );
       final response = await http.get(uri).timeout(const Duration(seconds: 10));
       if (response.statusCode == 200) {
@@ -485,7 +565,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
             'word': data['title'] ?? word,
             'phonetic': '',
             'phonetics': [],
-            'origin': 'Wikipedia Encyclopedia',
+            'origin': 'Wikipedia (${wikiLang.toUpperCase()})',
             'meanings': [
               {
                 'partOfSpeech': 'concept (technical)',
@@ -651,6 +731,92 @@ class _DictionaryPageState extends State<DictionaryPage> {
     return syns.take(8).toList();
   }
 
+  Widget _sourceChip(_ResultSource source, LanguageProvider lang) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: const Color(0xFF4B9EFF).withValues(alpha: 0.2),
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(source.icon, size: 12, color: const Color(0xFF4B9EFF)),
+          const SizedBox(width: 4),
+          Text(
+            lang.t(source.labelKey()),
+            style: const TextStyle(
+              color: Color(0xFF4B9EFF),
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildRecentSearches(LanguageProvider lang, String langCode) {
+    if (_recentSearches.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final forLang = _recentSearches
+        .where((e) => e.langCode == langCode)
+        .take(12)
+        .toList();
+    if (forLang.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            lang.t('dictionary_recent_searches'),
+            style: TextStyle(
+              color: VoxColors.textSecondary(context),
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: forLang.map((entry) {
+              return GestureDetector(
+                onTap: () {
+                  _searchController.text = entry.word;
+                  _search(langCode);
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: VoxColors.cardFill(context),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: VoxColors.border(context)),
+                  ),
+                  child: Text(
+                    entry.word,
+                    style: TextStyle(
+                      color: VoxColors.onBg(context),
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
   List<String> _getAntonyms() {
     final ants = <String>{};
     for (final m in _meanings) {
@@ -672,8 +838,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
   @override
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
-    final langCode = _apiLangCode[lang.selectedLanguage];
-    final unsupported = langCode == null;
+    final langCode = _apiLangCode[lang.selectedLanguage] ?? 'en';
 
     return Scaffold(
       backgroundColor: VoxColors.bg(context),
@@ -751,12 +916,10 @@ class _DictionaryPageState extends State<DictionaryPage> {
                     focusNode: _focusNode,
                     maxLength: 60,
                     textInputAction: TextInputAction.search,
-                    onSubmitted: unsupported ? null : (_) => _search(langCode),
+                    onSubmitted: (_) => _search(langCode),
                     decoration: InputDecoration(
                       hintText: _isListening
                           ? lang.t('search_voice_listening')
-                          : unsupported
-                          ? lang.t('dictionary_not_available_chinese')
                           : lang.t('dictionary_search_hint'),
                       counterText: '',
                       prefixIcon: Icon(Icons.search, size: 20, color: VoxColors.textHint(context)),
@@ -775,15 +938,13 @@ class _DictionaryPageState extends State<DictionaryPage> {
                         borderSide: BorderSide(color: VoxColors.border(context)),
                       ),
                     ),
-                    enabled: !unsupported,
                   ),
                 ),
                 const SizedBox(width: 8),
 
                 // Mic button
-                if (!unsupported)
-                  GestureDetector(
-                    onTap: () => _startVoiceSearch(langCode),
+                GestureDetector(
+                  onTap: () => _startVoiceSearch(langCode),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
                       width: 48,
@@ -808,15 +969,15 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
                 // Search button
                 GestureDetector(
-                  onTap: unsupported ? null : () => _search(langCode),
+                  onTap: () => _search(langCode),
                   child: AnimatedContainer(
                     duration: const Duration(milliseconds: 150),
                     width: 48,
                     height: 48,
                     decoration: BoxDecoration(
-                      color: unsupported ? VoxColors.border(context) : VoxColors.primary(context),
+                      color: VoxColors.primary(context),
                       borderRadius: BorderRadius.circular(14),
-                      boxShadow: unsupported ? [] : [
+                      boxShadow: [
                         BoxShadow(color: VoxColors.primary(context).withValues(alpha: 0.3), blurRadius: 8)
                       ],
                     ),
@@ -841,39 +1002,10 @@ class _DictionaryPageState extends State<DictionaryPage> {
 
           const SizedBox(height: 10),
 
+          _buildRecentSearches(lang, langCode),
+
           // â”€â”€ Body â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-          if (unsupported)
-            Expanded(
-              child: Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(32),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Text('ðŸˆš', style: TextStyle(fontSize: 48)),
-                      const SizedBox(height: 16),
-                      Text(
-                        lang.t('dictionary_chinese_unavailable_title'),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Color(0xDD0A0E1A),
-                          height: 1.4,
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Text(
-                        lang.t('dictionary_chinese_unavailable_body'),
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey[600], fontSize: 13),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            )
-          else if (_error != null)
+          if (_error != null)
             Expanded(
               child: Center(
                 child: Padding(
@@ -999,25 +1131,12 @@ class _DictionaryPageState extends State<DictionaryPage> {
                                       ),
                                     ),
                                     const SizedBox(height: 6),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(
-                                        horizontal: 8,
-                                        vertical: 4,
-                                      ),
-                                      decoration: BoxDecoration(
-                                        color: const Color(
-                                          0xFF4B9EFF,
-                                        ).withValues(alpha: 0.2),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: Text(
-                                        '${_resultSource.emoji} ${_resultSource.label} Dictionary',
-                                        style: TextStyle(
-                                          color: Color(0xFF4B9EFF),
-                                          fontSize: 10,
-                                          fontWeight: FontWeight.w700,
-                                        ),
-                                      ),
+                                    Wrap(
+                                      spacing: 6,
+                                      runSpacing: 6,
+                                      children: _activeSources
+                                          .map((s) => _sourceChip(s, lang))
+                                          .toList(),
                                     ),
                                   ],
                                 ),
@@ -1079,17 +1198,22 @@ class _DictionaryPageState extends State<DictionaryPage> {
                     // â”€â”€ Meanings â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
                     ..._meanings.map((meaning) {
                       final pos = meaning['partOfSpeech'] as String? ?? '';
+                      final source =
+                          _resultSourceFromKey(meaning['_source'] as String?);
                       final defs =
                           (meaning['definitions'] as List<dynamic>? ?? [])
                               .take(3)
                               .toList();
+                      final label = pos.isNotEmpty
+                          ? pos.toUpperCase()
+                          : 'DEFINITION';
                       return Padding(
                         padding: const EdgeInsets.only(bottom: 10),
                         child: _sectionCard(
-                          icon: _posIcon(pos),
-                          label: pos.isNotEmpty
-                              ? pos.toUpperCase()
-                              : 'DEFINITION',
+                          icon: source?.icon ?? _posIcon(pos),
+                          label: _activeSources.length > 1 && source != null
+                              ? '$label · ${lang.t(source.labelKey())}'
+                              : label,
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: defs.asMap().entries.map((entry) {
@@ -1240,7 +1364,7 @@ class _DictionaryPageState extends State<DictionaryPage> {
       ),
 
       bottomNavigationBar: BottomAppBar(
-        color: Color(0xFF141A29),
+        color: VoxColors.bottomBar(context),
         shape: const CircularNotchedRectangle(),
         child: SizedBox(
           height: 65,
@@ -1250,21 +1374,25 @@ class _DictionaryPageState extends State<DictionaryPage> {
               _navItem(
                 Icons.home,
                 lang.t('nav_home'),
-                Colors.grey[400]!,
+                VoxColors.textSecondary(context),
                 onTap: () => Navigator.pushReplacementNamed(context, '/home'),
               ),
               _navItem(
                 Icons.note_alt_outlined,
                 lang.t('nav_notes'),
-                Colors.grey[400]!,
+                VoxColors.textSecondary(context),
                 onTap: () => Navigator.pushReplacementNamed(context, '/notes'),
               ),
               const SizedBox(width: 48),
-              _navItem(Icons.book, lang.t('nav_dictionary'), Colors.white),
+              _navItem(
+                Icons.book,
+                lang.t('nav_dictionary'),
+                VoxColors.onSurface(context),
+              ),
               _navItem(
                 Icons.menu,
                 lang.t('nav_menu'),
-                Colors.grey[400]!,
+                VoxColors.textSecondary(context),
                 onTap: () => Navigator.pushReplacementNamed(context, '/menu'),
               ),
             ],
@@ -1273,9 +1401,12 @@ class _DictionaryPageState extends State<DictionaryPage> {
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       floatingActionButton: FloatingActionButton(
-        backgroundColor: Color(0xFF0A0E1A),
+        backgroundColor: VoxColors.fabBackground(context),
         onPressed: () => Navigator.pushNamed(context, '/upload'),
-        child: const Icon(Icons.file_upload_outlined, color: Colors.white),
+        child: Icon(
+          Icons.file_upload_outlined,
+          color: VoxColors.onPrimary(context),
+        ),
       ),
     );
   }

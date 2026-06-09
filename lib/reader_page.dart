@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'tts_service.dart';
@@ -9,18 +11,31 @@ import 'pdf_service.dart';
 import 'document_chat_buddy_sheet.dart';
 import 'services/mic_coordinator.dart';
 import 'services/app_route_observer.dart';
+import 'services/library_highlight_service.dart';
+import 'services/document_language_service.dart';
 import 'services/reading_voice_commands.dart';
+import 'theme_provider.dart';
 
 class ReaderPage extends StatefulWidget {
   final String title;
   final String content;
   final String locale;
+  final String? libraryDocId;
+  final bool guestLibrary;
+  final int? savedHighlightStart;
+  final int? savedHighlightEnd;
+  final List<HighlightRange> savedHighlights;
 
   const ReaderPage({
     super.key,
     required this.title,
     required this.content,
     required this.locale,
+    this.libraryDocId,
+    this.guestLibrary = false,
+    this.savedHighlightStart,
+    this.savedHighlightEnd,
+    this.savedHighlights = const [],
   });
 
   @override
@@ -32,10 +47,11 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
 
   bool _showSpeedPanel = false;
   bool _autoSpeed = false;
-  // Pinned highlight — set when user says "highlight text"
-  bool _hasPinnedHighlight = false;
-  int _pinnedStart = 0;
-  int _pinnedEnd = 0;
+  late String _readingLocale;
+  // Pinned highlights — voice "highlight" pins sentences in red (saved to library).
+  List<HighlightRange> _pinnedHighlights = [];
+
+  static const Color _pinnedHighlightColor = Color(0xFFE53935);
 
   static const List<double> _speedPresets = [
     0.4,
@@ -50,6 +66,11 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
   @override
   void initState() {
     super.initState();
+    _readingLocale = DocumentLanguageService.detectTtsLocale(
+      widget.content,
+      fallbackLanguage:
+          DocumentLanguageService.languageNameFromTtsLocale(widget.locale),
+    );
     MicCoordinator.instance.setReaderVoiceActive(true);
     ReadingVoiceCommands.onHighlightSentence = _pinCurrentSentence;
 
@@ -61,8 +82,34 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
         .trim();
     final finalContent = cleaned.isEmpty ? widget.content : cleaned;
 
-    if (!tts.isPlaying || tts.title != widget.title) {
-      tts.play(widget.title, finalContent, widget.locale);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final ttsNow = context.read<TtsService>();
+      if (ttsNow.isPlaying &&
+          ttsNow.title == widget.title &&
+          ttsNow.content == finalContent) {
+        return;
+      }
+      await ttsNow.play(widget.title, finalContent, _readingLocale);
+    });
+
+    _pinnedHighlights = List<HighlightRange>.from(widget.savedHighlights);
+    final savedStart = widget.savedHighlightStart;
+    final savedEnd = widget.savedHighlightEnd;
+    if (savedStart != null &&
+        savedEnd != null &&
+        savedEnd > savedStart &&
+        savedEnd <= finalContent.length) {
+      final legacy = HighlightRange(savedStart, savedEnd);
+      if (!_pinnedHighlights.contains(legacy)) {
+        _pinnedHighlights = [..._pinnedHighlights, legacy];
+      }
+    }
+    _pinnedHighlights.sort((a, b) => a.start.compareTo(b.start));
+    if (_pinnedHighlights.isNotEmpty) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _scrollToHighlight();
+      });
     }
 
     // Listener for auto-scrolling
@@ -74,12 +121,34 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
 
   void _pinCurrentSentence(TtsService tts) {
     if (!mounted) return;
+    final span = tts.sentenceSpanForVoiceHighlight();
+    if (span == null || span.end <= span.start) return;
+
+    final range = HighlightRange(span.start, span.end);
+    if (_pinnedHighlights.contains(range)) {
+      _scrollToHighlight();
+      return;
+    }
+
     setState(() {
-      _hasPinnedHighlight = true;
-      _pinnedStart = tts.sentenceStart;
-      _pinnedEnd = tts.sentenceEnd;
+      _pinnedHighlights = [..._pinnedHighlights, range]
+        ..sort((a, b) => a.start.compareTo(b.start));
     });
     _scrollToHighlight();
+
+    if (widget.libraryDocId != null) {
+      unawaited(
+        LibraryHighlightService.addHighlight(
+          context: context,
+          fileName: widget.title,
+          start: range.start,
+          end: range.end,
+          libraryDocId: widget.libraryDocId,
+          guestLibrary: widget.guestLibrary,
+          existing: _pinnedHighlights,
+        ),
+      );
+    }
   }
 
   @override
@@ -141,11 +210,13 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
   void _scrollToHighlight() {
     if (!_scrollController.hasClients) return;
     final tts = context.read<TtsService>();
-    final text = widget.content;
+    final text = tts.content ?? widget.content;
     if (text.isEmpty) return;
 
-    // Estimate position based on character offset
-    final progress = tts.sentenceStart / text.length;
+    final offset = _pinnedHighlights.isNotEmpty
+        ? _pinnedHighlights.last.start
+        : tts.sentenceStart;
+    final progress = offset / text.length;
     final maxScroll = _scrollController.position.maxScrollExtent;
     final target = progress * maxScroll;
 
@@ -159,8 +230,7 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
   // ── Open AI page ──────────────────────────────
   void _openAiPage(String mode) async {
     final tts = context.read<TtsService>();
-    final locale = context.read<LanguageProvider>().ttsLocale;
-    if (tts.isPlaying) tts.togglePause(locale);
+    if (tts.isPlaying) tts.togglePause(_readingLocale);
 
     int cardCount = 10;
     if (mode == 'flashcards') {
@@ -170,6 +240,7 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
     }
 
     if (!mounted) return;
+    final outputLanguage = context.read<LanguageProvider>().selectedLanguage;
     Navigator.push(
       context,
       MaterialPageRoute(
@@ -179,12 +250,14 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
           mode: mode,
           cardCount: cardCount,
           source: 'Home',
+          outputLanguage: outputLanguage,
         ),
       ),
     );
   }
 
   Future<int?> _pickCardCount() async {
+    final lang = context.read<LanguageProvider>();
     int selected = 10;
     return showDialog<int>(
       context: context,
@@ -194,15 +267,15 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
           ),
-          title: const Text(
-            'How many questions?',
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
+          title: Text(
+            lang.t('how_many_questions'),
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17),
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                '$selected cards',
+                lang.tNamed('cards_count', {'count': '$selected'}),
                 style: const TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
@@ -236,9 +309,9 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text(
-                'Cancel',
-                style: TextStyle(color: Color(0x8A0A0E1A)),
+              child: Text(
+                lang.t('cancel'),
+                style: const TextStyle(color: Color(0x8A0A0E1A)),
               ),
             ),
             ElevatedButton(
@@ -250,7 +323,7 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              child: const Text('Generate'),
+              child: Text(lang.t('generate')),
             ),
           ],
         ),
@@ -300,71 +373,111 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
     );
   }
 
-  // ── Highlighted text ──────────────────────────
-  Widget _buildHighlightedText(TtsService tts) {
-    final text = tts.content ?? '';
-    if (text.isEmpty) {
-      return const Text(
-        'No text content available for this file.',
-        style: TextStyle(fontSize: 16, height: 1.8, color: Color(0x8A0A0E1A)),
-      );
+  List<HighlightRange> _mergedPinnedHighlights(String text) {
+    if (_pinnedHighlights.isEmpty) return const [];
+    final sorted = List<HighlightRange>.from(_pinnedHighlights)
+      ..sort((a, b) => a.start.compareTo(b.start));
+    final merged = <HighlightRange>[];
+    for (final raw in sorted) {
+      final start = raw.start.clamp(0, text.length);
+      final end = raw.end.clamp(start, text.length);
+      if (end <= start) continue;
+      final range = HighlightRange(start, end);
+      if (merged.isEmpty) {
+        merged.add(range);
+        continue;
+      }
+      final last = merged.last;
+      if (range.start <= last.end) {
+        merged[merged.length - 1] = HighlightRange(
+          last.start,
+          range.end > last.end ? range.end : last.end,
+        );
+      } else {
+        merged.add(range);
+      }
     }
+    return merged;
+  }
 
-    final liveSStart = tts.sentenceStart.clamp(0, text.length);
-    final liveSEnd = tts.sentenceEnd.clamp(liveSStart, text.length);
-    final sStart = _hasPinnedHighlight
-        ? _pinnedStart.clamp(0, text.length)
-        : liveSStart;
-    final sEnd = _hasPinnedHighlight
-        ? _pinnedEnd.clamp(sStart, text.length)
-        : liveSEnd;
-
-    if (sStart >= sEnd) {
+  // ── Highlighted text (pinned red only — no live TTS tracking) ──
+  Widget _buildHighlightedText() {
+    final text = context.read<TtsService>().content ?? widget.content;
+    if (text.isEmpty) {
       return Text(
-        text,
-        style: const TextStyle(fontSize: 16, height: 1.8, color: Colors.white),
+        'No text content available for this file.',
+        style: TextStyle(
+          fontSize: 16,
+          height: 1.8,
+          color: VoxColors.textSecondary(context),
+        ),
       );
     }
 
     final lang = context.watch<LanguageProvider>();
     final isDyslexic = lang.isDyslexicFontEnabled;
     final isBionic = lang.isBionicReadingEnabled;
+    final textColor = VoxColors.onBg(context);
+    final baseStyle = isDyslexic
+        ? GoogleFonts.lexend(
+            fontSize: 20,
+            height: 1.8,
+            color: textColor,
+            letterSpacing: 1.2,
+          )
+        : TextStyle(
+            fontSize: 20,
+            height: 1.6,
+            color: textColor,
+            letterSpacing: 0.2,
+            fontFamily: 'Inter',
+          );
 
-    return RichText(
-      text: TextSpan(
-        style: isDyslexic
-            ? GoogleFonts.lexend(
-                fontSize: 20,
-                height: 1.8,
-                color: Colors.white,
-                letterSpacing: 1.2,
-              )
-            : const TextStyle(
-                fontSize: 20,
-                height: 1.6,
-                color: Colors.white,
-                letterSpacing: 0.2,
-                fontFamily: 'Inter',
-              ),
-        children: [
-          if (sStart > 0)
-            _processTextSpan(
-              text.substring(0, sStart),
-              isBionic,
-              false,
-              isDyslexic,
-            ),
+    final ranges = _mergedPinnedHighlights(text);
+    if (ranges.isEmpty) {
+      return Text(text, style: baseStyle);
+    }
+
+    final children = <InlineSpan>[];
+    var pos = 0;
+    for (final range in ranges) {
+      if (range.start > pos) {
+        children.add(
           _processTextSpan(
-            text.substring(sStart, sEnd),
+            text.substring(pos, range.start),
+            isBionic,
+            false,
+            isDyslexic,
+            textColor,
+          ),
+        );
+      }
+      if (range.end > range.start) {
+        children.add(
+          _processTextSpan(
+            text.substring(range.start, range.end),
             isBionic,
             true,
             isDyslexic,
+            textColor,
           ),
-          if (sEnd < text.length)
-            _processTextSpan(text.substring(sEnd), isBionic, false, isDyslexic),
-        ],
-      ),
-    );
+        );
+      }
+      pos = range.end;
+    }
+    if (pos < text.length) {
+      children.add(
+        _processTextSpan(
+          text.substring(pos),
+          isBionic,
+          false,
+          isDyslexic,
+          textColor,
+        ),
+      );
+    }
+
+    return RichText(text: TextSpan(style: baseStyle, children: children));
   }
 
   TextSpan _processTextSpan(
@@ -372,18 +485,20 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
     bool isBionic,
     bool isHighlighted,
     bool isDyslexic,
+    Color textColor,
   ) {
+    final secondaryColor = VoxColors.textSecondary(context);
     if (!isBionic) {
       return TextSpan(
         text: text,
         style: isHighlighted
             ? TextStyle(
-                backgroundColor: const Color(0xFF4B9EFF).withValues(alpha: 0.2),
-                color: const Color(0xFF4B9EFF),
+                backgroundColor: _pinnedHighlightColor.withValues(alpha: 0.25),
+                color: _pinnedHighlightColor,
                 fontWeight: FontWeight.w900,
                 decoration: TextDecoration.underline,
                 decorationThickness: 2,
-                decorationColor: const Color(0xFF4B9EFF).withValues(alpha: 0.5),
+                decorationColor: _pinnedHighlightColor.withValues(alpha: 0.6),
               )
             : null,
       );
@@ -402,9 +517,9 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
               text: w.substring(0, boldLen),
               style: TextStyle(
                 fontWeight: FontWeight.w900,
-                color: isHighlighted ? const Color(0xFF4B9EFF) : Colors.white,
+                color: isHighlighted ? _pinnedHighlightColor : textColor,
                 backgroundColor: isHighlighted
-                    ? const Color(0xFF4B9EFF).withValues(alpha: 0.2)
+                    ? _pinnedHighlightColor.withValues(alpha: 0.25)
                     : null,
               ),
             ),
@@ -413,10 +528,10 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
               style: TextStyle(
                 fontWeight: FontWeight.w300,
                 color: isHighlighted
-                    ? const Color(0xFF4B9EFF).withValues(alpha: 0.8)
-                    : Colors.white70,
+                    ? _pinnedHighlightColor.withValues(alpha: 0.85)
+                    : secondaryColor,
                 backgroundColor: isHighlighted
-                    ? const Color(0xFF4B9EFF).withValues(alpha: 0.2)
+                    ? _pinnedHighlightColor.withValues(alpha: 0.25)
                     : null,
               ),
             ),
@@ -435,10 +550,18 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
     );
   }
 
+  Future<void> _setReadingLanguage(String languageName) async {
+    final newLocale = DocumentLanguageService.ttsLocaleForLanguage(languageName);
+    if (newLocale == _readingLocale) return;
+    setState(() => _readingLocale = newLocale);
+    final tts = context.read<TtsService>();
+    await tts.switchReadingLocale(newLocale);
+  }
+
   void _showSettingsSheet(LanguageProvider lang) {
     showModalBottomSheet(
       context: context,
-      backgroundColor: const Color(0xFF141A29),
+      backgroundColor: VoxColors.surface(context),
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
@@ -457,23 +580,69 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
                   borderRadius: BorderRadius.circular(10),
                 ),
               ),
-              const Text(
-                'Reader Settings',
+              Text(
+                lang.t('reader_settings_title'),
                 style: TextStyle(
-                  color: Colors.white,
+                  color: VoxColors.onSurface(context),
                   fontWeight: FontWeight.bold,
                   fontSize: 17,
                 ),
               ),
               const SizedBox(height: 20),
-              SwitchListTile(
-                title: const Text(
-                  'OpenDyslexic Font',
-                  style: TextStyle(color: Colors.white),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  lang.t('reader_reading_language'),
+                  style: TextStyle(
+                    color: VoxColors.onSurface(context),
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
-                subtitle: const Text(
+              ),
+              const SizedBox(height: 4),
+              Text(
+                lang.t('reader_reading_language_hint'),
+                style: TextStyle(color: Colors.grey[500], fontSize: 12),
+              ),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: DocumentLanguageService.languageNames.map((name) {
+                  final locale = DocumentLanguageService.ttsLocaleForLanguage(name);
+                  final selected = _readingLocale == locale;
+                  return ChoiceChip(
+                    label: Text(
+                      '${_flagFromLocale(locale)} $name',
+                      style: TextStyle(
+                        color: selected
+                            ? VoxColors.onPrimary(context)
+                            : VoxColors.onSurface(context),
+                        fontSize: 12,
+                      ),
+                    ),
+                    selected: selected,
+                    selectedColor: VoxColors.primary(context),
+                    backgroundColor: VoxColors.surface2(context),
+                    onSelected: (_) {
+                      Navigator.pop(ctx);
+                      unawaited(_setReadingLanguage(name));
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              SwitchListTile(
+                title: Text(
+                  'OpenDyslexic Font',
+                  style: TextStyle(color: VoxColors.onSurface(context)),
+                ),
+                subtitle: Text(
                   'Enhanced readability for dyslexia',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  style: TextStyle(
+                    color: VoxColors.textSecondary(context),
+                    fontSize: 12,
+                  ),
                 ),
                 value: lang.isDyslexicFontEnabled,
                 activeThumbColor: const Color(0xFF4B9EFF),
@@ -485,13 +654,16 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
                 },
               ),
               SwitchListTile(
-                title: const Text(
+                title: Text(
                   'Bionic Reading',
-                  style: TextStyle(color: Colors.white),
+                  style: TextStyle(color: VoxColors.onSurface(context)),
                 ),
-                subtitle: const Text(
+                subtitle: Text(
                   'Highlight word starts for faster focus',
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  style: TextStyle(
+                    color: VoxColors.textSecondary(context),
+                    fontSize: 12,
+                  ),
                 ),
                 value: lang.isBionicReadingEnabled,
                 activeThumbColor: const Color(0xFF4B9EFF),
@@ -511,23 +683,24 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
 
   // ── AI Tools bar ──────────────────────────────
   Widget _buildAiBar() {
+    final lang = context.watch<LanguageProvider>();
     return Container(
       margin: const EdgeInsets.fromLTRB(12, 0, 12, 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.04),
+        color: VoxColors.cardFill(context),
         borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+        border: Border.all(color: VoxColors.border(context)),
       ),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
-            const Icon(Icons.auto_awesome, size: 15, color: Color(0xFF4B9EFF)),
+            Icon(Icons.auto_awesome, size: 15, color: VoxColors.primary(context)),
             const SizedBox(width: 8),
-            const Text(
-              'Actions',
-              style: TextStyle(
+            Text(
+              lang.t('ai_tools'),
+              style: const TextStyle(
                 fontWeight: FontWeight.w700,
                 fontSize: 12,
                 color: Color(0xFF4B9EFF),
@@ -543,23 +716,23 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.06),
+                  color: VoxColors.surfaceMuted(context),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+                  border: Border.all(color: VoxColors.border(context)),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Icon(
                       Icons.summarize_outlined,
-                      color: Color(0xFFF0F4FF),
+                      color: VoxColors.onBg(context),
                       size: 13,
                     ),
-                    SizedBox(width: 5),
+                    const SizedBox(width: 5),
                     Text(
-                      'Summarize',
+                      lang.t('summarize'),
                       style: TextStyle(
-                        color: Colors.white,
+                        color: VoxColors.onBg(context),
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
                       ),
@@ -581,18 +754,18 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
                   color: const Color(0xFF4B9EFF),
                   borderRadius: BorderRadius.circular(20),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.style_outlined,
                       color: Color(0xFF0A0E1A),
                       size: 13,
                     ),
-                    SizedBox(width: 5),
+                    const SizedBox(width: 5),
                     Text(
-                      'Q&A Generator',
-                      style: TextStyle(
+                      lang.t('qa_generator'),
+                      style: const TextStyle(
                         color: Colors.white,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
@@ -616,18 +789,18 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
                   borderRadius: BorderRadius.circular(20),
                   border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(
+                    const Icon(
                       Icons.psychology,
                       color: Colors.purpleAccent,
                       size: 13,
                     ),
-                    SizedBox(width: 5),
+                    const SizedBox(width: 5),
                     Text(
-                      'Study Buddy',
-                      style: TextStyle(
+                      lang.t('study_buddy'),
+                      style: const TextStyle(
                         color: Colors.purpleAccent,
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
@@ -693,7 +866,7 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
       decoration: BoxDecoration(
-        color: Color(0xFF141A29),
+        color: VoxColors.surface(context),
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
       ),
       child: Column(
@@ -710,8 +883,8 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
           ),
           Text(
             _speedLabel(rate),
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: VoxColors.onSurface(context),
               fontSize: 17,
               fontWeight: FontWeight.bold,
             ),
@@ -732,8 +905,8 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
               const SizedBox(width: 28),
               Text(
                 '${rate.toStringAsFixed(2)}x',
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: VoxColors.onSurface(context),
                   fontSize: 38,
                   fontWeight: FontWeight.bold,
                 ),
@@ -761,14 +934,16 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
                     ),
                     decoration: BoxDecoration(
                       color: selected
-                          ? const Color(0xFF4B9EFF)
-                          : Color(0xFF1c2333),
+                          ? VoxColors.primary(context)
+                          : VoxColors.surface2(context),
                       borderRadius: BorderRadius.circular(30),
                     ),
                     child: Text(
                       '${s}x',
                       style: TextStyle(
-                        color: selected ? Color(0xFF0A0E1A) : Colors.white,
+                        color: selected
+                            ? VoxColors.onPrimary(context)
+                            : VoxColors.onSurface(context),
                         fontSize: 13,
                         fontWeight: FontWeight.w600,
                       ),
@@ -782,7 +957,7 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             decoration: BoxDecoration(
-              color: Color(0xFF141A29),
+              color: VoxColors.surface2(context),
               borderRadius: BorderRadius.circular(14),
             ),
             child: Row(
@@ -790,10 +965,10 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
+                    Text(
                       'Increase Speed Automatically',
                       style: TextStyle(
-                        color: Colors.white,
+                        color: VoxColors.onSurface(context),
                         fontWeight: FontWeight.w600,
                         fontSize: 13,
                       ),
@@ -828,7 +1003,7 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
       decoration: BoxDecoration(
-        color: Color(0xFF141A29),
+        color: VoxColors.surface(context),
         borderRadius: _showSpeedPanel
             ? BorderRadius.zero
             : const BorderRadius.vertical(top: Radius.circular(28)),
@@ -843,7 +1018,7 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
               width: 52,
               height: 52,
               decoration: BoxDecoration(
-                color: Color(0xFF1c2333),
+                color: VoxColors.surface2(context),
                 shape: BoxShape.circle,
               ),
               child: Center(
@@ -856,16 +1031,15 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
             onTap: () => tts.skipBackward(10, locale),
             child: Padding(
               padding: const EdgeInsets.all(8),
-              child: Icon(Icons.replay_10, color: Colors.grey[300], size: 34),
+              child: Icon(
+                Icons.replay_10,
+                color: VoxColors.textSecondary(context),
+                size: 34,
+              ),
             ),
           ),
           GestureDetector(
-            onTap: () {
-              if (!tts.isPlaying && _hasPinnedHighlight) {
-                setState(() => _hasPinnedHighlight = false);
-              }
-              tts.togglePause(locale);
-            },
+            onTap: () => tts.togglePause(locale),
             child: Container(
               width: 64,
               height: 64,
@@ -885,7 +1059,11 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
             onTap: () => tts.skipForward(10, locale),
             child: Padding(
               padding: const EdgeInsets.all(8),
-              child: Icon(Icons.forward_10, color: Colors.grey[300], size: 34),
+              child: Icon(
+                Icons.forward_10,
+                color: VoxColors.textSecondary(context),
+                size: 34,
+              ),
             ),
           ),
           // Speed badge
@@ -896,15 +1074,17 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
               height: 52,
               decoration: BoxDecoration(
                 color: _showSpeedPanel
-                    ? const Color(0xFF4B9EFF)
-                    : Color(0xFF1c2333),
+                    ? VoxColors.primary(context)
+                    : VoxColors.surface2(context),
                 shape: BoxShape.circle,
               ),
               child: Center(
                 child: Text(
                   rate.toStringAsFixed(2),
                   style: TextStyle(
-                    color: _showSpeedPanel ? Color(0xFF0A0E1A) : Colors.white,
+                    color: _showSpeedPanel
+                        ? VoxColors.onPrimary(context)
+                        : VoxColors.onSurface(context),
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                   ),
@@ -921,10 +1101,10 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
   @override
   Widget build(BuildContext context) {
     final tts = context.watch<TtsService>();
-    final locale = context.watch<LanguageProvider>().ttsLocale;
+    final locale = _readingLocale;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: VoxColors.bg(context),
       body: SafeArea(
         child: Column(
           children: [
@@ -935,20 +1115,20 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
                 children: [
                   GestureDetector(
                     onTap: () => Navigator.pop(context),
-                    child: const Icon(
+                    child: Icon(
                       Icons.keyboard_arrow_down,
                       size: 32,
-                      color: Colors.white,
+                      color: VoxColors.onBg(context),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Text(
                       widget.title,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w900,
                         fontSize: 16,
-                        color: Colors.white,
+                        color: VoxColors.onBg(context),
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -956,9 +1136,9 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
                   GestureDetector(
                     onTap: () =>
                         _showSettingsSheet(context.read<LanguageProvider>()),
-                    child: const Icon(
+                    child: Icon(
                       Icons.settings_outlined,
-                      color: Colors.white70,
+                      color: VoxColors.textSecondary(context),
                       size: 24,
                     ),
                   ),
@@ -968,9 +1148,9 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
                       await tts.stop();
                       if (context.mounted) Navigator.pop(context);
                     },
-                    child: const Icon(
+                    child: Icon(
                       Icons.close,
-                      color: Colors.white70,
+                      color: VoxColors.textSecondary(context),
                       size: 24,
                     ),
                   ),
@@ -990,10 +1170,15 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
 
             // Scrollable text
             Expanded(
-              child: SingleChildScrollView(
-                controller: _scrollController,
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
-                child: _buildHighlightedText(tts),
+              child: Directionality(
+                textDirection: DocumentLanguageService.isRtlLocale(_readingLocale)
+                    ? TextDirection.rtl
+                    : TextDirection.ltr,
+                child: SingleChildScrollView(
+                  controller: _scrollController,
+                  padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
+                  child: _buildHighlightedText(),
+                ),
               ),
             ),
 

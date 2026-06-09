@@ -11,7 +11,6 @@ import 'headphone_audio_detector.dart';
 import 'read_aloud_ui.dart';
 import 'reading_audio_session.dart';
 import 'reading_playback_state.dart';
-import 'reading_voice_commands.dart';
 import 'reading_voice_keyword.dart';
 
 /// Speechify-style hands-free read-aloud: continuous device STT + tail keyword matching.
@@ -27,6 +26,7 @@ class ReadAloudVoiceService {
   bool _suspendedForTts = false;
   bool _micPermissionDenied = false;
   String _localeId = 'en_US';
+  String _commandLanguage = 'English';
   String _lastTranscript = '';
   ReadingPlaybackState? _listeningForState;
 
@@ -42,6 +42,7 @@ class ReadAloudVoiceService {
 
   Future<void> startSession({
     required String localeId,
+    String commandLanguage = 'English',
     required ReadingPlaybackState Function() playbackState,
     required String Function() recentTtsSnippet,
     required Future<void> Function(ReadingVoiceKeyword keyword) onKeyword,
@@ -53,6 +54,7 @@ class ReadAloudVoiceService {
     if (kIsWeb || (!Platform.isAndroid && !Platform.isIOS)) return;
 
     _localeId = localeId;
+    _commandLanguage = commandLanguage;
     _playbackState = playbackState;
     _recentTtsSnippet = recentTtsSnippet;
     _onKeyword = onKeyword;
@@ -117,6 +119,14 @@ class ReadAloudVoiceService {
   /// Release the mic while TTS starts speaking (Android cannot share reliably).
   Future<void> suspendForTts() async {
     _suspendedForTts = true;
+    if (AppSpeechService.instance.activeOwner == _owner) {
+      await AppSpeechService.instance.stop();
+    }
+  }
+
+  /// Yield the mic to assistant / search / notes without blocking reclaim after they finish.
+  Future<void> yieldMicToOtherFeature() async {
+    _listeningForState = null;
     if (AppSpeechService.instance.activeOwner == _owner) {
       await AppSpeechService.instance.stop();
     }
@@ -224,7 +234,9 @@ class ReadAloudVoiceService {
       if (!started && _sessionActive) {
         _listeningForState = null;
         debugPrint('ReadAloudVoiceService: STT listen failed');
-        ReadAloudUi.showFeedback('Voice controls unavailable — check mic permission');
+        ReadAloudUi.showFeedback(
+          ReadAloudUi.translate('voice_controls_unavailable'),
+        );
       } else {
         debugPrint(
           'ReadAloudVoiceService: listening ($state) for pause / play / stop',
@@ -253,37 +265,80 @@ class ReadAloudVoiceService {
 
     // Fast barge-in while TTS is playing (partial STT).
     if (state == ReadingPlaybackState.playing) {
-      if (ReadingVoiceCommands.looksLikeStopInterrupt(words)) {
+      if (ReadingVoiceKeywordSpotter.spot(
+            spoken: words,
+            state: ReadingPlaybackState.playing,
+            commandLanguage: _commandLanguage,
+            ignoreTtsEcho: true,
+          ) ==
+          ReadingVoiceKeyword.stop) {
         unawaited(_dispatchKeyword(ReadingVoiceKeyword.stop));
         return;
       }
-      if (ReadingVoiceCommands.looksLikePauseInterrupt(words)) {
+      if (ReadingVoiceKeywordSpotter.spot(
+            spoken: words,
+            state: ReadingPlaybackState.playing,
+            commandLanguage: _commandLanguage,
+            ignoreTtsEcho: true,
+          ) ==
+          ReadingVoiceKeyword.pause) {
         unawaited(_dispatchKeyword(ReadingVoiceKeyword.pause));
+        return;
+      }
+      final seekWhilePlaying = ReadingVoiceKeywordSpotter.spotSeekOnly(
+        words,
+        commandLanguage: _commandLanguage,
+      );
+      if (seekWhilePlaying != null) {
+        unawaited(_dispatchKeyword(seekWhilePlaying));
+        return;
+      }
+      final highlightWhilePlaying = ReadingVoiceKeywordSpotter.spotHighlightOnly(
+        words,
+        commandLanguage: _commandLanguage,
+      );
+      if (highlightWhilePlaying != null) {
+        unawaited(_dispatchKeyword(highlightWhilePlaying));
         return;
       }
     }
 
     // Fast commands while paused — continue / play / stop (always, with or without earphones).
     if (state == ReadingPlaybackState.paused) {
-      final tail = ReadingVoiceKeywordSpotter.tailWords(words);
-      if (ReadingVoiceCommands.looksLikeStopInterrupt(tail) ||
-          ReadingVoiceKeywordSpotter.spot(
-                spoken: words,
-                state: state,
-                ignoreTtsEcho: true,
-              ) ==
-              ReadingVoiceKeyword.stop) {
+      if (ReadingVoiceKeywordSpotter.spot(
+            spoken: words,
+            state: state,
+            commandLanguage: _commandLanguage,
+            ignoreTtsEcho: true,
+          ) ==
+          ReadingVoiceKeyword.stop) {
         unawaited(_dispatchKeyword(ReadingVoiceKeyword.stop));
         return;
       }
-      if (ReadingVoiceCommands.looksLikeResumeCommand(tail) ||
-          ReadingVoiceKeywordSpotter.spot(
-                spoken: words,
-                state: state,
-                ignoreTtsEcho: true,
-              ) ==
-              ReadingVoiceKeyword.play) {
+      if (ReadingVoiceKeywordSpotter.spot(
+            spoken: words,
+            state: state,
+            commandLanguage: _commandLanguage,
+            ignoreTtsEcho: true,
+          ) ==
+          ReadingVoiceKeyword.play) {
         unawaited(_dispatchKeyword(ReadingVoiceKeyword.play));
+        return;
+      }
+      final seekWhilePaused = ReadingVoiceKeywordSpotter.spotSeekOnly(
+        words,
+        commandLanguage: _commandLanguage,
+      );
+      if (seekWhilePaused != null) {
+        unawaited(_dispatchKeyword(seekWhilePaused));
+        return;
+      }
+      final highlightWhilePaused = ReadingVoiceKeywordSpotter.spotHighlightOnly(
+        words,
+        commandLanguage: _commandLanguage,
+      );
+      if (highlightWhilePaused != null) {
+        unawaited(_dispatchKeyword(highlightWhilePaused));
         return;
       }
     }
@@ -291,6 +346,7 @@ class ReadAloudVoiceService {
     final keyword = ReadingVoiceKeywordSpotter.spot(
       spoken: words,
       state: state,
+      commandLanguage: _commandLanguage,
       recentTtsSnippet: _recentTtsSnippet?.call() ?? '',
       ignoreTtsEcho: headphones,
     );

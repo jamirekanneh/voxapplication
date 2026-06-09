@@ -63,19 +63,25 @@ class RemindersService {
   }
 
   Future<void> deleteReminder(String id) async {
+    await deleteReminders([id]);
+  }
+
+  Future<int> deleteReminders(Iterable<String> ids) async {
+    final idSet = ids.toSet();
+    if (idSet.isEmpty) return 0;
+
     final all = await loadReminders();
-    StudyReminder? found;
-    for (final r in all) {
-      if (r.id == id) {
-        found = r;
-        break;
-      }
+    var removed = 0;
+    for (final reminder in all) {
+      if (!idSet.contains(reminder.id)) continue;
+      await NotificationService.instance.cancelReminder(reminder.notificationId);
+      removed++;
     }
-    if (found != null) {
-      await NotificationService.instance.cancelReminder(found.notificationId);
-    }
-    all.removeWhere((r) => r.id == id);
+    if (removed == 0) return 0;
+
+    all.removeWhere((r) => idSet.contains(r.id));
     await _saveAll(all);
+    return removed;
   }
 
   Future<bool> updateReminderSchedule({

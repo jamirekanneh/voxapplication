@@ -100,6 +100,24 @@ class VoxColors {
       ? Colors.white.withValues(alpha: 0.04)
       : Colors.white.withValues(alpha: 0.9);
 
+  static Color surfaceMuted(BuildContext ctx) => _isDark(ctx)
+      ? Colors.white.withValues(alpha: 0.04)
+      : Colors.black.withValues(alpha: 0.04);
+
+  static Color bottomBar(BuildContext ctx) =>
+      _isDark(ctx) ? _darkSurface : _lightSurface;
+
+  static Color fabBackground(BuildContext ctx) =>
+      _isDark(ctx) ? _darkBg : _brightBlue;
+
+  static Color textMuted(BuildContext ctx) => _isDark(ctx)
+      ? Colors.white.withValues(alpha: 0.5)
+      : _lightOnBg.withValues(alpha: 0.5);
+
+  static Color textFaint(BuildContext ctx) => _isDark(ctx)
+      ? Colors.white.withValues(alpha: 0.3)
+      : _lightOnBg.withValues(alpha: 0.35);
+
   static Color onPrimary(BuildContext ctx) => Colors.white;
 
   /// Use for brand highlights or special states
@@ -196,8 +214,21 @@ class AppTheme {
       ),
     ),
     textTheme: const TextTheme(
+      displayLarge: TextStyle(color: Color(0xFF0A0E1A)),
+      displayMedium: TextStyle(color: Color(0xFF0A0E1A)),
+      displaySmall: TextStyle(color: Color(0xFF0A0E1A)),
+      headlineLarge: TextStyle(color: Color(0xFF0A0E1A)),
+      headlineMedium: TextStyle(color: Color(0xFF0A0E1A)),
+      headlineSmall: TextStyle(color: Color(0xFF0A0E1A)),
+      titleLarge: TextStyle(color: Color(0xFF0A0E1A)),
+      titleMedium: TextStyle(color: Color(0xFF0A0E1A)),
+      titleSmall: TextStyle(color: Color(0xFF0A0E1A)),
+      bodyLarge: TextStyle(color: Color(0xFF0A0E1A)),
       bodyMedium: TextStyle(color: Color(0xFF0A0E1A)),
       bodySmall: TextStyle(color: Color(0xFF3A4A6A)),
+      labelLarge: TextStyle(color: Color(0xFF0A0E1A)),
+      labelMedium: TextStyle(color: Color(0xFF3A4A6A)),
+      labelSmall: TextStyle(color: Color(0xFF3A4A6A)),
     ),
     dialogTheme: DialogThemeData(backgroundColor: Colors.white),
   );

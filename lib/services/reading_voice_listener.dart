@@ -66,7 +66,10 @@ class ReadingVoiceListener {
       return;
     }
 
-    if (!MicCoordinator.instance.globalReadingVoiceMayListen) return;
+    if (!MicCoordinator.instance.globalReadingVoiceMayListen) {
+      await ReadAloudVoiceService.instance.yieldMicToOtherFeature();
+      return;
+    }
 
     final openMic = (tts.isPlaying || tts.userPaused) &&
         !ReadAloudVoiceService.instance.isSuspendedForTts;
@@ -83,8 +86,12 @@ class ReadingVoiceListener {
     final locale = context.read<LanguageProvider>().sttLocale;
     final headphones = HeadphoneAudioDetector.instance.isHeadphonesConnected;
 
+    final commandLanguage = context.read<LanguageProvider>().selectedLanguage;
+    ReadAloudUi.configureTranslator(context.read<LanguageProvider>().t);
+
     await ReadAloudVoiceService.instance.startSession(
       localeId: locale,
+      commandLanguage: commandLanguage,
       playbackState: () => tts.playbackState,
       recentTtsSnippet: () => tts.recentTtsSnippet,
       onKeyword: _onKeyword,
@@ -112,12 +119,17 @@ class ReadingVoiceListener {
     }
     if (tts.userPaused) {
       await ReadAloudVoiceService.instance.ensurePausedListening();
-      ReadAloudUi.showVoiceEngineTip(ReadAloudUi.voiceControlsPausedTip);
+      final lang = context.read<LanguageProvider>();
+      ReadAloudUi.showVoiceEngineTip(
+        ReadAloudUi.voiceControlsPausedTip(lang.t),
+      );
+      _tipShown = false;
     } else if (!_tipShown) {
       _tipShown = true;
+      final lang = context.read<LanguageProvider>();
       final tip = headphones
-          ? ReadAloudUi.voiceControlsPlayingHeadphoneTip
-          : ReadAloudUi.voiceControlsPlayingSpeakerTip;
+          ? ReadAloudUi.voiceControlsPlayingHeadphoneTip(lang.t)
+          : ReadAloudUi.voiceControlsPlayingSpeakerTip(lang.t);
       ReadAloudUi.showVoiceEngineTip(tip);
     }
   }
@@ -128,7 +140,8 @@ class ReadingVoiceListener {
 
     _handlingCommand = true;
     final tts = context.read<TtsService>();
-    final locale = context.read<LanguageProvider>().ttsLocale;
+    final lang = context.read<LanguageProvider>();
+    final locale = tts.readingLocale ?? lang.ttsLocale;
     final headphones = HeadphoneAudioDetector.instance.isHeadphonesConnected;
 
     final dispatch = await ReadingVoiceController.instance.dispatch(
@@ -138,7 +151,12 @@ class ReadingVoiceListener {
     );
 
     if (mounted && dispatch.handled) {
-      ReadAloudUi.showFeedback(ReadingVoiceKeywordSpotter.feedbackFor(keyword));
+      ReadAloudUi.showFeedback(
+        ReadingVoiceKeywordSpotter.feedbackFor(
+          keyword,
+          commandLanguage: lang.selectedLanguage,
+        ),
+      );
       if (dispatch.closeReader) {
         final nav = globalNavigatorKey.currentState;
         if (nav != null && nav.canPop()) {
@@ -153,5 +171,9 @@ class ReadingVoiceListener {
     }
 
     _handlingCommand = false;
+
+    if (mounted) {
+      _syncFromTts();
+    }
   }
 }

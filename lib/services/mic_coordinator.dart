@@ -32,6 +32,7 @@ class MicCoordinator extends ChangeNotifier {
   bool _globalReadingVoiceActive = false;
   bool _assistantMicActive = false;
   bool _ttsPlaybackActive = false;
+  bool _authFlowActive = false;
 
   /// Registered by [GlobalSttWrapper] so overlays (chat sheets) can trigger assistant.
   Future<void> Function({bool manual})? requestAssistantListen;
@@ -45,14 +46,23 @@ class MicCoordinator extends ChangeNotifier {
   bool get globalReadingVoiceActive => _globalReadingVoiceActive;
   bool get assistantMicActive => _assistantMicActive;
   bool get ttsPlaybackActive => _ttsPlaybackActive;
+  bool get authFlowActive => _authFlowActive;
 
-  /// True while read-aloud audio is playing — page mics & assistant yield the mic.
+  /// True while read-aloud TTS audio is playing.
   bool get readAloudMicReserved => _ttsPlaybackActive;
 
   /// Read-aloud session owns hands-free voice controls (playing or paused).
   bool get readAloudVoiceSessionActive => _globalReadingVoiceActive;
 
-  /// Hands-free read-aloud (pause / stop / define) while playing or paused mid-document.
+  /// Mini-player session is paused — assistant / search / notes / chat may borrow the mic.
+  bool get readAloudPausedYield =>
+      _globalReadingVoiceActive && !_ttsPlaybackActive;
+
+  /// While TTS plays, block assistant and page mics; when paused they may listen.
+  bool get readAloudBlocksOtherMics =>
+      _globalReadingVoiceActive && _ttsPlaybackActive;
+
+  /// Hands-free read-aloud (pause / play / seek / highlight) when nothing else holds the mic.
   bool get globalReadingVoiceMayListen =>
       _globalReadingVoiceActive &&
       !_assistantMicActive &&
@@ -61,40 +71,38 @@ class MicCoordinator extends ChangeNotifier {
       !_chatbotListening &&
       !_chatbotSheetOpen;
 
-  /// Assistant — not during active read-aloud playback or read-aloud voice session.
+  /// Assistant — blocked while read-aloud TTS is playing or during auth/profile.
   bool get assistantMayListen =>
       _assistantMicActive &&
-      !readAloudMicReserved &&
-      !_globalReadingVoiceActive;
+      !readAloudBlocksOtherMics &&
+      !_authFlowActive;
 
   /// Whether the user can activate the global assistant right now.
   bool get assistantMayActivate =>
-      !readAloudMicReserved && !_globalReadingVoiceActive;
+      !readAloudBlocksOtherMics && !_authFlowActive;
 
-  /// Search mic — not while read-aloud is actively playing.
+  /// Search mic — allowed when read-aloud is paused (mini player).
   bool get searchMicMayListen =>
       (_currentRoute == '/home' || _currentRoute == '/dictionary') &&
       !_assistantMicActive &&
       !_notesRecordingActive &&
       !_chatbotListening &&
       !_chatbotSheetOpen &&
-      !readAloudMicReserved &&
-      !_globalReadingVoiceActive;
+      !readAloudBlocksOtherMics;
 
-  /// Chatbot / study-buddy — not while read-aloud is actively playing.
+  /// Chatbot / study-buddy — allowed when read-aloud is paused.
   bool get chatbotMayListen =>
       !_assistantMicActive &&
       !_notesRecordingActive &&
-      !readAloudMicReserved &&
-      !_globalReadingVoiceActive &&
+      !readAloudBlocksOtherMics &&
       (_chatbotSheetOpen ||
           _currentRoute == '/menu' ||
           _currentRoute == '/faqs');
 
-  /// Notes dictation / recording — not while read-aloud is actively playing.
+  /// Notes dictation / recording — blocked only while read-aloud TTS is playing.
   bool get notesMayUseMic =>
       !_assistantMicActive &&
-      !readAloudMicReserved &&
+      !readAloudBlocksOtherMics &&
       (_currentRoute == '/notes' || _notesRecordingActive);
 
   void registerReleaseHandler(Future<void> Function() handler) {
@@ -107,10 +115,36 @@ class MicCoordinator extends ChangeNotifier {
     _releaseHandlers.remove(handler);
   }
 
+  /// Suspend assistant + release all mics during logout / profile sign-in.
+  Future<void> enterAuthFlow() async {
+    if (_authFlowActive) {
+      _assistantMicActive = false;
+      await releaseAll();
+      notifyListeners();
+      return;
+    }
+    _authFlowActive = true;
+    _assistantMicActive = false;
+    _searchMicActive = false;
+    _chatbotListening = false;
+    await releaseAll();
+    notifyListeners();
+  }
+
+  void exitAuthFlow() {
+    if (!_authFlowActive) return;
+    _authFlowActive = false;
+    notifyListeners();
+  }
+
   void setRoute(String? routeName) {
     final normalized = routeName?.isEmpty == true ? null : routeName;
     if (_currentRoute == normalized) return;
     _currentRoute = normalized;
+
+    if (normalized == '/home') {
+      exitAuthFlow();
+    }
 
     if (normalized == '/notes' ||
         normalized == '/menu' ||
@@ -233,8 +267,21 @@ class MicCoordinator extends ChangeNotifier {
   }
 
   /// Document read-aloud — release page mics before TTS speaks.
-  Future<void> prepareForTtsPlayback({bool stopReadingVoice = false}) async {
+  /// Release page / assistant mics before read-aloud resumes from the mini player.
+  Future<void> reclaimMicForReadAloudPlayback() async {
     await yieldFromAssistant();
+    _searchMicActive = false;
+    _chatbotListening = false;
+    for (final release in List<Future<void> Function()>.from(_releaseHandlers)) {
+      try {
+        await release();
+      } catch (_) {}
+    }
+    notifyListeners();
+  }
+
+  Future<void> prepareForTtsPlayback({bool stopReadingVoice = false}) async {
+    await reclaimMicForReadAloudPlayback();
     _ttsPlaybackActive = true;
     if (stopReadingVoice) {
       await AppSpeechService.instance.stop();

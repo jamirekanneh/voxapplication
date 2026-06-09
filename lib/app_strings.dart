@@ -31,7 +31,11 @@ class AppStrings {
     'menu_profile': 'Profile',
     'profile_security_title': 'Account security',
     'profile_change_email': 'Change email',
+    'profile_change_email_subtitle':
+        'Update sign-in email & password — choose to keep or clear your data',
     'profile_change_password': 'Change password',
+    'profile_change_password_subtitle':
+        'Secure email link to set a new password',
     'profile_reset_password_email': 'Send password reset email',
     'profile_signed_in_with': 'Signed in with',
     'profile_google_password_hint':
@@ -46,6 +50,75 @@ class AppStrings {
     'profile_password_updated': 'Password updated successfully.',
     'profile_passwords_dont_match': 'New passwords do not match.',
     'profile_enter_current_password': 'Enter your current password to continue.',
+    'profile_current_email': 'Current email address',
+    'profile_verify_continue': 'Verify & continue',
+    'profile_got_it': 'Got it',
+    'profile_email_step_verify': 'Step 1 of 2 — Verify it\'s you',
+    'profile_email_step_new': 'Step 2 of 2 — New sign-in details',
+    'profile_email_verify_info':
+        'For your security, enter the email and password you use to sign in today. Nothing changes until you finish all steps.',
+    'profile_email_new_info':
+        'Your new password takes effect right away. We will also email a verification link to your new address — open it to complete the email switch.',
+    'profile_email_need_password_account':
+        'Change email is only available for email & password accounts. Use Change password first to set one up via the reset link.',
+    'profile_email_sync_title': 'What should happen to your data?',
+    'profile_email_sync_intro':
+        'You are switching to {email}. Choose one option below — this cannot be changed after you continue.',
+    'profile_email_sync_keep_title': 'Keep my data',
+    'profile_email_sync_keep_body':
+        '• Notes, library, commands & recycle bin stay on this account\n'
+        '• New saves use your new email after you verify it\n'
+        '• Your old email stops working once verification completes',
+    'profile_email_sync_fresh_title': 'Start fresh',
+    'profile_email_sync_fresh_body':
+        '• Permanently deletes all cloud notes, library, commands & recycle bin\n'
+        '• Cannot be undone\n'
+        '• You begin with an empty account under the new email',
+    'profile_email_sync_now': 'Keep my data',
+    'profile_email_start_fresh': 'Start fresh',
+    'profile_email_fresh_confirm_title': 'Delete all cloud data?',
+    'profile_email_fresh_confirm_body':
+        'This permanently removes every note, library file, custom command, and recycle-bin item tied to this account. You will start with a blank slate under your new email. This action cannot be undone.',
+    'profile_email_fresh_confirm_button': 'Yes, delete everything',
+    'profile_email_success_sync_title': 'Almost done — check your inbox',
+    'profile_email_success_sync_body':
+        '• Your new password is already active\n'
+        '• Your notes, library & commands are still here\n'
+        '• Open the verification email sent to {email} to finish switching your sign-in address\n'
+        '• Until you verify, sign in with your old email',
+    'profile_email_success_fresh_title': 'Fresh start — verify your new email',
+    'profile_email_success_fresh_body':
+        '• All previous cloud data on this account was permanently deleted\n'
+        '• Your new password is already active\n'
+        '• Open the verification email sent to {email} to activate your new sign-in address',
+    'profile_password_reset_hint':
+        'Enter the email on your account. We will send a secure link — your current password keeps working until you set a new one through that link.',
+    'profile_password_steps':
+        '1. Check your inbox (and spam)\n2. Tap the reset link\n3. Choose a new password\n4. Sign in with that new password',
+    'profile_password_confirm_title': 'Send password reset email?',
+    'profile_password_confirm_body':
+        'A secure link will be sent to {email}. Your current password still works until you complete the link and save a new password.',
+    'profile_password_sent_title': 'Reset email sent',
+    'profile_password_sent_body':
+        'We sent a password reset link to {email}. Follow the steps in that email. Your current password remains valid until you finish.',
+    'profile_send_reset_email': 'Send reset email',
+    'guest_save_sync_title': 'This email already has a Vox account',
+    'guest_save_sync_intro':
+        'Choose what happens to cloud data for {email}. Your guest session items will be saved to the account you sign into.',
+    'guest_save_sync_keep_title': 'Keep my cloud data',
+    'guest_save_sync_keep_body':
+        '• Restore notes, library & commands from your account\n'
+        '• Guest session items are added on top',
+    'guest_save_sync_fresh_title': 'Start fresh',
+    'guest_save_sync_fresh_body':
+        '• Permanently deletes existing cloud data for this account\n'
+        '• Only your current guest session is saved',
+    'guest_save_fresh_confirm_title': 'Delete existing cloud data?',
+    'guest_save_fresh_confirm_body':
+        'All notes, library files, and commands already saved under this email will be permanently deleted. Your current guest session will still be uploaded.',
+    'guest_save_success_sync': 'Welcome back! Your data is synced and saving.',
+    'guest_save_success_fresh': 'Account ready. Starting with a clean cloud library.',
+    'guest_save_success_new': 'Account created! Your guest items are now saved.',
     'menu_language': 'Language',
     'menu_statistics': 'Statistics',
     'menu_reminders': 'Reminders',
@@ -192,6 +265,13 @@ class AppStrings {
     'delete_selected_title': 'Delete Selected?',
     'delete_notes_count': 'Delete {count}',
     'notes_deleted_count': '{count} note(s) deleted.',
+    'notes_moved_recycle_count':
+        '{count} note(s) moved to Recycle Bin. Kept for 30 days.',
+    'delete_forever_selected_title': 'Delete Forever?',
+    'delete_forever_selected_body':
+        '{count} item(s) will be permanently deleted and cannot be recovered.',
+    'items_permanently_deleted': '{count} item(s) permanently deleted.',
+    'reminders_deleted_count': '{count} reminder(s) deleted.',
     'failed_to_delete': 'Failed to delete:',
     'transcript_empty': 'Transcript cannot be empty.',
     'note_not_found': 'Note not found.',
@@ -200,6 +280,34 @@ class AppStrings {
     'summarize': 'Summarize',
     'qa_generator': 'Q&A Generator',
     'study_buddy': 'Study Buddy',
+    'ai_summary': 'Summary',
+    'read_aloud': 'Read Aloud',
+    'stop_speaking': 'Stop',
+    'auto_on': 'Auto ON',
+    'auto_off': 'Auto OFF',
+    'card_progress': 'Card {current} of {total}',
+    'tap_to_flip': 'Tap to flip',
+    'flashcard_question': 'QUESTION',
+    'flashcard_answer': 'ANSWER',
+    'previous_card': '← Previous',
+    'next_card': 'Next →',
+    'generating_summary': 'Generating summary...',
+    'creating_questions': 'Creating {count} questions...',
+    'something_went_wrong': 'Something went wrong',
+    'try_again': 'Try Again',
+    'no_text_to_analyze':
+        'No text to analyze. Add content or wait for the voice note transcript.',
+    'save_label': 'Save',
+    'save_summary_title': 'Save Summary',
+    'save_qa_title': 'Save Q&A',
+    'title_for_saved_docs': 'Title for Saved Docs:',
+    'title_hint_saved_docs': 'e.g. Chapter 1 Biology',
+    'sign_in_to_save_docs': 'Please sign in to save to Saved Docs.',
+    'saved_to_menu_docs': 'Saved to Menu → Saved Docs',
+    'could_not_save_document': 'Could not save document.',
+    'speak_question_n': 'Question {n}: {text}',
+    'speak_answer': 'Answer: {text}',
+    'speak_question': 'Question: {text}',
     'ask_about_document': 'Ask about this document...',
     'study_buddy_greeting':
         'Hi! Ask me anything about this transcript or document.',
@@ -298,7 +406,8 @@ class AppStrings {
         'Could not load cloud data. Sign in again with the same account you used on this phone.',
     // Assistant (Home)
     'assistant_label': 'Assistant',
-    'assistant_mode_tooltip': 'Assistant Mode (Voice Activated)',
+    'assistant_mode_tooltip':
+        'Assistant — double-tap anywhere to turn on; double-tap again to turn off',
     'assistant_on': 'Assistant on',
     'assistant_off': 'Assistant off',
     // Library folders (Home)
@@ -317,7 +426,7 @@ class AppStrings {
     'file_type_scan': 'Scan',
     'file_type_file': 'File',
     // Dictionary
-    'dictionary_search_hint': 'Search any word...',
+    'dictionary_search_hint': 'Search any word in your selected language...',
     'dictionary_not_available_chinese': 'Not available in Chinese',
     'dictionary_chinese_unavailable_title': 'Chinese dictionary\nnot available yet',
     'dictionary_chinese_unavailable_body':
@@ -325,6 +434,11 @@ class AppStrings {
     'dictionary_vox_title': 'VOX Dictionary',
     'dictionary_tagline':
         'General, medical, legal & technical\nall in one search.',
+    'dictionary_recent_searches': 'Recent searches (7 days)',
+    'dictionary_source_general': 'General',
+    'dictionary_source_medical': 'Medical',
+    'dictionary_source_legal': 'Legal',
+    'dictionary_source_technical': 'Technical',
     'tap_to_speak': 'Tap to speak',
     // Menu
     'section_preferences': 'PREFERENCES',
@@ -376,6 +490,69 @@ class AppStrings {
     'upload_tip_multipage': 'Multi-page mode merges all pages into one document',
     'upload_supported_types_label':
         'Supported: PDF, Word, PowerPoint, Excel, photos (JPG/PNG), TXT, and more',
+    'upload_status_uploading': 'Uploading...',
+    'upload_status_reading_file': 'Reading file...',
+    'upload_status_extracting_pdf': 'Extracting PDF text...',
+    'upload_status_ocr_image': 'Reading text from image...',
+    'upload_status_extracting_slides': 'Extracting slide text (ignoring images)...',
+    'upload_status_extracting_doc': 'Extracting text (ignoring images)...',
+    'upload_status_saving_temp': 'Adding to temporary library...',
+    'upload_status_saving_cloud': 'Saving to library...',
+    'upload_status_saving_scan': 'Saving scan...',
+    'upload_status_scan_page': 'Reading page {current} of {total}...',
+    'upload_status_image_n': 'Reading image {current} of {total}...',
+    'upload_file_ready': 'File ready. Reading started.',
+    'upload_snack_guest': '"{name}" added temporarily. Create an account to save it.',
+    'upload_snack_saved': '"{name}" saved & reading started!',
+    'upload_snack_no_text': '"{name}" saved — text could not be extracted from this format.',
+    'upload_save_cloud_failed':
+        'Could not save "{name}" to cloud ({error}). Reading locally.',
+    'upload_type_unsupported':
+        'File type .{ext} is not supported. Supported types: {types}',
+    'upload_too_large_type':
+        'File is too large. Maximum size for .{ext} files is {mb}MB.',
+    'upload_empty_file': 'Cannot upload empty files.',
+    'upload_multi_mixed':
+        'Select one document at a time, or select multiple photos only.',
+    'upload_read_failed':
+        'Could not read this file. Try again or use a smaller file.',
+    'upload_too_large_50mb': 'File is too large. Maximum size is 50MB.',
+    'upload_failed': 'Upload failed. Please try again.',
+    'upload_image_only_photo':
+        'This upload only contains images — no text was found to read. Try Scan Document with good lighting, or a clearer photo.',
+    'upload_image_only_doc':
+        'This upload only contains images — no readable text in "{name}". Embedded pictures are ignored. Add typed text in Word or PowerPoint, or use Scan Document for photo pages.',
+    'upload_image_only_voice':
+        'This upload only contains images. No text to read aloud.',
+    'upload_camera_required': 'Camera permission is required to scan documents.',
+    'upload_scan_another': 'Scan another page?',
+    'upload_scan_failed': 'Scan failed. Please try again.',
+    'upload_images_failed': 'Could not read image(s). Please try again.',
+    'home_doc_what_to_do': 'What would you like to do?',
+    'home_read_document': 'Read Document',
+    'home_read_subtitle': 'Listen to the document read aloud',
+    'home_summarize': 'Summarize',
+    'home_summarize_subtitle': 'Get an AI-powered summary of the document',
+    'home_qa_generator': 'Q&A Generator',
+    'home_qa_subtitle': 'Create a study Q&A set from the document',
+    'home_library_guest_hint':
+        'Tap + to upload.\nFiles are temporary until you create an account.',
+    'reader_settings_title': 'Reader Settings',
+    'reader_reading_language': 'Reading voice language',
+    'reader_reading_language_hint':
+        'Match the document language for correct pronunciation',
+    'voice_controls_intro_headphones':
+        'Earphones on — say pause, play, continue, stop, forward, back, or highlight while the app reads.',
+    'voice_controls_intro_speaker':
+        'Voice while reading: pause, play, continue, stop, forward, back, highlight. Plug in earphones if commands are missed.',
+    'voice_controls_paused_tip':
+        'Paused — say play, continue, stop, forward, back, or highlight.',
+    'voice_controls_playing_speaker_tip':
+        'Say pause, stop, forward, back, or highlight. Earphones work best so the mic hears only you.',
+    'voice_controls_playing_headphone_tip':
+        'Say pause, play, continue, stop, forward, back, or highlight anytime while reading.',
+    'voice_controls_unavailable':
+        'Voice controls unavailable — check mic permission.',
   };
 
   static const Map<String, String> _es = {

@@ -1,6 +1,4 @@
-import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:speech_to_text/speech_to_text.dart' as stt;
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
@@ -8,6 +6,7 @@ import 'theme_provider.dart';
 import 'language_provider.dart';
 import 'services/mic_coordinator.dart';
 import 'services/app_speech_service.dart';
+import 'services/contact_email_service.dart';
 
 class RecommendationsPage extends StatefulWidget {
   const RecommendationsPage({super.key});
@@ -81,32 +80,25 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
     setState(() => _isSending = true);
 
     try {
-      final res = await http.post(
-        Uri.parse('https://api.emailjs.com/api/v1.0/email/send'),
-        headers: {'Content-Type': 'application/json'},
-        body: jsonEncode({
-          'service_id': const String.fromEnvironment('EMAILJS_SERVICE_ID',
-              defaultValue: 'service_akm5fyg'),
-          'template_id': const String.fromEnvironment('EMAILJS_TEMPLATE_ID',
-              defaultValue: 'template_ujtn37d'),
-          'user_id': const String.fromEnvironment('EMAILJS_PUBLIC_KEY',
-              defaultValue: '7lv-I2bSLiEeBpoYg'),
-          'template_params': {
-            'name': 'Vox User',
-            'email': 'jamiremkanneh@gmail.com',
-            'title': 'New Recommendation for VOX App',
-            'message_phone': '-',
-            'subject': 'App Recommendation (Rating: $_rating Stars)',
-            'message': _controller.text.trim(),
-            'reply_preference': 'Sent from Recommendations Page',
-          },
-        }),
+      final text = _controller.text.trim();
+      final result = await ContactEmailService.send(
+        templateParams: {
+          'name': 'Vox User',
+          'email': ContactEmailService.supportEmail,
+          'title': 'New Recommendation for VOX App',
+          'message_phone': '-',
+          'subject': 'App Recommendation (Rating: $_rating Stars)',
+          'message': text,
+          'reply_preference': 'Sent from Recommendations Page',
+        },
+        mailtoSubject: 'VOX App Recommendation ($_rating stars)',
+        mailtoBody: text,
       );
 
       if (!mounted) return;
       setState(() => _isSending = false);
 
-      if (res.statusCode == 200) {
+      if (result.success) {
         showDialog(
           context: context,
           builder: (ctx) => AlertDialog(
@@ -144,9 +136,11 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-              content: Text(
-                  'Failed to send. Please try again. (${res.statusCode})'),
-              backgroundColor: VoxColors.danger),
+            content: Text(
+              result.errorMessage ?? 'Failed to send. Please try again.',
+            ),
+            backgroundColor: VoxColors.danger,
+          ),
         );
       }
     } catch (e) {

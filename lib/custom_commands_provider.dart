@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'services/assistant_voice_phrases.dart';
+import 'services/document_language_service.dart';
 
 // ─────────────────────────────────────────────
 //  ASSISTANT COMMANDS
@@ -359,6 +361,14 @@ class CustomCommandsProvider extends ChangeNotifier {
     await prefs.setBool('assistant_mode_enabled', enabled);
   }
 
+  /// Clears per-user commands and turns off assistant after logout.
+  Future<void> clearOnLogout() async {
+    _currentUserId = null;
+    _commands.clear();
+    _isLoaded = true;
+    await setAssistantMode(false);
+  }
+
   void setListening(bool value) {
     if (_isListening == value) return;
     _isListening = value;
@@ -603,36 +613,30 @@ class CustomCommandsProvider extends ChangeNotifier {
 
   // ── Matching ──────────────────────────────────
   /// Returns the best matching command for [spokenText], or null if none found.
-  CustomCommand? match(String spokenText) {
-    final input = _normalize(spokenText);
+  CustomCommand? match(
+    String spokenText, {
+    String language = 'English',
+    String? appLanguage,
+  }) {
+    final localized = AssistantVoicePhrases.matchSpoken(
+      spokenText,
+      appLanguage: appLanguage ?? language,
+    );
+    if (localized != null) return localized;
+
+    final input = AssistantVoicePhrases.normalize(spokenText);
+    final boostLang = DocumentLanguageService.detectSpokenLanguageName(
+      spokenText,
+      fallback: appLanguage ?? language,
+    );
     CustomCommand? best;
-    double bestScore = 0.35; // slightly lower threshold to catch more intent
+    double bestScore = 0.35;
 
     for (final cmd in enabledCommands) {
-      final phrase = _normalize(cmd.phrase);
+      final phrase = AssistantVoicePhrases.normalize(cmd.phrase);
       double score = _score(input, phrase);
 
-      // KEYWORD BOOST: If the input contains a hard navigation keyword related to the action,
-      // boost the score specifically to prioritize certain routes.
-      if (cmd.action == CommandActionType.navigateMenu && (input.contains('menu') || input.contains('option'))) {
-        score += 0.3;
-      } else if (cmd.action == CommandActionType.navigateDictionary && (input.contains('dictionary') || input.contains('meaning') || input.contains('word'))) {
-        score += 0.3;
-      } else if (cmd.action == CommandActionType.navigateNotes && (input.contains('notes') || input.contains('write'))) {
-        score += 0.3;
-      } else if (cmd.action == CommandActionType.navigateHome && (input.contains('home') || input.contains('back'))) {
-        score += 0.3;
-      } else if (cmd.action == CommandActionType.navigateHistory && input.contains('history')) {
-        score += 0.3;
-      } else if (cmd.action == CommandActionType.ttsStop &&
-          (input.contains('stop') || input.contains('quit'))) {
-        score += 0.35;
-      } else if (cmd.action == CommandActionType.ttsPause && input.contains('pause')) {
-        score += 0.35;
-      } else if (cmd.action == CommandActionType.ttsPlay &&
-          (input.contains('play') || input.contains('resume') || input.contains('continue'))) {
-        score += 0.35;
-      }
+      score += AssistantVoicePhrases.keywordBoost(cmd.action, input, boostLang);
 
       if (score > bestScore) {
         bestScore = score;
@@ -657,13 +661,12 @@ class CustomCommandsProvider extends ChangeNotifier {
     return best;
   }
 
-  String _normalize(String text) =>
-      text.toLowerCase().trim().replaceAll(RegExp(r'[^\w\s]'), '');
-
   CustomCommand? findByPhrase(String phrase) {
-    final normalized = _normalize(phrase);
+    final normalized = AssistantVoicePhrases.normalize(phrase);
     for (final cmd in enabledCommands) {
-      if (_normalize(cmd.phrase) == normalized) return cmd;
+      if (AssistantVoicePhrases.normalize(cmd.phrase) == normalized) {
+        return cmd;
+      }
     }
     return null;
   }

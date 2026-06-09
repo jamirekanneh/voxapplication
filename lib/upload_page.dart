@@ -11,7 +11,6 @@ import 'package:syncfusion_flutter_pdf/pdf.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:archive/archive.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import 'package:path_provider/path_provider.dart';
 import 'dart:typed_data';
 import 'theme_provider.dart';
@@ -21,8 +20,11 @@ import 'tts_service.dart';
 import 'reader_page.dart';
 import 'analytics_service.dart';
 import 'services/auth_session.dart';
+import 'services/document_language_service.dart';
+import 'services/document_ocr_service.dart';
 import 'services/mic_coordinator.dart';
 import 'services/document_text_extractor.dart';
+import 'services/reading_audio_session.dart';
 
 class UploadPage extends StatefulWidget {
   const UploadPage({super.key});
@@ -33,7 +35,7 @@ class UploadPage extends StatefulWidget {
 
 class _UploadPageState extends State<UploadPage> {
   bool _isUploading = false;
-  String _statusMessage = 'Uploading...';
+  String _statusMessage = '';
 
   String? _resolvedUid;
   bool _resolvedIsGuest = true;
@@ -107,44 +109,56 @@ class _UploadPageState extends State<UploadPage> {
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   //  SHARED: save content then open reader
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+  LanguageProvider get _lang => context.read<LanguageProvider>();
+
   Future<void> _saveAndOpenReader({
     required String fileName,
     required String fileType,
     required String fileContent,
   }) async {
     await MicCoordinator.instance.yieldFromAssistant();
+    String? libraryDocId;
+    final guestLibrary = _resolvedIsGuest;
+    final lang = _lang;
+
     if (_resolvedIsGuest) {
-      setState(() => _statusMessage = 'Adding to temporary library...');
+      setState(() => _statusMessage = lang.t('upload_status_saving_temp'));
       final tempProvider = context.read<TempLibraryProvider>();
+      libraryDocId = DateTime.now().millisecondsSinceEpoch.toString();
       tempProvider.add(
         TempLibraryItem(
-          id: DateTime.now().millisecondsSinceEpoch.toString(),
+          id: libraryDocId,
           fileName: fileName,
           fileType: fileType,
           content: fileContent,
         ),
       );
     } else {
-      setState(() => _statusMessage = 'Saving to library...');
+      setState(() => _statusMessage = lang.t('upload_status_saving_cloud'));
       try {
         const firestoreMaxChars = 900000;
         final storedContent = fileContent.length > firestoreMaxChars
             ? '${fileContent.substring(0, firestoreMaxChars)}\n\n[Document truncated for cloud storage — full text is available while reading now.]'
             : fileContent;
-        await FirebaseFirestore.instance.collection('library').add({
+        final docRef =
+            await FirebaseFirestore.instance.collection('library').add({
           'fileName': fileName,
           'fileType': fileType,
           'userId': _resolvedUid,
           'content': storedContent,
           'timestamp': FieldValue.serverTimestamp(),
         });
+        libraryDocId = docRef.id;
       } catch (e) {
         debugPrint('Firestore library save failed: $e');
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Could not save "$fileName" to cloud (${e.toString().split('\n').first}). Reading locally.',
+                lang.tNamed('upload_save_cloud_failed', {
+                  'name': fileName,
+                  'error': e.toString().split('\n').first,
+                }),
               ),
               backgroundColor: VoxColors.surface(context),
               behavior: SnackBarBehavior.floating,
@@ -161,15 +175,15 @@ class _UploadPageState extends State<UploadPage> {
     setState(() => _isUploading = false);
 
     SemanticsService.announce(
-      'File ready. Reading started.',
+      lang.t('upload_file_ready'),
       TextDirection.ltr,
     );
 
     final snackMsg = _resolvedIsGuest
-        ? '"$fileName" added temporarily. Create an account to save it.'
+        ? lang.tNamed('upload_snack_guest', {'name': fileName})
         : fileContent.isNotEmpty
-        ? '"$fileName" saved & reading started!'
-        : '"$fileName" saved â€” text could not be extracted from this format.';
+        ? lang.tNamed('upload_snack_saved', {'name': fileName})
+        : lang.tNamed('upload_snack_no_text', {'name': fileName});
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -180,7 +194,10 @@ class _UploadPageState extends State<UploadPage> {
     );
 
     if (fileContent.isNotEmpty) {
-      final locale = context.read<LanguageProvider>().ttsLocale;
+      final locale = DocumentLanguageService.detectTtsLocale(
+        fileContent,
+        fallbackLanguage: lang.selectedLanguage,
+      );
       final ttsService = context.read<TtsService>();
       final langProvider = context.read<LanguageProvider>();
       Navigator.of(context).pushReplacement(
@@ -194,6 +211,8 @@ class _UploadPageState extends State<UploadPage> {
               title: fileName,
               content: fileContent,
               locale: locale,
+              libraryDocId: libraryDocId,
+              guestLibrary: guestLibrary,
             ),
           ),
         ),
@@ -250,9 +269,15 @@ class _UploadPageState extends State<UploadPage> {
     // Check if file type is allowed
     if (!allowedTypes.containsKey(extension)) {
       if (mounted) {
+        final lang = _lang;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('File type .$extension is not supported. Supported types: ${allowedTypes.keys.join(', ')}'),
+            content: Text(
+              lang.tNamed('upload_type_unsupported', {
+                'ext': extension,
+                'types': allowedTypes.keys.join(', '),
+              }),
+            ),
             backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
@@ -266,9 +291,15 @@ class _UploadPageState extends State<UploadPage> {
     if (file.size > maxSize) {
       final maxSizeMB = (maxSize / (1024 * 1024)).round();
       if (mounted) {
+        final lang = _lang;
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('File is too large. Maximum size for .$extension files is ${maxSizeMB}MB.'),
+            content: Text(
+              lang.tNamed('upload_too_large_type', {
+                'ext': extension,
+                'mb': '$maxSizeMB',
+              }),
+            ),
             backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
@@ -282,7 +313,7 @@ class _UploadPageState extends State<UploadPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Cannot upload empty files.'),
+            content: Text(_lang.t('upload_empty_file')),
             backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
@@ -319,9 +350,7 @@ class _UploadPageState extends State<UploadPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text(
-              'Select one document at a time, or select multiple photos only.',
-            ),
+            content: Text(_lang.t('upload_multi_mixed')),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -331,7 +360,7 @@ class _UploadPageState extends State<UploadPage> {
 
     setState(() {
       _isUploading = true;
-      _statusMessage = 'Reading file...';
+      _statusMessage = _lang.t('upload_status_reading_file');
     });
 
     final file = result.files.first;
@@ -352,9 +381,7 @@ class _UploadPageState extends State<UploadPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text(
-              'Could not read this file. Try again or use a smaller file.',
-            ),
+            content: Text(_lang.t('upload_read_failed')),
             backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
@@ -374,7 +401,7 @@ class _UploadPageState extends State<UploadPage> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('File is too large. Maximum size is 50MB.'),
+            content: Text(_lang.t('upload_too_large_50mb')),
             backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
@@ -389,24 +416,26 @@ class _UploadPageState extends State<UploadPage> {
       if (extension == 'txt' && fileBytes != null) {
         fileContent = utf8.decode(fileBytes, allowMalformed: true);
       } else if (extension == 'pdf') {
-        setState(() => _statusMessage = 'Extracting PDF text...');
+        setState(() => _statusMessage = _lang.t('upload_status_extracting_pdf'));
         fileContent = await _extractPdfText(fileBytes);
       } else if (_isImageExtension(extension)) {
-        setState(() => _statusMessage = 'Reading text from image...');
+        setState(() => _statusMessage = _lang.t('upload_status_ocr_image'));
         fileContent = await _extractTextFromImage(
           bytes: fileBytes,
           filePath: file.path,
           fileName: fileName,
         );
       } else if (_isPresentationExtension(extension)) {
-        setState(() => _statusMessage = 'Extracting slide text (ignoring images)...');
+        setState(
+          () => _statusMessage = _lang.t('upload_status_extracting_slides'),
+        );
         fileContent = _extractPresentationText(fileBytes, extension);
         if (fileContent.isEmpty) {
           fileContent = _extractXmlBasedText(fileBytes);
         }
       } else if ((extension == 'docx' || extension == 'doc') &&
           fileBytes != null) {
-        setState(() => _statusMessage = 'Extracting text (ignoring images)...');
+        setState(() => _statusMessage = _lang.t('upload_status_extracting_doc'));
         fileContent = DocumentTextExtractor.extractDoc(
           fileBytes,
           extension: extension,
@@ -416,17 +445,17 @@ class _UploadPageState extends State<UploadPage> {
               extension == 'csv' ||
               extension == 'epub') &&
           fileBytes != null) {
-        setState(() => _statusMessage = 'Reading text file...');
+        setState(() => _statusMessage = _lang.t('upload_status_reading_file'));
         fileContent = _extractPlainText(fileBytes);
       } else if ((extension == 'xlsx' ||
               extension == 'xls' ||
               extension == 'odt' ||
               extension == 'odp') &&
           fileBytes != null) {
-        setState(() => _statusMessage = 'Extracting file text...');
+        setState(() => _statusMessage = _lang.t('upload_status_extracting_doc'));
         fileContent = _extractXmlBasedText(fileBytes);
       } else if (fileBytes != null) {
-        setState(() => _statusMessage = 'Reading file...');
+        setState(() => _statusMessage = _lang.t('upload_status_reading_file'));
         fileContent = _extractPlainText(fileBytes);
       }
 
@@ -455,7 +484,7 @@ class _UploadPageState extends State<UploadPage> {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Upload failed. Please try again.'),
+            content: Text(_lang.t('upload_failed')),
             backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
@@ -468,9 +497,55 @@ class _UploadPageState extends State<UploadPage> {
   //  SCAN DOCUMENT  (camera â†’ ML Kit OCR â†’ save & read)
   // â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   Future<void> _scanDocument() async {
+    try {
+      await _scanDocumentImpl();
+    } catch (e, st) {
+      debugPrint('Scan document error: $e\n$st');
+      if (!mounted) return;
+      setState(() => _isUploading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_lang.t('upload_scan_failed')),
+          backgroundColor: VoxColors.danger,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  /// Release mic/TTS/audio before launching the camera (avoids native crashes).
+  Future<void> _prepareForCamera() async {
+    await MicCoordinator.instance.yieldFromAssistant();
+    await MicCoordinator.instance.releaseAll();
+    MicCoordinator.instance.setTtsPlaybackActive(false);
+    if (mounted) {
+      await context.read<TtsService>().stop();
+    }
+    await ReadingAudioSession.deactivate();
+    await Future<void>.delayed(const Duration(milliseconds: 300));
+  }
+
+  Future<String> _stableScanImagePath(XFile file) async {
+    final dir = await getTemporaryDirectory();
+    final destPath =
+        '${dir.path}/scan_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    try {
+      final src = File(file.path);
+      if (await src.exists()) {
+        await src.copy(destPath);
+        return destPath;
+      }
+    } catch (_) {}
+    final bytes = await file.readAsBytes();
+    final dest = File(destPath);
+    await dest.writeAsBytes(bytes, flush: true);
+    return destPath;
+  }
+
+  Future<void> _scanDocumentImpl() async {
     await _requestPermissionsIfNeeded();
     await _resolveUser();
-    await MicCoordinator.instance.yieldFromAssistant();
+    await _prepareForCamera();
 
     // Check then request camera permission
     PermissionStatus camStatus = await Permission.camera.status;
@@ -501,8 +576,8 @@ class _UploadPageState extends State<UploadPage> {
     if (!camStatus.isGranted) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Camera permission is required to scan documents.'),
+          SnackBar(
+            content: Text(_lang.t('upload_camera_required')),
             backgroundColor: Color(0xFF333333),
             behavior: SnackBarBehavior.floating,
           ),
@@ -574,20 +649,14 @@ class _UploadPageState extends State<UploadPage> {
     final List<XFile> images = [];
 
     if (choice == 'single') {
-      final img = await picker.pickImage(
-        source: ImageSource.camera,
-        imageQuality: 90,
-      );
+      final img = await _pickCameraImage(picker);
       if (img == null) return;
       images.add(img);
     } else {
       // Multi-page loop
       bool keepGoing = true;
       while (keepGoing && mounted) {
-        final img = await picker.pickImage(
-          source: ImageSource.camera,
-          imageQuality: 90,
-        );
+        final img = await _pickCameraImage(picker);
         if (img == null) break;
         images.add(img);
         if (!mounted) break;
@@ -604,7 +673,10 @@ class _UploadPageState extends State<UploadPage> {
                   'Page ${images.length} captured',
                   style: TextStyle(fontWeight: FontWeight.bold, color: VoxColors.onSurface(context)),
                 ),
-                content: Text('Scan another page?', style: TextStyle(color: VoxColors.textSecondary(context))),
+                content: Text(
+                  _lang.t('upload_scan_another'),
+                  style: TextStyle(color: VoxColors.textSecondary(context)),
+                ),
                 actions: [
                   OutlinedButton(
                     onPressed: () => Navigator.pop(ctx, false),
@@ -638,33 +710,38 @@ class _UploadPageState extends State<UploadPage> {
     setState(() {
       _isUploading = true;
       _statusMessage = images.length == 1
-          ? 'Recognising text...'
-          : 'Reading page 1 of ${images.length}...';
+          ? _lang.t('upload_status_ocr_image')
+          : _lang.tNamed('upload_status_scan_page', {
+              'current': '1',
+              'total': '${images.length}',
+            });
     });
 
     try {
-      final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
       final buffer = StringBuffer();
+      final ocrLanguage = _lang.selectedLanguage;
 
       for (int i = 0; i < images.length; i++) {
         if (images.length > 1) {
           setState(
-            () =>
-                _statusMessage = 'Reading page ${i + 1} of ${images.length}...',
+            () => _statusMessage = _lang.tNamed('upload_status_scan_page', {
+              'current': '${i + 1}',
+              'total': '${images.length}',
+            }),
           );
         }
-        final inputImage = InputImage.fromFilePath(images[i].path);
-        final result = await recognizer.processImage(inputImage);
-        if (result.text.trim().isNotEmpty) {
+        final ocrPath = await _stableScanImagePath(images[i]);
+        final pageText = await DocumentOcrService.recognizeFromFilePath(
+          ocrPath,
+          preferredLanguage: ocrLanguage,
+        );
+        if (pageText.isNotEmpty) {
           if (buffer.isNotEmpty) buffer.write('\n\n');
-          buffer.write(result.text.trim());
+          buffer.write(pageText);
         }
-        try {
-          File(images[i].path).deleteSync();
-        } catch (_) {}
+        await DocumentOcrService.deleteTempFile(ocrPath);
+        await DocumentOcrService.deleteTempFile(images[i].path);
       }
-
-      recognizer.close();
 
       String scanned = buffer.toString().trim();
       scanned = scanned.replaceAll(RegExp(r'\n{3,}'), '\n\n');
@@ -689,24 +766,59 @@ class _UploadPageState extends State<UploadPage> {
           '${now.hour.toString().padLeft(2, '0')}h'
           '${now.minute.toString().padLeft(2, '0')}';
 
-      setState(() => _statusMessage = 'Saving scan...');
+      setState(() => _statusMessage = _lang.t('upload_status_saving_scan'));
       await _saveAndOpenReader(
         fileName: fileName,
         fileType: 'scan',
         fileContent: scanned,
       );
     } catch (e) {
-      debugPrint('Scan error: $e');
+      debugPrint('Scan OCR/save error: $e');
       if (mounted) {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Scan failed. Please try again.'),
+            content: Text(_lang.t('upload_scan_failed')),
             backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
         );
       }
+    }
+  }
+
+  Future<XFile?> _pickCameraImage(ImagePicker picker) async {
+    try {
+      await _prepareForCamera();
+      if (!mounted) return null;
+
+      final picked = await picker.pickImage(
+        source: ImageSource.camera,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 85,
+        requestFullMetadata: false,
+        preferredCameraDevice: CameraDevice.rear,
+      );
+      if (picked != null) return picked;
+
+      final lost = await picker.retrieveLostData();
+      if (!lost.isEmpty && lost.file != null) {
+        return lost.file;
+      }
+      return null;
+    } catch (e, st) {
+      debugPrint('Camera pick error: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_lang.t('upload_scan_failed')),
+            backgroundColor: VoxColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return null;
     }
   }
 
@@ -783,16 +895,13 @@ class _UploadPageState extends State<UploadPage> {
   }) async {
     if (!mounted) return;
 
+    final lang = _lang;
     final isPhoto =
         _isImageExtension(extension) || extension == 'scan' || extension == 'jpg';
     final screenMessage = isPhoto
-        ? 'This upload only contains images — no text was found to read. '
-            'Try Scan Document with good lighting, or a clearer photo.'
-        : 'This upload only contains images — no readable text in "$fileName". '
-            'Embedded pictures are ignored. Add typed text in Word or PowerPoint, '
-            'or use Scan Document for photo pages.';
-    const voiceMessage =
-        'This upload only contains images. No text to read aloud.';
+        ? lang.t('upload_image_only_photo')
+        : lang.tNamed('upload_image_only_doc', {'name': fileName});
+    final voiceMessage = lang.t('upload_image_only_voice');
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -832,10 +941,10 @@ class _UploadPageState extends State<UploadPage> {
         path = tempFile.path;
       }
 
-      final recognizer = TextRecognizer(script: TextRecognitionScript.latin);
-      final result = await recognizer.processImage(InputImage.fromFilePath(path));
-      recognizer.close();
-      return result.text.trim();
+      return DocumentOcrService.recognizeFromFilePath(
+        path,
+        preferredLanguage: _lang.selectedLanguage,
+      );
     } catch (e) {
       debugPrint('Image OCR error: $e');
       return '';
@@ -850,8 +959,11 @@ class _UploadPageState extends State<UploadPage> {
     setState(() {
       _isUploading = true;
       _statusMessage = files.length == 1
-          ? 'Reading text from image...'
-          : 'Reading image 1 of ${files.length}...';
+          ? _lang.t('upload_status_ocr_image')
+          : _lang.tNamed('upload_status_image_n', {
+              'current': '1',
+              'total': '${files.length}',
+            });
     });
 
     try {
@@ -860,7 +972,10 @@ class _UploadPageState extends State<UploadPage> {
         final file = files[i];
         if (files.length > 1 && mounted) {
           setState(
-            () => _statusMessage = 'Reading image ${i + 1} of ${files.length}...',
+            () => _statusMessage = _lang.tNamed('upload_status_image_n', {
+              'current': '${i + 1}',
+              'total': '${files.length}',
+            }),
           );
         }
 
@@ -908,7 +1023,7 @@ class _UploadPageState extends State<UploadPage> {
         setState(() => _isUploading = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Could not read image(s). Please try again.'),
+            content: Text(_lang.t('upload_images_failed')),
             backgroundColor: VoxColors.danger,
             behavior: SnackBarBehavior.floating,
           ),
@@ -1262,15 +1377,19 @@ class _UploadPageState extends State<UploadPage> {
   Widget build(BuildContext context) {
     final lang = context.watch<LanguageProvider>();
     return Scaffold(
-      backgroundColor: const Color(0xFF0A0E1A),
+      backgroundColor: VoxColors.bg(context),
       appBar: AppBar(
         title: Text(
           lang.t('upload_files_title'),
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w900, letterSpacing: 1),
+          style: TextStyle(
+            color: VoxColors.onBg(context),
+            fontWeight: FontWeight.w900,
+            letterSpacing: 1,
+          ),
         ),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
+        iconTheme: IconThemeData(color: VoxColors.onBg(context)),
       ),
       body: Center(
         child: _isUploading
@@ -1281,7 +1400,10 @@ class _UploadPageState extends State<UploadPage> {
                   const SizedBox(height: 16),
                   Text(
                     _statusMessage,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontWeight: FontWeight.w600),
+                    style: TextStyle(
+                      color: VoxColors.textSecondary(context),
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               )
@@ -1293,16 +1415,16 @@ class _UploadPageState extends State<UploadPage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(
+                    Icon(
                       Icons.drive_folder_upload,
                       size: 72,
-                      color: Colors.white12,
+                      color: VoxColors.textHint(context),
                     ),
                     const SizedBox(height: 18),
                     Text(
                       lang.t('upload_hero'),
-                      style: const TextStyle(
-                        color: Colors.white70,
+                      style: TextStyle(
+                        color: VoxColors.textSecondary(context),
                         fontSize: 15,
                         height: 1.5,
                         fontWeight: FontWeight.w500,
@@ -1312,14 +1434,17 @@ class _UploadPageState extends State<UploadPage> {
                     const SizedBox(height: 6),
                     Text(
                       lang.t('upload_reading_starts'),
-                      style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                      style: TextStyle(
+                        color: VoxColors.textMuted(context),
+                        fontSize: 12,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                     const SizedBox(height: 10),
                     Text(
                       lang.t('upload_supported_types_label'),
                       style: TextStyle(
-                        color: Colors.white.withValues(alpha: 0.45),
+                        color: VoxColors.textHint(context),
                         fontSize: 11,
                         height: 1.4,
                       ),
@@ -1335,17 +1460,15 @@ class _UploadPageState extends State<UploadPage> {
                           margin: const EdgeInsets.only(top: 20),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.05),
+                            color: VoxColors.cardFill(context),
                             borderRadius: BorderRadius.circular(14),
-                            border: Border.all(
-                              color: Colors.white.withValues(alpha: 0.1),
-                            ),
+                            border: Border.all(color: VoxColors.border(context)),
                           ),
                           child: Row(
                             children: [
-                              const Icon(
+                              Icon(
                                 Icons.info_outline,
-                                color: Color(0xFF4B9EFF),
+                                color: VoxColors.primary(context),
                                 size: 18,
                               ),
                               const SizedBox(width: 10),
@@ -1353,7 +1476,7 @@ class _UploadPageState extends State<UploadPage> {
                                 child: Text(
                                   lang.t('upload_guest_notice'),
                                   style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.6),
+                                    color: VoxColors.textSecondary(context),
                                     fontSize: 12,
                                     height: 1.5,
                                   ),
@@ -1404,7 +1527,7 @@ class _UploadPageState extends State<UploadPage> {
                       children: [
                         Expanded(
                           child: Divider(
-                            color: Colors.white.withValues(alpha: 0.1),
+                            color: VoxColors.border(context),
                             thickness: 1,
                           ),
                         ),
@@ -1413,7 +1536,7 @@ class _UploadPageState extends State<UploadPage> {
                           child: Text(
                             lang.t('upload_or'),
                             style: TextStyle(
-                              color: Colors.white.withValues(alpha: 0.3),
+                              color: VoxColors.textFaint(context),
                               fontWeight: FontWeight.w900,
                               fontSize: 12,
                               letterSpacing: 2.0,
@@ -1422,7 +1545,7 @@ class _UploadPageState extends State<UploadPage> {
                         ),
                         Expanded(
                           child: Divider(
-                            color: Colors.white.withValues(alpha: 0.1),
+                            color: VoxColors.border(context),
                             thickness: 1,
                           ),
                         ),
@@ -1452,9 +1575,9 @@ class _UploadPageState extends State<UploadPage> {
                             ),
                           ),
                           style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
+                            foregroundColor: VoxColors.onBg(context),
                             side: BorderSide(
-                              color: Colors.white.withValues(alpha: 0.15),
+                              color: VoxColors.borderStrong(context),
                               width: 1.5,
                             ),
                             padding: const EdgeInsets.symmetric(vertical: 18),
@@ -1472,9 +1595,9 @@ class _UploadPageState extends State<UploadPage> {
                     Container(
                       padding: const EdgeInsets.all(14),
                       decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.04),
+                        color: VoxColors.cardFill(context),
                         borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+                        border: Border.all(color: VoxColors.border(context)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1507,13 +1630,17 @@ class _UploadPageState extends State<UploadPage> {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Icon(icon, size: 15, color: const Color(0xFF4B9EFF).withValues(alpha: 0.6)),
+        Icon(
+          icon,
+          size: 15,
+          color: VoxColors.primary(context).withValues(alpha: 0.6),
+        ),
         const SizedBox(width: 8),
         Expanded(
           child: Text(
             text,
             style: TextStyle(
-              color: Colors.white.withValues(alpha: 0.5),
+              color: VoxColors.textMuted(context),
               fontSize: 12,
               height: 1.4,
               fontWeight: FontWeight.w500,
