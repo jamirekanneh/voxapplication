@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'dart:io';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:file_picker/file_picker.dart';
@@ -25,6 +26,7 @@ import 'services/document_ocr_service.dart';
 import 'services/mic_coordinator.dart';
 import 'services/app_speech_service.dart';
 import 'services/document_text_extractor.dart';
+import 'services/read_aloud_kws_service.dart';
 import 'services/read_aloud_voice_service.dart';
 import 'services/reading_audio_session.dart';
 
@@ -517,23 +519,33 @@ class _UploadPageState extends State<UploadPage> {
 
   /// Release mic/TTS/audio before launching the camera (avoids native crashes).
   Future<void> _prepareForCamera() async {
-    MicCoordinator.instance.setGlobalReadingVoiceActive(false);
-    MicCoordinator.instance.setTtsPlaybackActive(false);
-    await MicCoordinator.instance.yieldFromAssistant();
+    await MicCoordinator.instance.beginExternalCapture();
     await ReadAloudVoiceService.instance.stopSession();
-    await AppSpeechService.instance.stop();
-    await MicCoordinator.instance.releaseAll();
+    await ReadAloudKwsService.instance.stop();
     if (mounted) {
       await context.read<TtsService>().stop();
     }
     await ReadingAudioSession.deactivate();
-    await Future<void>.delayed(const Duration(milliseconds: 400));
   }
 
   Future<String> _stableScanImagePath(XFile file) async {
     final dir = await getTemporaryDirectory();
-    final destPath =
-        '${dir.path}/scan_${DateTime.now().millisecondsSinceEpoch}.jpg';
+    final stamp = DateTime.now().millisecondsSinceEpoch;
+    try {
+      final src = File(file.path);
+      final bytes = await (await src.exists()
+          ? src.readAsBytes()
+          : file.readAsBytes());
+      final downscaled = await _downscaleImageBytes(bytes, maxSide: 2048);
+      if (downscaled.length != bytes.length) {
+        final pngPath = '${dir.path}/scan_$stamp.png';
+        await File(pngPath).writeAsBytes(downscaled, flush: true);
+        return pngPath;
+      }
+    } catch (e) {
+      debugPrint('Scan image prepare failed: $e');
+    }
+    final destPath = '${dir.path}/scan_$stamp.jpg';
     try {
       final src = File(file.path);
       if (await src.exists()) {
@@ -542,9 +554,27 @@ class _UploadPageState extends State<UploadPage> {
       }
     } catch (_) {}
     final bytes = await file.readAsBytes();
-    final dest = File(destPath);
-    await dest.writeAsBytes(bytes, flush: true);
+    await File(destPath).writeAsBytes(bytes, flush: true);
     return destPath;
+  }
+
+  Future<Uint8List> _downscaleImageBytes(
+    Uint8List bytes, {
+    required int maxSide,
+  }) async {
+    final codec = await ui.instantiateImageCodec(
+      bytes,
+      targetWidth: maxSide,
+      targetHeight: maxSide,
+    );
+    final frame = await codec.getNextFrame();
+    try {
+      final data = await frame.image.toByteData(format: ui.ImageByteFormat.png);
+      if (data == null) return bytes;
+      return data.buffer.asUint8List();
+    } finally {
+      frame.image.dispose();
+    }
   }
 
   Future<bool> _ensureCameraPermission() async {
@@ -663,25 +693,23 @@ class _UploadPageState extends State<UploadPage> {
 
     if (choice == null || !mounted) return;
 
+    await _prepareForCamera();
     final List<XFile> images = [];
-
+    try {
     if (choice == 'gallery') {
-      final picked = await _pickGalleryImages(picker);
+      final picked = await _pickGalleryImages(picker, prepareMic: false);
       if (picked.isEmpty) return;
       images.addAll(picked);
     } else if (choice == 'single') {
       if (!await _ensureCameraPermission()) return;
-      await _prepareForCamera();
       final img = await _pickCameraImage(picker, prepareMic: false);
       if (img == null) return;
       images.add(img);
     } else {
       if (!await _ensureCameraPermission()) return;
-      await _prepareForCamera();
       // Multi-page loop
       bool keepGoing = true;
       while (keepGoing && mounted) {
-        await _prepareForCamera();
         final img = await _pickCameraImage(picker, prepareMic: false);
         if (img == null) break;
         images.add(img);
@@ -733,6 +761,7 @@ class _UploadPageState extends State<UploadPage> {
 
     if (images.isEmpty || !mounted) return;
 
+    if (!mounted) return;
     setState(() {
       _isUploading = true;
       _statusMessage = images.length == 1
@@ -744,6 +773,7 @@ class _UploadPageState extends State<UploadPage> {
     });
 
     try {
+      await Future<void>.delayed(const Duration(milliseconds: 120));
       final buffer = StringBuffer();
       final ocrLanguage = _lang.selectedLanguage;
 
@@ -811,6 +841,9 @@ class _UploadPageState extends State<UploadPage> {
         );
       }
     }
+    } finally {
+      await MicCoordinator.instance.endExternalCapture();
+    }
   }
 
   Future<XFile?> _pickCameraImage(
@@ -821,15 +854,16 @@ class _UploadPageState extends State<UploadPage> {
       if (prepareMic) await _prepareForCamera();
       if (!mounted) return null;
 
+      // Avoid maxWidth/maxHeight here — resizing on return crashes some devices.
       final picked = await picker.pickImage(
         source: ImageSource.camera,
-        maxWidth: 3000,
-        maxHeight: 3000,
-        imageQuality: 92,
+        imageQuality: 85,
         requestFullMetadata: false,
-        preferredCameraDevice: CameraDevice.rear,
       );
-      if (picked != null) return picked;
+      if (picked != null) {
+        await Future<void>.delayed(const Duration(milliseconds: 80));
+        return picked;
+      }
 
       final lost = await picker.retrieveLostData();
       if (!lost.isEmpty && lost.file != null) {
@@ -851,24 +885,27 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
-  Future<List<XFile>> _pickGalleryImages(ImagePicker picker) async {
+  Future<List<XFile>> _pickGalleryImages(
+    ImagePicker picker, {
+    bool prepareMic = true,
+  }) async {
     try {
-      await _prepareForCamera();
+      if (prepareMic) await _prepareForCamera();
       if (!mounted) return [];
 
       final multi = await picker.pickMultiImage(
-        maxWidth: 3000,
-        maxHeight: 3000,
-        imageQuality: 92,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 85,
         requestFullMetadata: false,
       );
       if (multi.isNotEmpty) return multi;
 
       final single = await picker.pickImage(
         source: ImageSource.gallery,
-        maxWidth: 3000,
-        maxHeight: 3000,
-        imageQuality: 92,
+        maxWidth: 2048,
+        maxHeight: 2048,
+        imageQuality: 85,
         requestFullMetadata: false,
       );
       if (single != null) return [single];

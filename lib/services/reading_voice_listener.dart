@@ -53,6 +53,10 @@ class ReadingVoiceListener {
 
   Future<void> _syncFromTtsAsync() async {
     if (!mounted) return;
+    if (MicCoordinator.instance.externalCaptureActive) {
+      await ReadAloudVoiceService.instance.stopSession();
+      return;
+    }
     await HeadphoneAudioDetector.instance.refresh();
     if (!mounted) return;
 

@@ -155,17 +155,22 @@ class DocumentLanguageService {
     return [TextRecognitionScript.latin, TextRecognitionScript.chinese];
   }
 
-  /// Camera/gallery scans — try every on-device script (typed, handwriting, screens).
+  /// Camera/gallery scans — primary script first, then fallbacks (memory-safe).
   static List<TextRecognitionScript> ocrScriptsForScan(String languageName) {
-    const all = [
+    final primary = ocrScriptForLanguage(languageName);
+    if (primary == TextRecognitionScript.chinese) {
+      return [
+        TextRecognitionScript.chinese,
+        TextRecognitionScript.japanese,
+        TextRecognitionScript.korean,
+        TextRecognitionScript.latin,
+      ];
+    }
+    return [
       TextRecognitionScript.latin,
       TextRecognitionScript.chinese,
       TextRecognitionScript.devanagiri,
-      TextRecognitionScript.japanese,
-      TextRecognitionScript.korean,
     ];
-    final primary = ocrScriptForLanguage(languageName);
-    return [primary, ...all.where((s) => s != primary)];
   }
 
   static bool _isArabic(int rune) =>

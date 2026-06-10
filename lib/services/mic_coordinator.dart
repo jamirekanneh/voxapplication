@@ -33,6 +33,7 @@ class MicCoordinator extends ChangeNotifier {
   bool _assistantMicActive = false;
   bool _ttsPlaybackActive = false;
   bool _authFlowActive = false;
+  bool _externalCaptureActive = false;
 
   /// Registered by [GlobalSttWrapper] so overlays (chat sheets) can trigger assistant.
   Future<void> Function({bool manual})? requestAssistantListen;
@@ -47,6 +48,9 @@ class MicCoordinator extends ChangeNotifier {
   bool get assistantMicActive => _assistantMicActive;
   bool get ttsPlaybackActive => _ttsPlaybackActive;
   bool get authFlowActive => _authFlowActive;
+
+  /// Camera / gallery capture — blocks all mics until [endExternalCapture].
+  bool get externalCaptureActive => _externalCaptureActive;
 
   /// True while read-aloud TTS audio is playing.
   bool get readAloudMicReserved => _ttsPlaybackActive;
@@ -64,6 +68,7 @@ class MicCoordinator extends ChangeNotifier {
 
   /// Hands-free read-aloud (pause / play / seek / highlight) when nothing else holds the mic.
   bool get globalReadingVoiceMayListen =>
+      !_externalCaptureActive &&
       _globalReadingVoiceActive &&
       !_assistantMicActive &&
       !_searchMicActive &&
@@ -73,16 +78,20 @@ class MicCoordinator extends ChangeNotifier {
 
   /// Assistant — blocked while read-aloud TTS is playing or during auth/profile.
   bool get assistantMayListen =>
+      !_externalCaptureActive &&
       _assistantMicActive &&
       !readAloudBlocksOtherMics &&
       !_authFlowActive;
 
   /// Whether the user can activate the global assistant right now.
   bool get assistantMayActivate =>
-      !readAloudBlocksOtherMics && !_authFlowActive;
+      !_externalCaptureActive &&
+      !readAloudBlocksOtherMics &&
+      !_authFlowActive;
 
   /// Search mic — allowed when read-aloud is paused (mini player).
   bool get searchMicMayListen =>
+      !_externalCaptureActive &&
       (_currentRoute == '/home' || _currentRoute == '/dictionary') &&
       !_assistantMicActive &&
       !_notesRecordingActive &&
@@ -92,6 +101,7 @@ class MicCoordinator extends ChangeNotifier {
 
   /// Chatbot / study-buddy — allowed when read-aloud is paused.
   bool get chatbotMayListen =>
+      !_externalCaptureActive &&
       !_assistantMicActive &&
       !_notesRecordingActive &&
       !readAloudBlocksOtherMics &&
@@ -101,6 +111,7 @@ class MicCoordinator extends ChangeNotifier {
 
   /// Notes dictation / recording — blocked only while read-aloud TTS is playing.
   bool get notesMayUseMic =>
+      !_externalCaptureActive &&
       !_assistantMicActive &&
       !readAloudBlocksOtherMics &&
       (_currentRoute == '/notes' || _notesRecordingActive);
@@ -309,6 +320,29 @@ class MicCoordinator extends ChangeNotifier {
     await Future<void>.delayed(const Duration(milliseconds: 80));
     registerReleaseHandler(searchReleaseHandler);
     setSearchMicActive(true);
+  }
+
+  /// Release every mic/TTS audio holder before camera or gallery capture.
+  Future<void> beginExternalCapture() async {
+    if (_externalCaptureActive) return;
+    _externalCaptureActive = true;
+    _assistantMicActive = false;
+    _searchMicActive = false;
+    _chatbotListening = false;
+    _readerVoiceActive = false;
+    _globalReadingVoiceActive = false;
+    _ttsPlaybackActive = false;
+    notifyListeners();
+
+    await yieldFromAssistant();
+    await releaseAll();
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+  }
+
+  Future<void> endExternalCapture() async {
+    if (!_externalCaptureActive) return;
+    _externalCaptureActive = false;
+    notifyListeners();
   }
 
   Future<void> releaseAll({

@@ -44,6 +44,8 @@ class DocumentOcrService {
           bestScore = score;
           best = text;
         }
+        // Good enough — skip extra scripts to avoid native OOM on large photos.
+        if (forScan && bestScore >= 60 && best.length >= 12) break;
       } catch (e, st) {
         debugPrint('DocumentOcrService ($script): $e\n$st');
       } finally {
