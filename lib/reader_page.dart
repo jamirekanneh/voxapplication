@@ -13,7 +13,6 @@ import 'services/mic_coordinator.dart';
 import 'services/app_route_observer.dart';
 import 'services/library_highlight_service.dart';
 import 'services/document_language_service.dart';
-import 'services/reading_voice_commands.dart';
 import 'theme_provider.dart';
 
 class ReaderPage extends StatefulWidget {
@@ -48,8 +47,6 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
   bool _showSpeedPanel = false;
   bool _autoSpeed = false;
   late String _readingLocale;
-  // Pinned highlights — voice "highlight" pins sentences in red (saved to library).
-  List<HighlightRange> _pinnedHighlights = [];
 
   static const Color _pinnedHighlightColor = Color(0xFFE53935);
 
@@ -72,41 +69,47 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
           DocumentLanguageService.languageNameFromTtsLocale(widget.locale),
     );
     MicCoordinator.instance.setReaderVoiceActive(true);
-    ReadingVoiceCommands.onHighlightSentence = _pinCurrentSentence;
 
-    // Clean content for reading (strip XML tags if detected in docx/xml)
     final tts = context.read<TtsService>();
-    final cleaned = widget.content
-        .replaceAll(RegExp(r'<[^>]*>'), ' ')
-        .replaceAll(RegExp(r'\s+'), ' ')
-        .trim();
-    final finalContent = cleaned.isEmpty ? widget.content : cleaned;
+    final normalized = DocumentLanguageService.normalizeReaderText(widget.content);
+    final savedHighlights = List<HighlightRange>.from(widget.savedHighlights);
+    final savedStart = widget.savedHighlightStart;
+    final savedEnd = widget.savedHighlightEnd;
+    if (savedStart != null &&
+        savedEnd != null &&
+        savedEnd > savedStart &&
+        savedEnd <= normalized.length) {
+      final legacy = HighlightRange(savedStart, savedEnd);
+      if (!savedHighlights.contains(legacy)) {
+        savedHighlights.add(legacy);
+      }
+    }
+    savedHighlights.sort((a, b) => a.start.compareTo(b.start));
 
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final ttsNow = context.read<TtsService>();
       if (ttsNow.isPlaying &&
           ttsNow.title == widget.title &&
-          ttsNow.content == finalContent) {
+          ttsNow.content == normalized) {
+        ttsNow.configureReadingLibrary(
+          docId: widget.libraryDocId,
+          guest: widget.guestLibrary,
+          savedHighlights: savedHighlights,
+        );
         return;
       }
-      await ttsNow.play(widget.title, finalContent, _readingLocale);
+      await ttsNow.play(
+        widget.title,
+        widget.content,
+        _readingLocale,
+        libraryDocId: widget.libraryDocId,
+        guestLibrary: widget.guestLibrary,
+        savedHighlights: savedHighlights,
+      );
     });
 
-    _pinnedHighlights = List<HighlightRange>.from(widget.savedHighlights);
-    final savedStart = widget.savedHighlightStart;
-    final savedEnd = widget.savedHighlightEnd;
-    if (savedStart != null &&
-        savedEnd != null &&
-        savedEnd > savedStart &&
-        savedEnd <= finalContent.length) {
-      final legacy = HighlightRange(savedStart, savedEnd);
-      if (!_pinnedHighlights.contains(legacy)) {
-        _pinnedHighlights = [..._pinnedHighlights, legacy];
-      }
-    }
-    _pinnedHighlights.sort((a, b) => a.start.compareTo(b.start));
-    if (_pinnedHighlights.isNotEmpty) {
+    if (savedHighlights.isNotEmpty) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _scrollToHighlight();
       });
@@ -117,38 +120,6 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
 
     // Track file read operation
     AnalyticsService.instance.recordFileOperation('read');
-  }
-
-  void _pinCurrentSentence(TtsService tts) {
-    if (!mounted) return;
-    final span = tts.sentenceSpanForVoiceHighlight();
-    if (span == null || span.end <= span.start) return;
-
-    final range = HighlightRange(span.start, span.end);
-    if (_pinnedHighlights.contains(range)) {
-      _scrollToHighlight();
-      return;
-    }
-
-    setState(() {
-      _pinnedHighlights = [..._pinnedHighlights, range]
-        ..sort((a, b) => a.start.compareTo(b.start));
-    });
-    _scrollToHighlight();
-
-    if (widget.libraryDocId != null) {
-      unawaited(
-        LibraryHighlightService.addHighlight(
-          context: context,
-          fileName: widget.title,
-          start: range.start,
-          end: range.end,
-          libraryDocId: widget.libraryDocId,
-          guestLibrary: widget.guestLibrary,
-          existing: _pinnedHighlights,
-        ),
-      );
-    }
   }
 
   @override
@@ -188,7 +159,8 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
   void _onTtsUpdate() {
     if (!mounted) return;
     final tts = context.read<TtsService>();
-    if (tts.isPlaying) {
+    setState(() {});
+    if (tts.pinnedHighlights.isNotEmpty || tts.isPlaying) {
       _scrollToHighlight();
     }
   }
@@ -196,9 +168,6 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
   @override
   void dispose() {
     appRouteObserver.unsubscribe(this);
-    if (ReadingVoiceCommands.onHighlightSentence == _pinCurrentSentence) {
-      ReadingVoiceCommands.onHighlightSentence = null;
-    }
     MicCoordinator.instance.setReaderVoiceActive(false);
     final tts = context.read<TtsService>();
     tts.setSuppressGlobalMiniPlayer(false);
@@ -213,8 +182,8 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
     final text = tts.content ?? widget.content;
     if (text.isEmpty) return;
 
-    final offset = _pinnedHighlights.isNotEmpty
-        ? _pinnedHighlights.last.start
+    final offset = tts.pinnedHighlights.isNotEmpty
+        ? tts.pinnedHighlights.last.start
         : tts.sentenceStart;
     final progress = offset / text.length;
     final maxScroll = _scrollController.position.maxScrollExtent;
@@ -373,9 +342,12 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
     );
   }
 
-  List<HighlightRange> _mergedPinnedHighlights(String text) {
-    if (_pinnedHighlights.isEmpty) return const [];
-    final sorted = List<HighlightRange>.from(_pinnedHighlights)
+  List<HighlightRange> _mergedPinnedHighlights(
+    String text,
+    List<HighlightRange> pinned,
+  ) {
+    if (pinned.isEmpty) return const [];
+    final sorted = List<HighlightRange>.from(pinned)
       ..sort((a, b) => a.start.compareTo(b.start));
     final merged = <HighlightRange>[];
     for (final raw in sorted) {
@@ -402,7 +374,9 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
 
   // ── Highlighted text (pinned red only — no live TTS tracking) ──
   Widget _buildHighlightedText() {
-    final text = context.read<TtsService>().content ?? widget.content;
+    final tts = context.watch<TtsService>();
+    final text = tts.content ??
+        DocumentLanguageService.normalizeReaderText(widget.content);
     if (text.isEmpty) {
       return Text(
         'No text content available for this file.',
@@ -433,7 +407,7 @@ class _ReaderPageState extends State<ReaderPage> with RouteAware {
             fontFamily: 'Inter',
           );
 
-    final ranges = _mergedPinnedHighlights(text);
+    final ranges = _mergedPinnedHighlights(text, tts.pinnedHighlights);
     if (ranges.isEmpty) {
       return Text(text, style: baseStyle);
     }

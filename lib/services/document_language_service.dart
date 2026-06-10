@@ -155,6 +155,19 @@ class DocumentLanguageService {
     return [TextRecognitionScript.latin, TextRecognitionScript.chinese];
   }
 
+  /// Camera/gallery scans — try every on-device script (typed, handwriting, screens).
+  static List<TextRecognitionScript> ocrScriptsForScan(String languageName) {
+    const all = [
+      TextRecognitionScript.latin,
+      TextRecognitionScript.chinese,
+      TextRecognitionScript.devanagiri,
+      TextRecognitionScript.japanese,
+      TextRecognitionScript.korean,
+    ];
+    final primary = ocrScriptForLanguage(languageName);
+    return [primary, ...all.where((s) => s != primary)];
+  }
+
   static bool _isArabic(int rune) =>
       (rune >= 0x0600 && rune <= 0x06FF) ||
       (rune >= 0x0750 && rune <= 0x077F) ||
@@ -174,4 +187,13 @@ class DocumentLanguageService {
   static const _turkishChars = {0x011F, 0x011E, 0x015F, 0x015E, 0x0131, 0x0130, 0x00F6, 0x00D6, 0x00FC, 0x00DC, 0x00E7, 0x00C7};
   static const _frenchChars = {0x00E9, 0x00E8, 0x00EA, 0x00EB, 0x00E0, 0x00E2, 0x00F4, 0x00EE, 0x00FB, 0x00E7, 0x0153, 0x0152};
   static const _spanishChars = {0x00F1, 0x00D1, 0x00BF, 0x00A1, 0x00E1, 0x00ED, 0x00F3, 0x00FA, 0x00FC};
+
+  /// Normalize document text for read-aloud + highlight offsets (stable across sessions).
+  static String normalizeReaderText(String raw) {
+    final cleaned = raw
+        .replaceAll(RegExp(r'<[^>]+>'), ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+    return cleaned.isEmpty ? raw.trim() : cleaned;
+  }
 }

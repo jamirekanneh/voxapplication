@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/widgets.dart';
 import 'package:provider/provider.dart';
 
+import '../navigation_keys.dart';
 import '../temp_library_provider.dart';
 
 /// A character range pinned by the voice "highlight" command.
@@ -81,7 +82,7 @@ class LibraryHighlightService {
 
   /// Appends a highlighted sentence range (no overwrite of prior pins).
   static Future<void> addHighlight({
-    required BuildContext context,
+    BuildContext? context,
     required String fileName,
     required int start,
     required int end,
@@ -98,11 +99,14 @@ class LibraryHighlightService {
 
     try {
       if (guestLibrary && libraryDocId != null) {
-        context.read<TempLibraryProvider>().addHighlight(
-              id: libraryDocId,
-              start: start,
-              end: end,
-            );
+        final ctx = context ?? globalNavigatorKey.currentContext;
+        if (ctx != null) {
+          ctx.read<TempLibraryProvider>().addHighlight(
+                id: libraryDocId,
+                start: start,
+                end: end,
+              );
+        }
         return;
       }
 

@@ -214,6 +214,7 @@ class ReadingVoiceKeywordsI18n {
         'mark text',
         'mark this',
         'highlight text',
+        'high light',
       ],
     },
     'es': {

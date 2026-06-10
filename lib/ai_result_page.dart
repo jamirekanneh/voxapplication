@@ -514,18 +514,28 @@ class _AiResultPageState extends State<AiResultPage> {
               duration: const Duration(milliseconds: 300),
               transitionBuilder: (child, anim) =>
                   ScaleTransition(scale: anim, child: child),
-              child: Container(
+              child: Theme(
+                data: ThemeData(
+                  brightness: Brightness.light,
+                  textTheme: const TextTheme(
+                    bodyMedium: TextStyle(color: Color(0xFF0A0E1A)),
+                    bodySmall: TextStyle(color: Color(0xFF0A0E1A)),
+                    labelSmall: TextStyle(color: Color(0xFF0A0E1A)),
+                  ),
+                  iconTheme: const IconThemeData(color: Color(0xFF0A0E1A)),
+                ),
+                child: Container(
                 key: ValueKey('${_currentCard}_$isFlipped'),
                 margin: const EdgeInsets.symmetric(horizontal: 20),
                 padding: const EdgeInsets.all(28),
                 decoration: BoxDecoration(
                   color: isFlipped
-                      ? VoxColors.surface2(context)
-                      : VoxColors.surface(context),
+                      ? VoxColors.flashcardFillAlt(context)
+                      : VoxColors.flashcardFill(context),
                   borderRadius: BorderRadius.circular(24),
                   boxShadow: [
                     BoxShadow(
-                      color: VoxColors.onBg(context).withValues(alpha: 0.08),
+                      color: Colors.black.withValues(alpha: 0.08),
                       blurRadius: 20,
                       offset: const Offset(0, 6),
                     ),
@@ -533,7 +543,7 @@ class _AiResultPageState extends State<AiResultPage> {
                   border: Border.all(
                     color: isFlipped
                         ? VoxColors.primary(context).withValues(alpha: 0.4)
-                        : VoxColors.border(context),
+                        : VoxColors.borderStrong(context),
                   ),
                 ),
                 child: Column(
@@ -547,7 +557,7 @@ class _AiResultPageState extends State<AiResultPage> {
                       decoration: BoxDecoration(
                         color: isFlipped
                             ? VoxColors.primary(context).withValues(alpha: 0.15)
-                            : VoxColors.surfaceMuted(context),
+                            : Colors.black.withValues(alpha: 0.05),
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
@@ -560,7 +570,8 @@ class _AiResultPageState extends State<AiResultPage> {
                           letterSpacing: 1.5,
                           color: isFlipped
                               ? VoxColors.primary(context)
-                              : VoxColors.textMuted(context),
+                              : VoxColors.flashcardText(context)
+                                  .withValues(alpha: 0.55),
                         ),
                       ),
                     ),
@@ -572,20 +583,22 @@ class _AiResultPageState extends State<AiResultPage> {
                         fontSize: 17,
                         height: 1.6,
                         fontWeight: FontWeight.w700,
-                        color: VoxColors.onSurface(context),
+                        color: VoxColors.flashcardText(context),
                       ),
                     ),
                     const SizedBox(height: 16),
                     Icon(
                       Icons.touch_app_outlined,
                       size: 14,
-                      color: VoxColors.textSecondary(context),
+                      color: VoxColors.flashcardText(context)
+                          .withValues(alpha: 0.45),
                     ),
                     Text(
                       lang.t('tap_to_flip'),
                       style: TextStyle(
                         fontSize: 10,
-                        color: VoxColors.textSecondary(context),
+                        color: VoxColors.flashcardText(context)
+                            .withValues(alpha: 0.45),
                       ),
                     ),
                   ],
@@ -593,6 +606,7 @@ class _AiResultPageState extends State<AiResultPage> {
               ),
             ),
           ),
+        ),
         ),
 
         // Navigation

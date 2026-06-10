@@ -120,6 +120,29 @@ class VoxColors {
 
   static Color onPrimary(BuildContext ctx) => Colors.white;
 
+  /// Form fields — guaranteed readable text on filled inputs.
+  static Color inputFill(BuildContext ctx) => _isDark(ctx)
+      ? Colors.white.withValues(alpha: 0.06)
+      : const Color(0xFFF0F5FF);
+
+  static Color inputText(BuildContext ctx) =>
+      _isDark(ctx) ? Colors.white : _lightOnBg;
+
+  /// Q&A flashcards — light card with dark text (readable in dark mode).
+  static Color flashcardFill(BuildContext ctx) => _isDark(ctx)
+      ? const Color(0xFFF8FAFF)
+      : Colors.white;
+
+  static Color flashcardFillAlt(BuildContext ctx) => _isDark(ctx)
+      ? const Color(0xFFE8F0FF)
+      : const Color(0xFFF0F5FF);
+
+  /// Dark text for light flashcard surfaces (any app theme).
+  static Color flashcardText(BuildContext ctx) => _lightOnBg;
+
+  /// Text on light panels (note sheets, flashcards) — always dark for contrast.
+  static Color onLightPanel(BuildContext ctx) => _lightOnBg;
+
   /// Use for brand highlights or special states
   static Color accent(BuildContext ctx) =>
       _isDark(ctx) ? const Color(0xFF25D366) : const Color(0xFF25D366);
@@ -231,5 +254,12 @@ class AppTheme {
       labelSmall: TextStyle(color: Color(0xFF3A4A6A)),
     ),
     dialogTheme: DialogThemeData(backgroundColor: Colors.white),
+    inputDecorationTheme: InputDecorationTheme(
+      filled: true,
+      fillColor: const Color(0xFFF0F5FF),
+      hintStyle: TextStyle(color: _lightOnBg.withValues(alpha: 0.35)),
+      labelStyle: const TextStyle(color: _lightOnBg),
+      errorStyle: const TextStyle(color: Color(0xFFFF5252)),
+    ),
   );
 }

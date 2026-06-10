@@ -23,7 +23,9 @@ import 'services/auth_session.dart';
 import 'services/document_language_service.dart';
 import 'services/document_ocr_service.dart';
 import 'services/mic_coordinator.dart';
+import 'services/app_speech_service.dart';
 import 'services/document_text_extractor.dart';
+import 'services/read_aloud_voice_service.dart';
 import 'services/reading_audio_session.dart';
 
 class UploadPage extends StatefulWidget {
@@ -515,14 +517,17 @@ class _UploadPageState extends State<UploadPage> {
 
   /// Release mic/TTS/audio before launching the camera (avoids native crashes).
   Future<void> _prepareForCamera() async {
-    await MicCoordinator.instance.yieldFromAssistant();
-    await MicCoordinator.instance.releaseAll();
+    MicCoordinator.instance.setGlobalReadingVoiceActive(false);
     MicCoordinator.instance.setTtsPlaybackActive(false);
+    await MicCoordinator.instance.yieldFromAssistant();
+    await ReadAloudVoiceService.instance.stopSession();
+    await AppSpeechService.instance.stop();
+    await MicCoordinator.instance.releaseAll();
     if (mounted) {
       await context.read<TtsService>().stop();
     }
     await ReadingAudioSession.deactivate();
-    await Future<void>.delayed(const Duration(milliseconds: 300));
+    await Future<void>.delayed(const Duration(milliseconds: 400));
   }
 
   Future<String> _stableScanImagePath(XFile file) async {
@@ -542,13 +547,8 @@ class _UploadPageState extends State<UploadPage> {
     return destPath;
   }
 
-  Future<void> _scanDocumentImpl() async {
-    await _requestPermissionsIfNeeded();
-    await _resolveUser();
-    await _prepareForCamera();
-
-    // Check then request camera permission
-    PermissionStatus camStatus = await Permission.camera.status;
+  Future<bool> _ensureCameraPermission() async {
+    var camStatus = await Permission.camera.status;
     if (!camStatus.isGranted) {
       camStatus = await Permission.camera.request();
     }
@@ -570,7 +570,7 @@ class _UploadPageState extends State<UploadPage> {
           ),
         );
       }
-      return;
+      return false;
     }
 
     if (!camStatus.isGranted) {
@@ -583,12 +583,21 @@ class _UploadPageState extends State<UploadPage> {
           ),
         );
       }
-      return;
+      return false;
     }
+    return true;
+  }
+
+  Future<void> _scanDocumentImpl() async {
+    await _requestPermissionsIfNeeded();
+    await _resolveUser();
 
     if (!mounted) return;
 
-    // Ask: single or multi-page
+    final picker = ImagePicker();
+    await picker.retrieveLostData();
+
+    // Ask: single, multi-page, or gallery (screenshots / saved photos)
     final choice = await showModalBottomSheet<String>(
       context: context,
       backgroundColor: VoxColors.surface(context),
@@ -619,7 +628,8 @@ class _UploadPageState extends State<UploadPage> {
             ),
             const SizedBox(height: 4),
             Text(
-              'How many pages do you want to scan?',
+              'Works with typed pages, handwriting, and phone screens.',
+              textAlign: TextAlign.center,
               style: TextStyle(color: VoxColors.textSecondary(context), fontSize: 13),
             ),
             const SizedBox(height: 20),
@@ -627,7 +637,7 @@ class _UploadPageState extends State<UploadPage> {
               ctx,
               icon: Icons.photo_camera_rounded,
               title: 'Single Page',
-              subtitle: 'Snap one photo and start reading',
+              subtitle: 'Snap one photo — paper or screen',
               value: 'single',
             ),
             const SizedBox(height: 12),
@@ -635,8 +645,16 @@ class _UploadPageState extends State<UploadPage> {
               ctx,
               icon: Icons.document_scanner_rounded,
               title: 'Multi-Page',
-              subtitle: 'Take several photos â€” merged into one document',
+              subtitle: 'Several photos merged into one document',
               value: 'multi',
+            ),
+            const SizedBox(height: 12),
+            _scanOptionTile(
+              ctx,
+              icon: Icons.photo_library_rounded,
+              title: 'From Photos',
+              subtitle: 'Screenshots or gallery images (e.g. phone screen)',
+              value: 'gallery',
             ),
           ],
         ),
@@ -645,18 +663,26 @@ class _UploadPageState extends State<UploadPage> {
 
     if (choice == null || !mounted) return;
 
-    final picker = ImagePicker();
     final List<XFile> images = [];
 
-    if (choice == 'single') {
-      final img = await _pickCameraImage(picker);
+    if (choice == 'gallery') {
+      final picked = await _pickGalleryImages(picker);
+      if (picked.isEmpty) return;
+      images.addAll(picked);
+    } else if (choice == 'single') {
+      if (!await _ensureCameraPermission()) return;
+      await _prepareForCamera();
+      final img = await _pickCameraImage(picker, prepareMic: false);
       if (img == null) return;
       images.add(img);
     } else {
+      if (!await _ensureCameraPermission()) return;
+      await _prepareForCamera();
       // Multi-page loop
       bool keepGoing = true;
       while (keepGoing && mounted) {
-        final img = await _pickCameraImage(picker);
+        await _prepareForCamera();
+        final img = await _pickCameraImage(picker, prepareMic: false);
         if (img == null) break;
         images.add(img);
         if (!mounted) break;
@@ -734,13 +760,13 @@ class _UploadPageState extends State<UploadPage> {
         final pageText = await DocumentOcrService.recognizeFromFilePath(
           ocrPath,
           preferredLanguage: ocrLanguage,
+          forScan: true,
         );
         if (pageText.isNotEmpty) {
           if (buffer.isNotEmpty) buffer.write('\n\n');
           buffer.write(pageText);
         }
         await DocumentOcrService.deleteTempFile(ocrPath);
-        await DocumentOcrService.deleteTempFile(images[i].path);
       }
 
       String scanned = buffer.toString().trim();
@@ -787,16 +813,19 @@ class _UploadPageState extends State<UploadPage> {
     }
   }
 
-  Future<XFile?> _pickCameraImage(ImagePicker picker) async {
+  Future<XFile?> _pickCameraImage(
+    ImagePicker picker, {
+    bool prepareMic = true,
+  }) async {
     try {
-      await _prepareForCamera();
+      if (prepareMic) await _prepareForCamera();
       if (!mounted) return null;
 
       final picked = await picker.pickImage(
         source: ImageSource.camera,
-        maxWidth: 2048,
-        maxHeight: 2048,
-        imageQuality: 85,
+        maxWidth: 3000,
+        maxHeight: 3000,
+        imageQuality: 92,
         requestFullMetadata: false,
         preferredCameraDevice: CameraDevice.rear,
       );
@@ -819,6 +848,43 @@ class _UploadPageState extends State<UploadPage> {
         );
       }
       return null;
+    }
+  }
+
+  Future<List<XFile>> _pickGalleryImages(ImagePicker picker) async {
+    try {
+      await _prepareForCamera();
+      if (!mounted) return [];
+
+      final multi = await picker.pickMultiImage(
+        maxWidth: 3000,
+        maxHeight: 3000,
+        imageQuality: 92,
+        requestFullMetadata: false,
+      );
+      if (multi.isNotEmpty) return multi;
+
+      final single = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 3000,
+        maxHeight: 3000,
+        imageQuality: 92,
+        requestFullMetadata: false,
+      );
+      if (single != null) return [single];
+      return [];
+    } catch (e, st) {
+      debugPrint('Gallery pick error: $e\n$st');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_lang.t('upload_scan_failed')),
+            backgroundColor: VoxColors.danger,
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return [];
     }
   }
 

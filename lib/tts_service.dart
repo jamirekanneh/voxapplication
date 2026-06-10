@@ -11,6 +11,8 @@ import 'services/headphone_audio_detector.dart';
 import 'services/read_aloud_voice_service.dart';
 import 'services/reading_audio_session.dart';
 import 'services/document_language_service.dart';
+import 'services/library_highlight_service.dart';
+import 'services/reading_voice_commands.dart';
 
 class TtsService extends ChangeNotifier {
   final FlutterTts _tts = FlutterTts();
@@ -49,6 +51,9 @@ class TtsService extends ChangeNotifier {
 
   String? title;
   String? content;
+  String? libraryDocId;
+  bool guestLibrary = false;
+  List<HighlightRange> pinnedHighlights = [];
 
   // Tracks char position so we can seek forward/back
   int _currentCharOffset = 0;
@@ -101,7 +106,10 @@ class TtsService extends ChangeNotifier {
 
   TtsService() {
     _init();
+    ReadingVoiceCommands.onHighlightSentence = _onVoiceHighlightPin;
   }
+
+  void _onVoiceHighlightPin(TtsService _) => pinCurrentSentenceHighlight();
 
   /// True while a document read-aloud session is open (mini player / reader).
   bool get isReadingSession => isVisible && content != null;
@@ -571,11 +579,14 @@ class TtsService extends ChangeNotifier {
     return _sentenceSpans.length - 1;
   }
 
-  /// Sentence to pin when the user says "highlight" — uses playback position,
-  /// preferring the sentence that was just being read when crossing a boundary.
+  /// Sentence to pin when the user says "highlight" — prefers live sentence bounds,
+  /// then extrapolated playback position at sentence boundaries.
   ({int start, int end})? sentenceSpanForVoiceHighlight() {
     final text = content;
     if (text == null || text.isEmpty) return null;
+    if (sentenceEnd > sentenceStart && sentenceEnd <= text.length) {
+      return (start: sentenceStart, end: sentenceEnd);
+    }
     if (_sentenceSpans.isEmpty) _parseSentenceSpans(text);
 
     final pos = _extrapolatedHighlightPosition().clamp(0, text.length);
@@ -592,6 +603,47 @@ class TtsService extends ChangeNotifier {
     final target = _sentenceSpans[idx];
     if (target.end <= target.start) return null;
     return (start: target.start, end: target.end);
+  }
+
+  void configureReadingLibrary({
+    String? docId,
+    bool guest = false,
+    List<HighlightRange> savedHighlights = const [],
+  }) {
+    libraryDocId = docId;
+    guestLibrary = guest;
+    pinnedHighlights = List<HighlightRange>.from(savedHighlights);
+    pinnedHighlights.sort((a, b) => a.start.compareTo(b.start));
+    notifyListeners();
+  }
+
+  /// Voice "highlight" / "mark" — pins the current sentence in red and saves it.
+  bool pinCurrentSentenceHighlight() {
+    if (!isReadingSession) return false;
+
+    final span = sentenceSpanForVoiceHighlight();
+    if (span == null || span.end <= span.start) return false;
+
+    final range = HighlightRange(span.start, span.end);
+    if (!pinnedHighlights.contains(range)) {
+      pinnedHighlights = [...pinnedHighlights, range]
+        ..sort((a, b) => a.start.compareTo(b.start));
+      notifyListeners();
+    }
+
+    if (libraryDocId != null) {
+      unawaited(
+        LibraryHighlightService.addHighlight(
+          fileName: title ?? 'Document',
+          start: range.start,
+          end: range.end,
+          libraryDocId: libraryDocId,
+          guestLibrary: guestLibrary,
+          existing: pinnedHighlights,
+        ),
+      );
+    }
+    return true;
   }
 
   void _updateSentenceBounds(int charPos) {
@@ -827,11 +879,24 @@ class TtsService extends ChangeNotifier {
     await _tts.speak(trimmed, focus: false);
   }
 
-  Future<void> play(String t, String c, String locale) async {
+  Future<void> play(
+    String t,
+    String c,
+    String locale, {
+    String? libraryDocId,
+    bool guestLibrary = false,
+    List<HighlightRange> savedHighlights = const [],
+  }) async {
     AnalyticsService.instance.recordTtsUsage();
     await _safeStop();
     title = t;
-    content = c;
+    final normalized = DocumentLanguageService.normalizeReaderText(c);
+    content = normalized.isEmpty ? c : normalized;
+    configureReadingLibrary(
+      docId: libraryDocId,
+      guest: guestLibrary,
+      savedHighlights: savedHighlights,
+    );
     userPaused = false;
     isVisible = true;
     isPlaying = false;
@@ -848,7 +913,7 @@ class TtsService extends ChangeNotifier {
     _activeChunkEnd = 0;
     _readingLocale = locale;
     _resetSentenceTracking();
-    _parseSentenceSpans(c);
+    _parseSentenceSpans(content!);
     _reanchorPlayback(0);
     if (_sentenceSpans.isNotEmpty) {
       sentenceStart = _sentenceSpans.first.start;
@@ -1000,6 +1065,9 @@ class TtsService extends ChangeNotifier {
     _pendingVoiceControlsTip = false;
     title = null;
     content = null;
+    libraryDocId = null;
+    guestLibrary = false;
+    pinnedHighlights = [];
     progress = 0.0;
     wordStart = 0;
     wordEnd = 0;

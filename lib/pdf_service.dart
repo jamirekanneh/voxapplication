@@ -1,8 +1,10 @@
 import 'dart:io';
+
+import 'package:flutter/material.dart';
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:path_provider/path_provider.dart';
-import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 
 class PdfService {
   static Future<void> exportSummaryPdf(BuildContext context, String title, String summary) async {
@@ -74,6 +76,88 @@ class PdfService {
     );
 
     await _savePdfAndNotify(context, pdf, 'QnA_$title');
+  }
+
+  /// Export a voice-note transcript as PDF and open the system share/save sheet.
+  static Future<void> exportTranscriptPdf(
+    BuildContext context,
+    String title,
+    String content,
+  ) async {
+    final trimmed = content.trim();
+    if (trimmed.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No transcript to download')),
+        );
+      }
+      return;
+    }
+
+    try {
+      final pdf = pw.Document();
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          build: (pw.Context pdfCtx) => [
+            pw.Header(
+              level: 0,
+              child: pw.Text(
+                title,
+                style: pw.TextStyle(
+                  fontSize: 22,
+                  fontWeight: pw.FontWeight.bold,
+                  color: const PdfColor.fromInt(0xFF0A0E1A),
+                ),
+              ),
+            ),
+            pw.SizedBox(height: 12),
+            pw.Text(
+              trimmed,
+              style: const pw.TextStyle(
+                fontSize: 13,
+                lineSpacing: 5,
+                color: PdfColors.black,
+              ),
+            ),
+          ],
+        ),
+      );
+
+      final dir = await getTemporaryDirectory();
+      final safeName = title
+          .replaceAll(RegExp(r'[^\w\s-]'), '')
+          .replaceAll(RegExp(r'\s+'), '_');
+      final file = File('${dir.path}/${safeName}_transcript.pdf');
+      await file.writeAsBytes(await pdf.save());
+
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile(file.path, mimeType: 'application/pdf')],
+          text: '$title transcript',
+        ),
+      );
+
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('PDF ready — choose Save or Share'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error generating PDF: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   static Future<void> exportTextFile(

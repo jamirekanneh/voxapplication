@@ -24,6 +24,7 @@ import 'services/app_speech_service.dart';
 import 'analytics_service.dart';
 import 'services/saved_docs_service.dart';
 import 'document_chat_buddy_sheet.dart';
+import 'pdf_service.dart';
 import 'widgets/list_selection_bar.dart';
 
 const int _kMaxTitleLength = 100;
@@ -1698,21 +1699,12 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
     }
   }
 
-  Future<void> _downloadTranscript(String title, String content) async {
-    final dir = await getApplicationDocumentsDirectory();
-    final timestamp = DateTime.now().toIso8601String().replaceAll(':', '-');
-    final file = File('${dir.path}/${title}_$timestamp.txt');
-    await file.writeAsString(content);
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          context.read<LanguageProvider>().tNamed('transcript_saved_to', {
-            'path': file.path,
-          }),
-        ),
-      ),
-    );
+  Future<void> _downloadTranscript(
+    BuildContext sheetContext,
+    String title,
+    String content,
+  ) async {
+    await PdfService.exportTranscriptPdf(sheetContext, title, content);
   }
 
   // ————————————————————————————————————————————————
@@ -1802,10 +1794,11 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                             Expanded(
                               child: Text(
                                 title,
-                                style: TextStyle(
+                                style: const TextStyle(
                                   fontSize: 22,
                                   fontWeight: FontWeight.w800,
                                   letterSpacing: -0.5,
+                                  color: Color(0xFF0A0E1A),
                                 ),
                               ),
                             ),
@@ -1834,10 +1827,13 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                               },
                             ),
                             _sheetIconBtn(
-                              icon: Icons.file_download_outlined,
+                              icon: Icons.picture_as_pdf_outlined,
                               color: Color(0x8A0A0E1A),
-                              onTap: () =>
-                                  _downloadTranscript(title, sheetContent),
+                              onTap: () => _downloadTranscript(
+                                ctx,
+                                title,
+                                sheetContent,
+                              ),
                             ),
                             _sheetIconBtn(
                               icon: Icons.bookmark_add_outlined,
@@ -2066,6 +2062,17 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                       spacing: 8,
                                       runSpacing: 8,
                                       children: [
+                                        _transcriptActionChip(
+                                          label: 'PDF',
+                                          icon: Icons.picture_as_pdf_outlined,
+                                          onTap: sheetContent.trim().isEmpty
+                                              ? null
+                                              : () => _downloadTranscript(
+                                                    ctx,
+                                                    title,
+                                                    sheetContent,
+                                                  ),
+                                        ),
                                         _transcriptActionChip(
                                           label: isEditingTranscript
                                               ? lang.t('cancel')
@@ -3007,9 +3014,9 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
             const SizedBox(height: 12),
             Container(
               decoration: BoxDecoration(
-                color: Colors.white.withValues(alpha: 0.7),
+                color: VoxColors.cardFill(context),
                 borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: Colors.grey[300]!),
+                border: Border.all(color: VoxColors.border(context)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -3026,10 +3033,10 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                         const SizedBox(width: 6),
                         Text(
                           lang.t('transcript_label'),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
-                            color: Color(0x730A0E1A),
+                            color: VoxColors.onBg(context),
                           ),
                         ),
                         const Spacer(),
@@ -3062,9 +3069,14 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                     minLines: 3,
                     textCapitalization: TextCapitalization.sentences,
                     onChanged: (_) => setState(() {}),
-                    style: TextStyle(fontSize: 14, height: 1.6),
+                    style: TextStyle(
+                      fontSize: 14,
+                      height: 1.6,
+                      color: VoxColors.onBg(context),
+                    ),
                     decoration: InputDecoration(
                       hintText: lang.t('transcript_edit_hint'),
+                      hintStyle: TextStyle(color: VoxColors.textHint(context)),
                       counterText: '',
                       border: InputBorder.none,
                       contentPadding: const EdgeInsets.fromLTRB(16, 8, 16, 14),
@@ -3147,6 +3159,17 @@ class _NotesPageState extends State<NotesPage> with TickerProviderStateMixin {
                                   _transcriptController.text,
                                 );
                               },
+                            ),
+                            const SizedBox(width: 8),
+                            _aiChip(
+                              label: 'PDF',
+                              icon: Icons.picture_as_pdf_outlined,
+                              dark: true,
+                              onTap: () => _downloadTranscript(
+                                context,
+                                _editorNoteTitle(),
+                                _transcriptController.text,
+                              ),
                             ),
                           ],
                         ),

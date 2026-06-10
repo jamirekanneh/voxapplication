@@ -2,7 +2,6 @@ import 'package:flutter/foundation.dart';
 
 import '../tts_service.dart';
 import 'reading_playback_state.dart';
-import 'reading_voice_commands.dart';
 import 'reading_voice_keyword.dart';
 
 /// Result of dispatching a voice keyword to the read-aloud controller.
@@ -81,8 +80,8 @@ class ReadingVoiceController {
         return const ReadingVoiceDispatchResult(handled: true);
 
       case ReadingVoiceKeyword.highlight:
-        ReadingVoiceCommands.onHighlightSentence?.call(tts);
-        return const ReadingVoiceDispatchResult(handled: true);
+        final pinned = tts.pinCurrentSentenceHighlight();
+        return ReadingVoiceDispatchResult(handled: pinned);
     }
   }
 }

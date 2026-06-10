@@ -126,6 +126,8 @@ class ReadingVoiceCommands {
       'skip',
       'backward',
       'pause',
+      'highlight',
+      'mark',
     ])) {
       return true;
     }
@@ -140,6 +142,8 @@ class ReadingVoiceCommands {
       'close doc',
       'close document',
       'close reader',
+      'highlight that',
+      'mark text',
     ]);
   }
 
@@ -380,8 +384,7 @@ class ReadingVoiceCommands {
     }
 
     if (_has(words, ['highlight', 'mark', 'highlight that', 'mark text'])) {
-      if (onHighlightSentence != null) {
-        onHighlightSentence!(tts);
+      if (tts.pinCurrentSentenceHighlight()) {
         return const ReadingVoiceResult(
           handled: true,
           feedback: '🖍️ Sentence highlighted',
