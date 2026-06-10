@@ -257,8 +257,8 @@ class AppTheme {
     inputDecorationTheme: InputDecorationTheme(
       filled: true,
       fillColor: const Color(0xFFF0F5FF),
-      hintStyle: TextStyle(color: _lightOnBg.withValues(alpha: 0.35)),
-      labelStyle: const TextStyle(color: _lightOnBg),
+      hintStyle: TextStyle(color: const Color(0xFF0A0E1A).withValues(alpha: 0.35)),
+      labelStyle: const TextStyle(color: Color(0xFF0A0E1A)),
       errorStyle: const TextStyle(color: Color(0xFFFF5252)),
     ),
   );
