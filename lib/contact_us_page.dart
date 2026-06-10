@@ -104,6 +104,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
   ContactPreference _contactPref = ContactPreference.email;
   bool _isSending = false;
   bool _sent = false;
+  bool _pendingMailtoSend = false;
   bool _speechAvailable = false;
   String? _listeningField;
   bool _voiceBusy = false;
@@ -230,6 +231,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
         templateParams: {
           'name': name,
           'email': userEmail,
+          'reply_to': userEmail,
           'title': 'New message from VOX App',
           'message_phone': phoneLine,
           'subject': subject,
@@ -244,26 +246,31 @@ class _ContactUsPageState extends State<ContactUsPage> {
             'Phone: $phoneLine\n'
             'Subject: $subject\n\n'
             'Message:\n$message',
+        source: 'contact_us',
       );
 
       if (!mounted) return;
       setState(() => _isSending = false);
 
       if (result.success) {
-        if (result.usedMailtoFallback) {
+        if (result.pendingUserAction) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: const Text(
-                'Opening your email app — tap Send to deliver the message.',
+                'Your email app is open — tap Send there to deliver the message.',
               ),
               behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 8),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
             ),
           );
         }
-        setState(() => _sent = true);
+        setState(() {
+          _sent = true;
+          _pendingMailtoSend = result.pendingUserAction;
+        });
       } else {
         _showError(result.errorMessage ?? 'Failed to send. Try again.');
       }
@@ -637,6 +644,16 @@ class _ContactUsPageState extends State<ContactUsPage> {
   Widget _buildSuccess() {
     final isEmail = _contactPref == ContactPreference.email;
     final replyVia = isEmail ? 'Email' : 'WhatsApp';
+    final pendingMailto = _pendingMailtoSend;
+    final title = pendingMailto
+        ? 'Finish sending in your email app'
+        : 'Thank you for contacting us!';
+    final body = pendingMailto
+        ? 'We opened your email app with your message ready. Tap Send there to deliver it to our team.'
+        : 'Your message has been received.';
+    final followUp = pendingMailto
+        ? 'We cannot reply until the email is sent from your mail app.'
+        : 'We will contact you via $replyVia shortly.';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(24),
@@ -654,7 +671,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
               color: VoxColors.surface(context),
             ),
             child: Icon(
-              Icons.check_rounded,
+              pendingMailto ? Icons.mail_outline_rounded : Icons.check_rounded,
               color: VoxColors.primary(context),
               size: 38,
             ),
@@ -663,7 +680,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
 
           // â”€â”€ Title â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
           Text(
-            'Thank you for contacting us!',
+            title,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 22,
@@ -674,7 +691,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
           ),
           const SizedBox(height: 12),
           Text(
-            'Your message has been received.',
+            body,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
@@ -684,7 +701,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
           ),
           const SizedBox(height: 6),
           Text(
-            'We will contact you via $replyVia shortly.',
+            followUp,
             textAlign: TextAlign.center,
             style: TextStyle(
               fontSize: 14,
@@ -701,6 +718,7 @@ class _ContactUsPageState extends State<ContactUsPage> {
               onPressed: () => setState(() {
                 _messageCtrl.clear();
                 _sent = false;
+                _pendingMailtoSend = false;
               }),
               style: ElevatedButton.styleFrom(
                 backgroundColor: VoxColors.primary(context),

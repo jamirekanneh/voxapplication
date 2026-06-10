@@ -6,7 +6,7 @@ import 'theme_provider.dart';
 import 'language_provider.dart';
 import 'services/mic_coordinator.dart';
 import 'services/app_speech_service.dart';
-import 'services/contact_email_service.dart';
+import 'services/recommendations_service.dart';
 
 class RecommendationsPage extends StatefulWidget {
   const RecommendationsPage({super.key});
@@ -81,18 +81,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
 
     try {
       final text = _controller.text.trim();
-      final result = await ContactEmailService.send(
-        templateParams: {
-          'name': 'Vox User',
-          'email': ContactEmailService.supportEmail,
-          'title': 'New Recommendation for VOX App',
-          'message_phone': '-',
-          'subject': 'App Recommendation (Rating: $_rating Stars)',
-          'message': text,
-          'reply_preference': 'Sent from Recommendations Page',
-        },
-        mailtoSubject: 'VOX App Recommendation ($_rating stars)',
-        mailtoBody: text,
+      final result = await RecommendationsService.submit(
+        rating: _rating,
+        message: text,
       );
 
       if (!mounted) return;
@@ -112,7 +103,9 @@ class _RecommendationsPageState extends State<RecommendationsPage> {
                     fontWeight: FontWeight.bold,
                     color: VoxColors.onSurface(context))),
             content: Text(
-              'Your recommendation and $_rating-star rating have been submitted successfully.',
+              _rating > 0
+                  ? 'Your $_rating-star rating and feedback have been saved. Thank you!'
+                  : 'Your feedback has been saved. Thank you!',
               style: TextStyle(color: VoxColors.textSecondary(context)),
             ),
             actions: [

@@ -62,6 +62,45 @@ service cloud.firestore {
       allow create, update: if request.auth != null;
     }
 
+    // Play Store feedback — rating + message for developers to review later.
+    match /recommendations/{recommendationId} {
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasAll([
+          'rating', 'message', 'userId', 'published', 'createdAt'
+        ])
+        && request.resource.data.rating is int
+        && request.resource.data.rating >= 0
+        && request.resource.data.rating <= 5
+        && request.resource.data.message is string
+        && request.resource.data.message.size() <= 1000
+        && request.resource.data.userId == request.auth.uid
+        && request.resource.data.published == false
+        && (request.resource.data.rating > 0
+            || request.resource.data.message.size() > 0);
+      allow read, update, delete: if false;
+    }
+
+    // Contact Us inbox (create-only from signed-in app users).
+    match /contact_messages/{messageId} {
+      allow create: if request.auth != null
+        && request.resource.data.keys().hasAll([
+          'name', 'email', 'subject', 'message', 'source', 'createdAt'
+        ])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 120
+        && request.resource.data.email is string
+        && request.resource.data.email.size() > 3
+        && request.resource.data.email.size() <= 200
+        && request.resource.data.subject is string
+        && request.resource.data.subject.size() <= 200
+        && request.resource.data.message is string
+        && request.resource.data.message.size() > 0
+        && request.resource.data.message.size() <= 8000
+        && request.resource.data.source is string;
+      allow read, update, delete: if false;
+    }
+
     // Analytics: only developers can read aggregated data
     match /analytics/{document=**} {
       allow read: if request.auth != null && request.auth.token.email in [
