@@ -1,8 +1,9 @@
 ﻿import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'tts_service.dart';
 import 'language_provider.dart';
+import 'navigation_keys.dart';
 import 'reader_page.dart';
+import 'tts_service.dart';
 
 class MiniPlayerBar extends StatelessWidget {
   const MiniPlayerBar({super.key});
@@ -59,15 +60,16 @@ class MiniPlayerBar extends StatelessWidget {
 
   void _openReader(BuildContext context, TtsService tts, String locale) {
     if (tts.title == null || tts.content == null) return;
-    Navigator.push(
-      context,
+    final nav = globalNavigatorKey.currentState;
+    if (nav == null) return;
+
+    final lang = context.read<LanguageProvider>();
+    nav.push(
       MaterialPageRoute(
         builder: (_) => MultiProvider(
           providers: [
             ChangeNotifierProvider.value(value: tts),
-            ChangeNotifierProvider.value(
-              value: context.read<LanguageProvider>(),
-            ),
+            ChangeNotifierProvider.value(value: lang),
           ],
           child: ReaderPage(
             title: tts.title!,
@@ -90,8 +92,12 @@ class MiniPlayerBar extends StatelessWidget {
 
     if (!tts.isVisible) return const SizedBox.shrink();
 
+    void expandReader() => _openReader(context, tts, locale);
+
     return Semantics(
-      label: 'Now reading: ${tts.title ?? ""}',
+      label: 'Now reading: ${tts.title ?? ""}. Double tap to expand.',
+      button: true,
+      onTap: expandReader,
       child: Material(
         color: const Color(0xFF141A29),
         elevation: 6,
@@ -101,21 +107,24 @@ class MiniPlayerBar extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            LinearProgressIndicator(
-              value: tts.progress,
-              backgroundColor: Colors.grey[700],
-              valueColor: const AlwaysStoppedAnimation<Color>(
-                Color(0xFF4B9EFF),
+            InkWell(
+              onTap: expandReader,
+              child: LinearProgressIndicator(
+                value: tts.progress,
+                backgroundColor: Colors.grey[700],
+                valueColor: const AlwaysStoppedAnimation<Color>(
+                  Color(0xFF4B9EFF),
+                ),
+                minHeight: 3,
               ),
-              minHeight: 3,
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(10, 6, 6, 6),
               child: Row(
                 children: [
-                  GestureDetector(
-                    behavior: HitTestBehavior.opaque,
-                    onTap: () => _openReader(context, tts, locale),
+                  InkWell(
+                    onTap: expandReader,
+                    borderRadius: BorderRadius.circular(8),
                     child: Container(
                       width: 36,
                       height: 36,
@@ -132,9 +141,8 @@ class MiniPlayerBar extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: GestureDetector(
-                      behavior: HitTestBehavior.opaque,
-                      onTap: () => _openReader(context, tts, locale),
+                    child: InkWell(
+                      onTap: expandReader,
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         mainAxisSize: MainAxisSize.min,
@@ -162,7 +170,14 @@ class MiniPlayerBar extends StatelessWidget {
                       ),
                     ),
                   ),
-                  const SizedBox(width: 4),
+                  _miniIconButton(
+                    label: 'Expand reader',
+                    icon: Icons.keyboard_arrow_up_rounded,
+                    iconColor: const Color(0xFF4B9EFF),
+                    iconSize: 26,
+                    onTap: expandReader,
+                  ),
+                  const SizedBox(width: 2),
                   FittedBox(
                     fit: BoxFit.scaleDown,
                     child: Row(
